@@ -1,4 +1,27 @@
 // Timing engine - WPM calculation and tokenization
+use unicode_segmentation::UnicodeSegmentation;
+
+pub struct Token {
+    pub text: String,
+    pub duration_ms: u64,
+}
+
+pub fn wpm_to_milliseconds(wpm: u32) -> u64 {
+    60_000 / wpm as u64
+}
+
+pub fn tokenize_text(text: &str) -> Vec<Token> {
+    text.split_word_bounds()
+        .filter(|s| {
+            let trimmed = s.trim();
+            !trimmed.is_empty() && !trimmed.chars().all(|c| c.is_whitespace() || c.is_control())
+        })
+        .map(|word| Token {
+            text: word.trim().to_string(),
+            duration_ms: 200,
+        })
+        .collect()
+}
 
 #[cfg(test)]
 mod tests {
