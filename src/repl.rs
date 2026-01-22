@@ -8,7 +8,21 @@ pub enum ReplCommand {
 }
 
 pub fn parse_repl_input(input: &str) -> ReplCommand {
-    unimplemented!("parse_repl_input to be implemented")
+    let trimmed = input.trim();
+
+    if trimmed.starts_with("@@") {
+        return ReplCommand::LoadClipboard;
+    }
+
+    if trimmed.starts_with('@') && trimmed.len() > 1 {
+        return ReplCommand::LoadFile(trimmed[1..].to_string());
+    }
+
+    if trimmed == ":q" || trimmed == ":quit" {
+        return ReplCommand::Quit;
+    }
+
+    ReplCommand::LoadFile(trimmed.to_string())
 }
 
 #[cfg(test)]
