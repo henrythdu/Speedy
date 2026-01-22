@@ -5,6 +5,7 @@ pub enum ReplCommand {
     LoadFile(String),
     LoadClipboard,
     Quit,
+    Help,
 }
 
 pub fn parse_repl_input(input: &str) -> ReplCommand {
@@ -20,6 +21,10 @@ pub fn parse_repl_input(input: &str) -> ReplCommand {
 
     if trimmed == ":q" || trimmed == ":quit" {
         return ReplCommand::Quit;
+    }
+
+    if trimmed == ":h" || trimmed == ":help" {
+        return ReplCommand::Help;
     }
 
     ReplCommand::LoadFile(trimmed.to_string())
@@ -48,5 +53,12 @@ mod tests {
         let input = ":q";
         let command = parse_repl_input(input);
         assert_eq!(command, ReplCommand::Quit);
+    }
+
+    #[test]
+    fn test_parse_repl_input_help() {
+        let input = ":h";
+        let command = parse_repl_input(input);
+        assert_eq!(command, ReplCommand::Help);
     }
 }
