@@ -24,6 +24,13 @@ impl ReadingState {
             self.current_index += 1;
         }
     }
+
+    pub fn adjust_wpm(&mut self, delta: i32) {
+        const MIN_WPM: u32 = 50;
+        const MAX_WPM: u32 = 1000;
+        let new_wpm = self.wpm as i32 + delta;
+        self.wpm = new_wpm.clamp(MIN_WPM as i32, MAX_WPM as i32) as u32;
+    }
 }
 
 #[cfg(test)]
