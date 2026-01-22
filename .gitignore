@@ -1,0 +1,11 @@
+# Rust build artifacts
+target/
+
+# Serena tool data
+.serena/
+
+# Claude Code data
+.claude/
+
+# bd/beads issue tracker data
+.beads/
