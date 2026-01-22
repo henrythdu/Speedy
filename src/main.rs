@@ -1,6 +1,7 @@
 mod app;
 mod audio;
 mod engine;
+mod repl;
 mod storage;
 mod ui;
 
