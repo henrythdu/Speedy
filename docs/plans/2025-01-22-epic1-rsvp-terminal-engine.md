@@ -19,6 +19,8 @@
 
 **Task Count:** 14 tasks (expanded from original 11 to include REPL, WPM controls, and error handling per PRD alignment)
 
+**Architecture Note:** Separated REPL logic into `src/repl.rs` to align with PRD Section 6.1 where app.rs is designated as "State Machine" only. This follows the Single Responsibility Principle and keeps concerns cleanly separated.
+
 ---
 
 ## Task 1: Initialize Rust Project Structure
@@ -588,10 +590,62 @@ git commit -m "feat: implement UI reader word rendering"
 
 ---
 
-## Task 13: Implement REPL Interface
+## Task 8: Write Failing Tests for REPL Interface
 
 **Files:**
-- Modify: `src/app.rs`
+- Create: `src/repl.rs`
+- Test: `src/repl.rs` (tests module)
+
+**Step 1: Write test for REPL command parsing**
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_repl_input_load_file() {
+        let input = "@test.txt";
+        let command = parse_repl_input(input);
+        assert_eq!(command, ReplCommand::LoadFile("test.txt".to_string()));
+    }
+
+    #[test]
+    fn test_parse_repl_input_load_clipboard() {
+        let input = "@@";
+        let command = parse_repl_input(input);
+        assert_eq!(command, ReplCommand::LoadClipboard);
+    }
+
+    #[test]
+    fn test_parse_repl_input_quit() {
+        let input = ":q";
+        let command = parse_repl_input(input);
+        assert_eq!(command, ReplCommand::Quit);
+    }
+}
+```
+
+**Step 2: Run test to verify it fails**
+
+```bash
+cargo test repl::tests::test_parse_repl_input_load_file
+```
+Expected: FAIL with "parse_repl_input undefined"
+
+**Step 3: Commit**
+
+```bash
+git add src/repl.rs
+git commit -m "test: add failing REPL interface tests"
+```
+
+---
+
+## Task 9: Implement REPL Interface
+
+**Files:**
+- Create: `src/repl.rs` (update existing)
 - Modify: `src/main.rs`
 
 **Step 1: Implement REPL command parsing**
@@ -621,9 +675,40 @@ pub fn parse_repl_input(input: &str) -> ReplCommand {
     
     ReplCommand::LoadFile(trimmed.to_string()) // Fallback
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_repl_input_load_file() {
+        let input = "@test.txt";
+        let command = parse_repl_input(input);
+        assert_eq!(command, ReplCommand::LoadFile("test.txt".to_string()));
+    }
+
+    #[test]
+    fn test_parse_repl_input_load_clipboard() {
+        let input = "@@";
+        let command = parse_repl_input(input);
+        assert_eq!(command, ReplCommand::LoadClipboard);
+    }
+
+    #[test]
+    fn test_parse_repl_input_quit() {
+        let input = ":q";
+        let command = parse_repl_input(input);
+        assert_eq!(command, ReplCommand::Quit);
+    }
+}
 ```
 
-**Step 2: Add REPL mode to AppMode enum**
+**Files:**
+- Create: `src/repl.rs` (update existing)
+- Modify: `src/app.rs` (add Repl to AppMode enum)
+- Modify: `src/main.rs`
+
+**Step 1: Implement REPL command parsing**
 
 ```rust
 #[derive(Debug, Clone, PartialEq)]
@@ -631,79 +716,29 @@ pub enum AppMode {
     Repl,           // NEW: Interactive prompt
     Reading,         // Displaying words
     Paused,          // Reading paused
+    Peek,           // Hold Tab to see full context
     Quit,            // Application exit
 }
 ```
 
-**Step 3: Implement REPL loop in main.rs**
+**Step 3: Update main.rs to import repl module**
 
 ```rust
-use std::io::{self, Write};
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Enable raw mode for REPL
-    enable_raw_mode()?;
-    
-    let mut app = app::App::new();
-    
-    loop {
-        match app.mode {
-            AppMode::Repl => {
-                print!("speedy> ");
-                io::stdout().flush()?;
-                
-                let mut input = String::new();
-                io::stdin().read_line(&mut input)?;
-                
-                let command = app::parse_repl_input(&input);
-                
-                match command {
-                    app::ReplCommand::LoadFile(filename) => {
-                        let content = fs::read_to_string(&filename)?;
-                        let tokens = engine::tokenize_text(&content, 300);
-                        app.start_reading(tokens);
-                    }
-                    app::ReplCommand::LoadClipboard => {
-                        // TODO: Add clipboard support (future epic)
-                        println!("Clipboard loading not yet implemented");
-                    }
-                    app::ReplCommand::Quit => {
-                        break;
-                    }
-                    _ => {}
-                }
-            }
-            AppMode::Reading | AppMode::Paused => {
-                // Existing event loop logic
-                break; // Exit REPL mode
-            }
-            AppMode::Quit => break,
-        }
-    }
-    
-    Ok(())
-}
+mod repl;
+use repl::ReplCommand;
 ```
 
 **Step 4: Run REPL tests**
 
 ```bash
-cargo test app::tests
+cargo test repl
 ```
 Expected: PASS
 
-**Step 5: Test REPL manually**
+**Step 5: Commit**
 
 ```bash
-cargo run
-# At prompt: @test.txt
-# Should load file and start reading
-```
-
-**Step 6: Commit**
-
-```bash
-git add src/app.rs src/main.rs
+git add src/repl.rs src/main.rs
 git commit -m "feat: implement REPL interface with file loading"
 ```
 
