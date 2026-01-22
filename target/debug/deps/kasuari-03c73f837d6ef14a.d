@@ -1,0 +1,14 @@
+/home/hdu/Projects/Speedy/target/debug/deps/kasuari-03c73f837d6ef14a.d: /home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/lib.rs /home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/constraint.rs /home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/error.rs /home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/expression.rs /home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/relations.rs /home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/row.rs /home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/solver.rs /home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/strength.rs /home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/term.rs /home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/variable.rs
+
+/home/hdu/Projects/Speedy/target/debug/deps/libkasuari-03c73f837d6ef14a.rmeta: /home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/lib.rs /home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/constraint.rs /home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/error.rs /home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/expression.rs /home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/relations.rs /home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/row.rs /home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/solver.rs /home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/strength.rs /home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/term.rs /home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/variable.rs
+
+/home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/lib.rs:
+/home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/constraint.rs:
+/home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/error.rs:
+/home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/expression.rs:
+/home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/relations.rs:
+/home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/row.rs:
+/home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/solver.rs:
+/home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/strength.rs:
+/home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/term.rs:
+/home/hdu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/kasuari-0.4.11/src/variable.rs:
