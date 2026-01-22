@@ -7,7 +7,7 @@ pub struct Token {
 }
 
 pub fn wpm_to_milliseconds(wpm: u32) -> u64 {
-    60_000 / wpm as u64
+    60_000 / wpm.max(1) as u64
 }
 
 pub fn tokenize_text(text: &str) -> Vec<Token> {
