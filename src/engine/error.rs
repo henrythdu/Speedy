@@ -33,11 +33,11 @@ impl From<io::Error> for SpeedyError {
 
 pub fn load_file_safe(path: &str) -> Result<String, SpeedyError> {
     let content = std::fs::read_to_string(path)?;
-    
+
     if content.trim().is_empty() {
         return Err(SpeedyError::EmptyFile(path.to_string()));
     }
-    
+
     Ok(content)
 }
 
@@ -51,14 +51,14 @@ mod tests {
     fn test_empty_file_error() {
         let test_file = "test_empty.txt";
         File::create(test_file).unwrap();
-        
+
         let result = load_file_safe(test_file);
         assert!(result.is_err());
         match result {
             Err(SpeedyError::EmptyFile(_)) => (),
             _ => panic!("Expected EmptyFile error"),
         }
-        
+
         fs::remove_file(test_file).unwrap();
     }
 
@@ -77,11 +77,11 @@ mod tests {
         let test_file = "test_valid.txt";
         let mut file = File::create(test_file).unwrap();
         file.write_all(b"hello world").unwrap();
-        
+
         let result = load_file_safe(test_file);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "hello world");
-        
+
         fs::remove_file(test_file).unwrap();
     }
 }
