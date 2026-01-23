@@ -1,5 +1,1 @@
-   0.069205856s  INFO prepare_target{force=false package_id=speedy v0.1.0 (/home/hdu/Projects/Speedy) target="integration_test"}: cargo::core::compiler::fingerprint: dependency on `speedy` is newer than we are 1769201860.146087070s > 1769191348.810700572s "/home/hdu/Projects/Speedy"
-   0.069264126s  INFO prepare_target{force=false package_id=speedy v0.1.0 (/home/hdu/Projects/Speedy) target="integration_test"}: cargo::core::compiler::fingerprint: fingerprint dirty for speedy v0.1.0 (/home/hdu/Projects/Speedy)/Check { test: true }/TargetInner { kind: "test", name: "integration_test", benched: false, ..: with_path("/home/hdu/Projects/Speedy/tests/integration_test.rs", Edition2021) }
-   0.069274866s  INFO prepare_target{force=false package_id=speedy v0.1.0 (/home/hdu/Projects/Speedy) target="integration_test"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDependency { name: "speedy", dep_mtime: FileTime { seconds: 1769201860, nanos: 146087070 }, max_mtime: FileTime { seconds: 1769191348, nanos: 810700572 } })
-    Checking speedy v0.1.0 (/home/hdu/Projects/Speedy)
-error: could not compile `speedy` (test "integration_test") due to 2 previous errors
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.10s
