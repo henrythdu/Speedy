@@ -2,10 +2,10 @@ use crate::app::AppEvent;
 
 /// Commands that can be parsed from REPL input
 ///
-/// These commands map to AppEvent for handling in the App core.
+/// These commands map to AppEvent for handling in App core.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ReplCommand {
-    /// Quit the application
+    /// Quit to application
     Quit,
 
     /// Show help information
@@ -23,22 +23,16 @@ pub enum ReplCommand {
 
 /// Convert a parsed REPL command into an AppEvent
 ///
-/// This is the translation layer between REPL input and the App core.
+/// This is the translation layer between REPL input and App core.
 pub fn command_to_app_event(command: ReplCommand) -> AppEvent {
     match command {
         ReplCommand::Quit => AppEvent::Quit,
         ReplCommand::Help => AppEvent::Help,
         ReplCommand::LoadFile(path) => AppEvent::LoadFile(path),
-        ReplCommand::LoadClipboard => {
-            // TODO: Implement clipboard support in future epic
-            eprintln!("Clipboard input not yet supported.");
-            eprintln!("Type :q to quit or :h for help.");
-            AppEvent::None
-        }
-        ReplCommand::Unknown(input) => {
-            eprintln!("Unknown command: {}", input);
-            AppEvent::None
-        }
+        ReplCommand::LoadClipboard => AppEvent::Warning(
+            "Clipboard input not yet supported. Type :q to quit or :h for help.".to_string(),
+        ),
+        ReplCommand::Unknown(input) => AppEvent::InvalidCommand(input),
     }
 }
 
@@ -67,14 +61,14 @@ mod tests {
     #[test]
     fn test_command_to_app_event_load_clipboard() {
         let event = command_to_app_event(ReplCommand::LoadClipboard);
-        // For now, LoadClipboard maps to AppEvent::None with message
-        assert!(matches!(event, AppEvent::None));
+        // LoadClipboard now maps to AppEvent::Warning with message
+        assert!(matches!(event, AppEvent::Warning(_)));
     }
 
     #[test]
     fn test_command_to_app_event_unknown() {
         let event = command_to_app_event(ReplCommand::Unknown("invalid".to_string()));
-        // Unknown commands map to AppEvent::None with error message
-        assert!(matches!(event, AppEvent::None));
+        // Unknown commands now map to AppEvent::InvalidCommand
+        assert!(matches!(event, AppEvent::InvalidCommand(_)));
     }
 }

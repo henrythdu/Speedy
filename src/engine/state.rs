@@ -1,6 +1,5 @@
 use crate::engine::timing::Token;
 
-#[allow(dead_code)]
 pub struct ReadingState {
     pub tokens: Vec<Token>,
     pub current_index: usize,

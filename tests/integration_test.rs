@@ -1,6 +1,6 @@
 use speedy::engine::timing::tokenize_text;
 use speedy::engine::error::load_file_safe;
-use speedy::app::state::ReadingState;
+use speedy::engine::state::ReadingState;
 use std::fs::{self, File};
 use std::io::Write;
 
@@ -15,7 +15,7 @@ fn end_to_end_reading() {
     let loaded_content = load_file_safe(test_file).expect("Should load file successfully");
     assert_eq!(loaded_content, content);
     
-    let tokens = tokenize_text(&loaded_content);
+    let tokens = tokenize_text(&loaded_content, 300);
     assert!(!tokens.is_empty(), "Should have tokens");
     assert_eq!(tokens[0].text, "Hello");
     assert_eq!(tokens[1].text, "world");
