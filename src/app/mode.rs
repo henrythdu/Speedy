@@ -1,8 +1,10 @@
-#[derive(Clone, Debug, PartialEq)]
+#[allow(dead_code)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub enum AppMode {
+    #[default]
+    Repl,
     Reading,
     Paused,
-    Repl,
     Peek,
     Quit,
 }
