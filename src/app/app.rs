@@ -1,30 +1,28 @@
 use super::mode::AppMode;
-use super::state::ReadingState;
+use crate::engine::state::ReadingState;
 use crate::engine::timing::tokenize_text;
 
-#[allow(dead_code)]
 #[derive(Debug, PartialEq, Clone)]
 pub enum AppEvent {
     LoadFile(String),
     LoadClipboard,
     Quit,
     Help,
+    Warning(String),
+    InvalidCommand(String),
     None,
 }
 
-#[allow(dead_code)]
 pub struct RenderState {
     pub mode: AppMode,
     pub current_word: Option<String>,
 }
 
-#[allow(dead_code)]
 pub struct App {
     pub mode: AppMode,
     pub reading_state: Option<ReadingState>,
 }
 
-#[allow(dead_code)]
 impl App {
     pub fn new() -> Self {
         Self {
@@ -33,14 +31,12 @@ impl App {
         }
     }
 
-    #[allow(dead_code)]
     pub fn start_reading(&mut self, text: &str, wpm: u32) {
-        let tokens = tokenize_text(text);
+        let tokens = tokenize_text(text, wpm);
         self.reading_state = Some(ReadingState::new(tokens, wpm));
         self.mode = AppMode::Reading;
     }
 
-    #[allow(dead_code)]
     pub fn toggle_pause(&mut self) {
         match self.mode {
             AppMode::Reading => {
@@ -67,13 +63,18 @@ impl App {
             AppEvent::LoadClipboard => {
                 // TODO: Implement clipboard loading logic (Task 2A-4)
             }
+            AppEvent::Warning(msg) => {
+                eprintln!("Warning: {}", msg);
+            }
+            AppEvent::InvalidCommand(cmd) => {
+                eprintln!("Unknown command: {}", cmd);
+            }
             AppEvent::None => {
                 // No action required
             }
         }
     }
 
-    #[allow(dead_code)]
     pub fn get_render_state(&self) -> RenderState {
         let current_word = self
             .reading_state

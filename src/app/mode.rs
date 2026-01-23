@@ -1,4 +1,3 @@
-#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Default)]
 pub enum AppMode {
     #[default]
