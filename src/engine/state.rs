@@ -43,10 +43,12 @@ mod tests {
             Token {
                 text: "hello".to_string(),
                 duration_ms: 200,
+                punctuation: None,
             },
             Token {
                 text: "world".to_string(),
                 duration_ms: 200,
+                punctuation: None,
             },
         ];
         let state = ReadingState::new(tokens, 300);
@@ -60,10 +62,12 @@ mod tests {
             Token {
                 text: "hello".to_string(),
                 duration_ms: 200,
+                punctuation: None,
             },
             Token {
                 text: "world".to_string(),
                 duration_ms: 200,
+                punctuation: None,
             },
         ];
         let state = ReadingState::new(tokens, 300);
@@ -76,10 +80,12 @@ mod tests {
             Token {
                 text: "hello".to_string(),
                 duration_ms: 200,
+                punctuation: None,
             },
             Token {
                 text: "world".to_string(),
                 duration_ms: 200,
+                punctuation: None,
             },
         ];
         let mut state = ReadingState::new(tokens, 300);
