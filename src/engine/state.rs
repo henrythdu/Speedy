@@ -78,6 +78,43 @@ impl ReadingState {
             *self.config.wpm_range.end() as i32,
         ) as u32;
     }
+
+    pub fn find_next_sentence_start(&self) -> Option<usize> {
+        self.tokens
+            .iter()
+            .enumerate()
+            .skip(self.current_index + 1)
+            .find(|(_, token)| token.is_sentence_start)
+            .map(|(index, _)| index)
+    }
+
+    pub fn jump_to_next_sentence(&mut self) -> bool {
+        if let Some(next_index) = self.find_next_sentence_start() {
+            self.current_index = next_index;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn find_previous_sentence_start(&self) -> Option<usize> {
+        self.tokens
+            .iter()
+            .enumerate()
+            .take(self.current_index)
+            .rev()
+            .find(|(_, token)| token.is_sentence_start)
+            .map(|(index, _)| index)
+    }
+
+    pub fn jump_to_previous_sentence(&mut self) -> bool {
+        if let Some(prev_index) = self.find_previous_sentence_start() {
+            self.current_index = prev_index;
+            true
+        } else {
+            false
+        }
+    }
 }
 
 #[cfg(test)]
@@ -90,10 +127,12 @@ mod tests {
             Token {
                 text: "hello".to_string(),
                 punctuation: vec![],
+                is_sentence_start: false,
             },
             Token {
                 text: "world".to_string(),
                 punctuation: vec![],
+                is_sentence_start: false,
             },
         ];
         let state = ReadingState::new_with_default_config(tokens, 300);
@@ -107,10 +146,12 @@ mod tests {
             Token {
                 text: "hello".to_string(),
                 punctuation: vec![],
+                is_sentence_start: false,
             },
             Token {
                 text: "world".to_string(),
                 punctuation: vec![],
+                is_sentence_start: false,
             },
         ];
         let state = ReadingState::new_with_default_config(tokens, 300);
@@ -123,10 +164,12 @@ mod tests {
             Token {
                 text: "hello".to_string(),
                 punctuation: vec![],
+                is_sentence_start: false,
             },
             Token {
                 text: "world".to_string(),
                 punctuation: vec![],
+                is_sentence_start: false,
             },
         ];
         let mut state = ReadingState::new_with_default_config(tokens, 300);
@@ -169,6 +212,7 @@ mod tests {
         let tokens = vec![Token {
             text: "hello".to_string(),
             punctuation: vec![],
+            is_sentence_start: false,
         }];
         let mut state = ReadingState::new_with_default_config(tokens, 300); // 300 WPM = 200ms base
 
@@ -190,7 +234,8 @@ mod tests {
         // Test that punctuation multipliers work with dynamic WPM
         let tokens = vec![Token {
             text: "hello".to_string(),
-            punctuation: vec!['.'], // 3.0x multiplier
+            punctuation: vec!['.'],
+            is_sentence_start: false,
         }];
         let mut state = ReadingState::new_with_default_config(tokens, 100); // 100 WPM = 600ms base
 
@@ -201,5 +246,239 @@ mod tests {
         state.adjust_wpm(100);
         // Expected: 300ms * 3.0 = 900ms
         assert_eq!(state.current_token_duration(), 900);
+    }
+
+    #[test]
+    fn test_jump_to_next_middle() {
+        // Test normal forward jump from middle of text
+        let tokens = vec![
+            Token {
+                text: "Hello".to_string(),
+                punctuation: vec![],
+                is_sentence_start: true,
+            },
+            Token {
+                text: "world".to_string(),
+                punctuation: vec!['.'],
+                is_sentence_start: false,
+            },
+            Token {
+                text: "This".to_string(),
+                punctuation: vec![],
+                is_sentence_start: true,
+            },
+            Token {
+                text: "is".to_string(),
+                punctuation: vec![],
+                is_sentence_start: false,
+            },
+        ];
+        let mut state = ReadingState::new_with_default_config(tokens, 300);
+        assert_eq!(state.current_index, 0);
+
+        let jumped = state.jump_to_next_sentence();
+        assert!(jumped);
+        assert_eq!(state.current_index, 2);
+    }
+
+    #[test]
+    fn test_jump_to_next_at_boundary() {
+        // Test jump when already at sentence start - should jump to NEXT
+        let tokens = vec![
+            Token {
+                text: "Hello".to_string(),
+                punctuation: vec![],
+                is_sentence_start: true,
+            },
+            Token {
+                text: "world".to_string(),
+                punctuation: vec!['.'],
+                is_sentence_start: false,
+            },
+            Token {
+                text: "This".to_string(),
+                punctuation: vec![],
+                is_sentence_start: true,
+            },
+        ];
+        let mut state = ReadingState::new_with_default_config(tokens, 300);
+        assert_eq!(state.current_index, 0);
+
+        let jumped = state.jump_to_next_sentence();
+        assert!(jumped);
+        assert_eq!(state.current_index, 2);
+    }
+
+    #[test]
+    fn test_jump_to_next_last_sentence() {
+        // Test jump at last sentence - should stay at end
+        let tokens = vec![
+            Token {
+                text: "Hello".to_string(),
+                punctuation: vec![],
+                is_sentence_start: true,
+            },
+            Token {
+                text: "world".to_string(),
+                punctuation: vec!['.'],
+                is_sentence_start: false,
+            },
+        ];
+        let mut state = ReadingState::new_with_default_config(tokens, 300);
+        assert_eq!(state.current_index, 0);
+
+        let jumped = state.jump_to_next_sentence();
+        assert!(!jumped);
+        assert_eq!(state.current_index, 0);
+    }
+
+    #[test]
+    fn test_jump_to_next_empty_stream() {
+        // Test jump on empty token list - should be no-op
+        let tokens = vec![];
+        let mut state = ReadingState::new_with_default_config(tokens, 300);
+
+        let jumped = state.jump_to_next_sentence();
+        assert!(!jumped);
+        assert_eq!(state.current_index, 0);
+    }
+
+    #[test]
+    fn test_find_next_no_more_sentences() {
+        // Test find_next_sentence_start when no more sentences
+        let tokens = vec![
+            Token {
+                text: "Hello".to_string(),
+                punctuation: vec![],
+                is_sentence_start: true,
+            },
+            Token {
+                text: "world".to_string(),
+                punctuation: vec!['.'],
+                is_sentence_start: false,
+            },
+        ];
+        let mut state = ReadingState::new_with_default_config(tokens, 300);
+        state.current_index = 1; // Move to last token (not sentence start)
+
+        let next = state.find_next_sentence_start();
+        assert!(next.is_none());
+    }
+
+    #[test]
+    fn test_jump_to_prev_middle() {
+        // Test normal backward jump from middle of text
+        let tokens = vec![
+            Token {
+                text: "Hello".to_string(),
+                punctuation: vec![],
+                is_sentence_start: true,
+            },
+            Token {
+                text: "world".to_string(),
+                punctuation: vec!['.'],
+                is_sentence_start: false,
+            },
+            Token {
+                text: "This".to_string(),
+                punctuation: vec![],
+                is_sentence_start: true,
+            },
+            Token {
+                text: "is".to_string(),
+                punctuation: vec![],
+                is_sentence_start: false,
+            },
+        ];
+        let mut state = ReadingState::new_with_default_config(tokens, 300);
+        state.current_index = 3; // Point to "is"
+
+        let jumped = state.jump_to_previous_sentence();
+        assert!(jumped);
+        assert_eq!(state.current_index, 2);
+    }
+
+    #[test]
+    fn test_jump_to_prev_at_boundary() {
+        // Test jump when already at sentence start - should jump to PREVIOUS
+        let tokens = vec![
+            Token {
+                text: "Hello".to_string(),
+                punctuation: vec![],
+                is_sentence_start: true,
+            },
+            Token {
+                text: "world".to_string(),
+                punctuation: vec!['.'],
+                is_sentence_start: false,
+            },
+            Token {
+                text: "This".to_string(),
+                punctuation: vec![],
+                is_sentence_start: true,
+            },
+        ];
+        let mut state = ReadingState::new_with_default_config(tokens, 300);
+        state.current_index = 2; // Point to sentence start
+
+        let jumped = state.jump_to_previous_sentence();
+        assert!(jumped);
+        assert_eq!(state.current_index, 0);
+    }
+
+    #[test]
+    fn test_jump_to_prev_first_sentence() {
+        // Test jump at first sentence - should stay at 0
+        let tokens = vec![
+            Token {
+                text: "Hello".to_string(),
+                punctuation: vec![],
+                is_sentence_start: true,
+            },
+            Token {
+                text: "world".to_string(),
+                punctuation: vec!['.'],
+                is_sentence_start: false,
+            },
+        ];
+        let mut state = ReadingState::new_with_default_config(tokens, 300);
+        state.current_index = 0; // At first sentence
+
+        let jumped = state.jump_to_previous_sentence();
+        assert!(!jumped);
+        assert_eq!(state.current_index, 0);
+    }
+
+    #[test]
+    fn test_jump_to_prev_empty_stream() {
+        // Test jump on empty token list - should be no-op
+        let tokens = vec![];
+        let mut state = ReadingState::new_with_default_config(tokens, 300);
+
+        let jumped = state.jump_to_previous_sentence();
+        assert!(!jumped);
+        assert_eq!(state.current_index, 0);
+    }
+
+    #[test]
+    fn test_find_prev_no_more_sentences() {
+        // Test find_previous_sentence_start when no more sentences
+        let tokens = vec![
+            Token {
+                text: "Hello".to_string(),
+                punctuation: vec![],
+                is_sentence_start: true,
+            },
+            Token {
+                text: "world".to_string(),
+                punctuation: vec!['.'],
+                is_sentence_start: false,
+            },
+        ];
+        let mut state = ReadingState::new_with_default_config(tokens, 300);
+        state.current_index = 0; // At first (only) sentence start
+
+        let prev = state.find_previous_sentence_start();
+        assert!(prev.is_none());
     }
 }
