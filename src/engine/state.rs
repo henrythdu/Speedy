@@ -80,12 +80,14 @@ impl ReadingState {
     }
 
     pub fn find_next_sentence_start(&self) -> Option<usize> {
-        self.tokens
+        let start = self.current_index.saturating_add(1);
+        if start >= self.tokens.len() {
+            return None;
+        }
+        self.tokens[start..]
             .iter()
-            .enumerate()
-            .skip(self.current_index + 1)
-            .find(|(_, token)| token.is_sentence_start)
-            .map(|(index, _)| index)
+            .position(|token| token.is_sentence_start)
+            .map(|pos| pos + start)
     }
 
     pub fn jump_to_next_sentence(&mut self) -> bool {
@@ -98,13 +100,9 @@ impl ReadingState {
     }
 
     pub fn find_previous_sentence_start(&self) -> Option<usize> {
-        self.tokens
+        self.tokens[..self.current_index]
             .iter()
-            .enumerate()
-            .take(self.current_index)
-            .rev()
-            .find(|(_, token)| token.is_sentence_start)
-            .map(|(index, _)| index)
+            .rposition(|token| token.is_sentence_start)
     }
 
     pub fn jump_to_previous_sentence(&mut self) -> bool {
