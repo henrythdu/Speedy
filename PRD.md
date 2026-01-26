@@ -204,6 +204,20 @@ speedy/
 | `Tab` (hold) | Peek context (show normal text view) |
 | `Shift` (hold) | Tactical throttle (50% speed) |
 
+### 7.3 Future Navigation Enhancements (v1.1+)
+**Rapid Navigation Options:**
+- **Hold-based advancement**: Holding `j` continuously advances through sentences
+- **Count-based jumps**: `5j` jumps forward 5 sentences, `10k` jumps back 10 sentences
+- **Time-based skipping**: `30s` skip 30 seconds ahead, `1m` skip 1 minute ahead
+
+**Advanced Navigation Features:**
+- **Paragraph jumps**: Jump to next/previous paragraph (larger granularity than sentences)
+- **Chapter navigation**: Jump between chapters in EPUB documents
+- **Bookmark support**: Mark and return to specific positions
+- **Navigation history**: Back/forward through recent positions
+
+**Note:** Current MVP implements single-step sentence navigation (j/k) per Section 7.2.
+
 ---
 
 ## 8. VISUAL HIERARCHY SUMMARY

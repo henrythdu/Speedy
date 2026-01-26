@@ -1,9 +1,12 @@
 // Timing engine - WPM calculation and tokenization
 
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Token {
     pub text: String,
     /// Trailing punctuation characters (e.g., ['?', '!'] for "word?!") per PRD Section 3.2 max stacking rule.
     pub punctuation: Vec<char>,
+    /// Indicates if this token starts a new sentence (PRD Section 3.3).
+    pub is_sentence_start: bool,
 }
 
 fn extract_punctuation(word: &str) -> (String, Vec<char>) {
@@ -41,6 +44,37 @@ pub fn wpm_to_milliseconds(wpm: u32) -> u64 {
     60_000 / wpm.max(1) as u64
 }
 
+/// Detects if current word starts a new sentence based on previous token.
+/// MVP: Period/question/exclamation followed by capital letter A-Z, or newline.
+/// First token always returns true (PRD Section 3.3 requirement).
+pub fn detect_sentence_boundary(prev_token: Option<&Token>, current_word: &str) -> bool {
+    if prev_token.is_none() {
+        return true;
+    }
+
+    let prev = prev_token.unwrap();
+    let has_newline = prev.punctuation.contains(&'\n');
+
+    if has_newline {
+        return true;
+    }
+
+    let has_terminator = prev
+        .punctuation
+        .iter()
+        .any(|&p| p == '.' || p == '?' || p == '!');
+
+    if !has_terminator {
+        return false;
+    }
+
+    current_word
+        .chars()
+        .next()
+        .map(|c| c.is_ascii_uppercase())
+        .unwrap_or(false)
+}
+
 /// Tokenizes text line-by-line; PRD Section 3.2.
 /// Note: duration is calculated dynamically in ReadingState, not stored in Token.
 pub fn tokenize_text(text: &str) -> Vec<Token> {
@@ -51,15 +85,24 @@ pub fn tokenize_text(text: &str) -> Vec<Token> {
         for word in line.split_whitespace() {
             if !word.is_empty() {
                 let (text, punctuation) = extract_punctuation(word);
+                let prev_token = tokens.last().cloned();
+                let is_start = detect_sentence_boundary(prev_token.as_ref(), &word);
 
-                tokens.push(Token { text, punctuation });
+                tokens.push(Token {
+                    text,
+                    punctuation,
+                    is_sentence_start: is_start,
+                });
             }
         }
 
         // Create newline token after each line (except if line was empty/whitespace only)
+        let prev_token = tokens.last().cloned();
+        let is_start = detect_sentence_boundary(prev_token.as_ref(), "");
         tokens.push(Token {
             text: String::new(),
             punctuation: vec!['\n'],
+            is_sentence_start: is_start,
         });
     }
 
@@ -237,5 +280,64 @@ mod tests {
         assert_eq!(tokens.len(), 1);
         assert_eq!(tokens[0].text, "hello");
         assert_eq!(tokens[0].punctuation, vec![]);
+    }
+
+    // Speedy-ui3: Tokenization Update tests
+
+    #[test]
+    fn test_is_sentence_start_set_correctly() {
+        let text = "Hello. World? Good!";
+        let tokens = tokenize_text(text);
+
+        // Expected: [Hello., World?, Good!]
+        // Sentence starts: Hello (first token), World (period before), Good (question mark before)
+        assert_eq!(tokens.len(), 3);
+        assert!(
+            tokens[0].is_sentence_start,
+            "First token should be marked as sentence start"
+        );
+        assert!(
+            tokens[1].is_sentence_start,
+            "World should be marked as sentence start (period before)"
+        );
+        assert!(
+            tokens[2].is_sentence_start,
+            "Good should be marked as sentence start (question mark before)"
+        );
+    }
+
+    #[test]
+    fn test_tokenize_single_sentence() {
+        let text = "Hello world";
+        let tokens = tokenize_text(text);
+
+        // Expected: [Hello, world]
+        // Only first token should be sentence start
+        assert_eq!(tokens.len(), 2);
+        assert!(
+            tokens[0].is_sentence_start,
+            "First token should be marked as sentence start"
+        );
+        assert!(
+            !tokens[1].is_sentence_start,
+            "Second token without terminator should NOT be sentence start"
+        );
+    }
+
+    #[test]
+    fn test_tokenize_multiple_sentences() {
+        let text = "Hello. World! Good? Yes";
+        let tokens = tokenize_text(text);
+
+        // Expected: [Hello., World!, Good?, Yes]
+        // Sentence starts: Hello, World, Good, Yes (each after terminator)
+        assert_eq!(tokens.len(), 4);
+        for (i, token) in tokens.iter().enumerate() {
+            assert!(
+                token.is_sentence_start,
+                "Token {} should be marked as sentence start",
+                i + 1
+            );
+        }
     }
 }
