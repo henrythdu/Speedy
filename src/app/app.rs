@@ -1,4 +1,5 @@
 use super::mode::AppMode;
+use crate::engine::config::TimingConfig;
 use crate::engine::state::ReadingState;
 use crate::engine::timing::tokenize_text;
 
@@ -32,8 +33,8 @@ impl App {
     }
 
     pub fn start_reading(&mut self, text: &str, wpm: u32) {
-        let tokens = tokenize_text(text, wpm);
-        self.reading_state = Some(ReadingState::new(tokens, wpm));
+        let tokens = tokenize_text(text);
+        self.reading_state = Some(ReadingState::new_with_default_config(tokens, wpm));
         self.mode = AppMode::Reading;
     }
 
