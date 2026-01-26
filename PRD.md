@@ -53,14 +53,17 @@ speedy> :q                      # Quit
 
 ### 3.1 Fixed-Axis OVP Anchoring
 
-Words are horizontally shifted so the **Anchor Letter** remains at a fixed vertical coordinate.
+Words are horizontally shifted so that **Anchor Letter** remains at a fixed vertical coordinate.
 
-* **Anchor Logic:** * 1 char: 1st letter.
-* 2-5 chars: 2nd letter.
-* 6-9 chars: 3rd letter.
-* 10-13 chars: 4th letter.
-* 14+ chars: Cap at 4th position (MVP); Phase 2: Proportional positioning (~33% into word).
-
+**Anchor Position Formula f(word_length):**
+```
+anchor_index = match word_length:
+    1      → 0    (1st letter)
+    2-5    → 1    (2nd letter)
+    6-9    → 2    (3rd letter)
+    10-13   → 3    (4th letter)
+     14+     → 3    (cap at 4th position for MVP; Phase 2: ~33% position)
+```
 
 * **Salience:** Anchor is colored `#F7768E` (Coral Red) and pulses in luminance at paragraph breaks.
 
@@ -68,10 +71,34 @@ Words are horizontally shifted so the **Anchor Letter** remains at a fixed verti
 
 Instead of a static WPM, time-per-word is calculated as:
 
+**Base Delay Formula:**
+```
+base_delay_ms = 60000 / wpm
+```
 
-* **Punctuation:** `.` (3.0x), `,` (1.5x), `\n` (4.0x).
-* **Word Length:** Words >10 characters apply configurable delay penalty (default 1.15x, user-adjustable).
-* **Chunking:** Common 2-letter pairs (e.g., "in it") are flashed together.
+**Punctuation Multipliers (stacking rule: max of all applicable):**
+* `.` (3.0x), `,` (1.5x), `?` (3.0x), `!` (3.0x), `\n` (4.0x)
+* If word has multiple punctuation types (e.g., "word?!"), apply the **maximum** multiplier only
+* Delay per word: `delay_ms = base_delay_ms * max(multipliers)`
+
+**Word Length Penalty:**
+* Words >10 characters apply configurable delay penalty (default 1.15x, user-adjustable)
+* Final delay: `delay_ms = delay_ms * word_length_penalty_if_applicable`
+
+**Chunking:** Common 2-letter pairs (e.g., "in it") are flashed together.
+
+### 3.3 Sentence-Aware Navigation
+
+Navigation jumps (`j`/`k`) always land at sentence beginnings to prevent users from starting mid-sentence, which disrupts reading comprehension.
+
+**Sentence Boundary Rules:**
+* Terminal punctuation marks: `.`, `?`, `!` indicate sentence ends
+* Newlines indicate sentence boundaries
+* Common abbreviations do NOT break sentences: `Dr.`, `Mr.`, `Mrs.`, `Ms.`, `St.`, `Jr.`, `e.g.`, `i.e.`, `vs.`, `etc.`
+* Decimal numbers do NOT break sentences: `3.14`, `2.5`, `1,000` (period after number is not sentence terminator)
+
+* **Backward (`k`):** Find the nearest sentence start before current position
+* **Forward (`j`):** Find the next sentence start after current position
 
 ---
 
@@ -89,11 +116,20 @@ Designed to meet **WCAG AA accessibility** while minimizing eye strain.
 
 To solve "Spatial Blindness," a 3-character wide vertical gutter sits on the far right.
 * **Progress Indication:** Uses opacity levels and position to map **Information Density** (Phase 2: Consider topographic textures after accessibility validation).
-* **Peripheral Attenuation:** * **Reading:** 20% Opacity (Subliminal).
-* **Paused:** 100% Opacity (Active).
-
+* **Peripheral Attenuation:** * **Reading:** 20% Opacity (Subliminal) - *configurable*.
+* **Paused:** 100% Opacity (Active) - *configurable*.
 
 * **Micro-Progress:** A `▁` (U+2581) character beneath the active word shows progress through the current sentence/chapter.
+
+**Gutter Word Display Rules (all configurable via config file):**
+* Shows 3 words before current position and 3 words after (total 7 words in gutter) - *word count configurable*
+* Words fade from 100% opacity → 20% opacity based on distance from center word:
+  - Center word (current): 100% opacity - *configurable*
+  - ±1 words from center: 80% opacity - *configurable*
+  - ±2 words from center: 60% opacity - *configurable*
+  - ±3 words from center: 40% opacity - *configurable*
+* Updates continuously during playback
+* During navigation (j/k jumps), gutter regenerates around new position immediately
 
 ---
 
@@ -163,7 +199,8 @@ speedy/
 | `Space` | Pause/Resume |
 | `q` | Quit to REPL |
 | `[` / `]` | Decrease/Increase WPM |
-| `j` / `k` | Seek backward/forward |
+| `j` | Jump forward one sentence (always land at sentence beginning) |
+| `k` | Jump backward one sentence (always land at sentence beginning) |
 | `Tab` (hold) | Peek context (show normal text view) |
 | `Shift` (hold) | Tactical throttle (50% speed) |
 
