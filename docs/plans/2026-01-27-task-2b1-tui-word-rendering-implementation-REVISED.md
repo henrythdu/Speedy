@@ -11,9 +11,19 @@
 **Critical Changes from Original:**
 1. **WPM-based auto-advancement**: Event loop uses `event::poll(timeout)` with timeout derived from current WPM
 2. **Key delegation**: Call existing `app.handle_keypress()`, don't duplicate key handling
-3. **Add App methods**: `get_wpm()`, `advance_reading()`, `mode()`, `set_mode()`
+3. **Add App method**: `advance_reading()` (already have: `get_wpm()`, `mode()`, `set_mode()`)
 4. **Simplified integration**: Extract render callback, ~20 lines vs 80+ lines original
 5. **Fixed syntax errors**: Removed duplicate `)`, added missing imports
+
+**VERIFICATION (2026-01-27):** The following methods already exist in the codebase:
+- `App::get_wpm()` (line 198) ✓
+- `App::mode()` (line 190) ✓  
+- `App::set_mode()` (line 194) ✓
+- `App::get_render_state()` (line 143) ✓
+- `App::resume_reading()` (line 134) ✓
+- `App::handle_keypress()` (line 227) ✓
+- `ReadingState::get_wpm()` (line 39) ✓
+- `ReadingState::advance()` (line 83) ✓
 
 **Tech Stack:** Rust, ratatui 0.30, crossterm 0.29, rustyline 17.0
 
@@ -147,122 +157,25 @@ Add comprehensive TDD tests covering all word length ranges."
 
 ---
 
-## Bead 2B-1-2: Add App Methods for Auto-Advancement
+## Bead 2B-1-2: Add Missing App Method for Auto-Advancement
 
 **Files:**
-- Modify: `src/engine/state.rs`
 - Modify: `src/app/app.rs`
-- Test: Both files (inline tests)
+- Test: `src/app/app.rs` (inline test)
 
-**Purpose:** Expose WPM and advancement logic that TuiManager needs for auto-advancement timing.
+**Purpose:** Add the single missing method needed by TuiManager: `advance_reading()`. All other required methods already exist.
 
-**Step 1: Add `get_wpm()` to ReadingState**
+**VERIFIED EXISTING METHODS:**
+- `App::get_wpm()` - ✓ Already exists (line 198)
+- `App::mode()` - ✓ Already exists (line 190)
+- `App::set_mode()` - ✓ Already exists (line 194)  
+- `ReadingState::get_wpm()` - ✓ Already exists (line 39 in state.rs)
+- `ReadingState::advance()` - ✓ Already exists (line 83 in state.rs)
 
-```rust
-// src/engine/state.rs
-impl ReadingState {
-    // ... existing methods (current_token, current_token_duration, advance, etc.) ...
-
-    /// Returns the current WPM setting for timing calculations.
-    ///
-    /// Used by TuiManager to calculate event loop timeout.
-    pub fn get_wpm(&self) -> u32 {
-        self.wpm
-    }
-}
-```
-
-**Step 2: Write test for ReadingState::get_wpm()**
+**Step 1: Write failing test for App::advance_reading()**
 
 ```rust
-// src/engine/state.rs (in #[cfg(test)] module)
-#[test]
-fn test_get_wpm_returns_configured_wpm() {
-    let tokens = vec![Token {
-        text: "test".to_string(),
-        punctuation: vec![],
-        is_sentence_start: false,
-    }];
-    let state = ReadingState::new_with_default_config(tokens, 450);
-    assert_eq!(state.get_wpm(), 450);
-}
-
-#[test]
-fn test_get_wpm_returns_updated_wpm() {
-    let tokens = vec![Token {
-        text: "test".to_string(),
-        punctuation: vec![],
-        is_sentence_start: false,
-    }];
-    let mut state = ReadingState::new_with_default_config(tokens, 300);
-    state.adjust_wpm(100); // Increase by 100
-    assert_eq!(state.get_wpm(), 400);
-}
-```
-
-**Step 3: Run test to verify it passes**
-
-Run: `cargo test --lib engine::state::tests::test_get_wpm_returns_configured_wpm`
-
-Expected: PASS
-
-**Step 4: Add methods to App struct**
-
-```rust
-// src/app/app.rs
-impl App {
-    /// Returns the current WPM from ReadingState, or default 300 if no state.
-    pub fn get_wpm(&self) -> u32 {
-        self.reading_state
-            .as_ref()
-            .map(|state| state.get_wpm())
-            .unwrap_or(300) // Default 300 WPM per PRD
-    }
-
-    /// Advances to the next word if ReadingState exists.
-    /// Returns true if advanced, false if at end or no state.
-    pub fn advance_reading(&mut self) -> bool {
-        if let Some(state) = &mut self.reading_state {
-            if state.current_index < state.tokens.len().saturating_sub(1) {
-                state.advance();
-                true
-            } else {
-                false // At end, don't advance
-            }
-        } else {
-            false // No reading state
-        }
-    }
-
-    /// Gets current AppMode (convenience method)
-    pub fn mode(&self) -> AppMode {
-        self.mode.clone()
-    }
-
-    /// Sets AppMode (convenience method)
-    pub fn set_mode(&mut self, mode: AppMode) {
-        self.mode = mode;
-    }
-}
-```
-
-**Step 5: Write tests for App methods**
-
-```rust
-// src/app/app.rs (in #[cfg(test)] module)
-#[test]
-fn test_get_wpm_defaults_to_300() {
-    let app = App::new();
-    assert_eq!(app.get_wpm(), 300);
-}
-
-#[test]
-fn test_get_wpm_returns_state_wpm() {
-    let mut app = App::new();
-    app.start_reading("hello world", 450);
-    assert_eq!(app.get_wpm(), 450);
-}
-
+// src/app/app.rs (in #[cfg(test)] module, add after existing tests)
 #[test]
 fn test_advance_reading_moves_to_next_word() {
     let mut app = App::new();
@@ -284,28 +197,73 @@ fn test_advance_reading_returns_false_at_end() {
     assert!(!advanced); // At end, should return false
     assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
 }
+
+#[test]
+fn test_advance_reading_returns_false_with_no_state() {
+    let mut app = App::new();
+    // No reading state initialized
+    let advanced = app.advance_reading();
+    assert!(!advanced);
+}
 ```
 
-**Step 6: Run all state and app tests**
+**Step 2: Run test to verify it fails**
 
-Run: `cargo test --lib engine::state app::app`
+Run: `cargo test --lib app::app::tests::test_advance_reading_moves_to_next_word`
 
-Expected: All tests PASS
+Expected: FAIL with "cannot find method `advance_reading`"
 
-**Step 7: Commit**
+**Step 3: Add the missing App::advance_reading() method**
+
+```rust
+// src/app/app.rs (add to impl App block after existing methods)
+impl App {
+    // ... existing methods (get_wpm, mode, set_mode, etc.) ...
+
+    /// Advances to the next word if ReadingState exists.
+    /// Returns true if advanced, false if at end or no state.
+    pub fn advance_reading(&mut self) -> bool {
+        if let Some(state) = &mut self.reading_state {
+            if state.current_index < state.tokens.len().saturating_sub(1) {
+                state.advance();
+                true
+            } else {
+                false // At end, don't advance
+            }
+        } else {
+            false // No reading state
+        }
+    }
+}
+```
+
+**Step 4: Run test to verify it passes**
+
+Run: `cargo test --lib app::app`
+
+Expected: PASS (all tests including new advance_reading tests)
+
+**Step 5: Run all tests to ensure no regressions**
+
+Run: `cargo test --lib`
+
+Expected: PASS
+
+**Step 6: Commit**
 
 ```bash
-git add src/engine/state.rs src/app/app.rs
-git commit -m "feat: add App methods for TUI auto-advancement (Bead 2B-1-2)
+git add src/app/app.rs
+git commit -m "feat: add missing App::advance_reading() method (Bead 2B-1-2)
 
-Add methods needed by TuiManager for WPM-based auto-advancement:
-- ReadingState::get_wpm() -> u32
-- App::get_wpm() -> u32 (with 300 WPM default)
-- App::advance_reading() -> bool
-- App::mode() -> AppMode (convenience)
-- App::set_mode(mode) (convenience)
+Add the single missing method needed by TuiManager for auto-advancement:
+- App::advance_reading() -> bool (calls ReadingState::advance() if available)
 
-These methods enable the WPM timing loop for RSVP auto-advancement."
+All other required methods already exist:
+- App::get_wpm() ✓ (exists)
+- App::mode() ✓ (exists)  
+- App::set_mode() ✓ (exists)
+- ReadingState::get_wpm() ✓ (exists)
+- ReadingState::advance() ✓ (exists)"
 ```
 
 ---
