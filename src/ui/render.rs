@@ -64,7 +64,13 @@ pub fn render_context_left(tokens: &[Token], current: usize, window: usize) -> P
     };
     let context_words: Vec<String> = tokens[start..current]
         .iter()
-        .map(|t| t.text.clone())
+        .map(|t| {
+            let mut text = t.text.clone();
+            for &p in &t.punctuation {
+                text.push(p);
+            }
+            text
+        })
         .collect();
 
     let text = context_words.join(" ");
@@ -88,7 +94,13 @@ pub fn render_context_right(tokens: &[Token], current: usize, window: usize) -> 
     let end = std::cmp::min(current + window + 1, tokens.len());
     let context_words: Vec<String> = tokens[current + 1..end]
         .iter()
-        .map(|t| t.text.clone())
+        .map(|t| {
+            let mut text = t.text.clone();
+            for &p in &t.punctuation {
+                text.push(p);
+            }
+            text
+        })
         .collect();
 
     let text = context_words.join(" ");
