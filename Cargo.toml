@@ -10,5 +10,5 @@ unicode-segmentation = "1.12"
 rustyline = "17.0"
 pdf-extract = "0.10.0"
 epub = "2.1.5"
-arboard = "3.6.1"
+arboard = { version = "3.6.1", features = ["wayland-data-control"] }
 thiserror = "2.0.18"

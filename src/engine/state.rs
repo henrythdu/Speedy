@@ -33,6 +33,18 @@ impl ReadingState {
         }
     }
 
+    /// Returns the current WPM setting for timeout calculation.
+    ///
+    /// Used by TuiManager to calculate timing tick interval.
+    pub fn get_wpm(&self) -> u32 {
+        self.wpm
+    }
+
+    pub fn adjust_wpm(&mut self, delta: i32) {
+        let new_wpm = (self.wpm as i32 + delta).max(50).min(1000);
+        self.wpm = new_wpm as u32;
+    }
+
     fn calculate_token_duration(&self, token: &Token) -> u64 {
         let base_delay_ms = wpm_to_milliseconds(self.wpm);
 
@@ -69,14 +81,6 @@ impl ReadingState {
         if self.current_index < self.tokens.len().saturating_sub(1) {
             self.current_index += 1;
         }
-    }
-
-    pub fn adjust_wpm(&mut self, delta: i32) {
-        let new_wpm = self.wpm as i32 + delta;
-        self.wpm = new_wpm.clamp(
-            *self.config.wpm_range.start() as i32,
-            *self.config.wpm_range.end() as i32,
-        ) as u32;
     }
 
     pub fn find_next_sentence_start(&self) -> Option<usize> {

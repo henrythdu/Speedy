@@ -1,6 +1,6 @@
 use super::mode::AppMode;
 use crate::engine::state::ReadingState;
-use crate::engine::timing::tokenize_text;
+use crate::engine::timing::{tokenize_text, Token};
 use crate::input::{clipboard, epub, pdf, LoadError, LoadedDocument};
 use std::path::Path;
 
@@ -18,6 +18,11 @@ pub enum AppEvent {
 pub struct RenderState {
     pub mode: AppMode,
     pub current_word: Option<String>,
+    pub tokens: Vec<Token>,
+    pub current_index: usize,
+    pub context_left: Vec<String>,
+    pub context_right: Vec<String>,
+    pub progress: (usize, usize),
 }
 
 pub struct App {
@@ -126,6 +131,77 @@ impl App {
         );
     }
 
+    pub fn resume_reading(&mut self) -> Result<(), String> {
+        if self.reading_state.is_some() {
+            self.mode = AppMode::Reading;
+            Ok(())
+        } else {
+            Err("No reading session to resume".to_string())
+        }
+    }
+
+    pub fn get_render_state(&self) -> RenderState {
+        match &self.reading_state {
+            Some(state) => {
+                let current_index = state.current_index;
+                let tokens = &state.tokens;
+                let context_window = 3;
+
+                // Get context words before current
+                let start = if current_index > context_window {
+                    current_index - context_window
+                } else {
+                    0
+                };
+                let context_left: Vec<String> = tokens[start..current_index]
+                    .iter()
+                    .map(|t| t.text.clone())
+                    .collect();
+
+                // Get context words after current
+                let end = std::cmp::min(current_index + context_window + 1, tokens.len());
+                let context_right: Vec<String> = tokens[current_index + 1..end]
+                    .iter()
+                    .map(|t| t.text.clone())
+                    .collect();
+
+                RenderState {
+                    mode: self.mode.clone(),
+                    current_word: tokens.get(current_index).map(|t| t.text.clone()),
+                    tokens: tokens.clone(),
+                    current_index,
+                    context_left,
+                    context_right,
+                    progress: (current_index, tokens.len()),
+                }
+            }
+            None => RenderState {
+                mode: self.mode.clone(),
+                current_word: None,
+                tokens: vec![],
+                current_index: 0,
+                context_left: vec![],
+                context_right: vec![],
+                progress: (0, 0),
+            },
+        }
+    }
+
+    pub fn mode(&self) -> AppMode {
+        self.mode.clone()
+    }
+
+    pub fn set_mode(&mut self, mode: AppMode) {
+        self.mode = mode;
+    }
+
+    pub fn get_wpm(&self) -> u32 {
+        self.reading_state
+            .as_ref()
+            .map(|state| state.wpm)
+            .unwrap_or(300) // Default 300 WPM
+    }
+
     fn handle_load_error(&self, error: &LoadError) {
         match error {
             LoadError::FileNotFound(path) => {
@@ -143,19 +219,6 @@ impl App {
             LoadError::UnsupportedFormat(fmt) => {
                 eprintln!("Error: Unsupported format: {}", fmt);
             }
-        }
-    }
-
-    pub fn get_render_state(&self) -> RenderState {
-        let current_word = self
-            .reading_state
-            .as_ref()
-            .and_then(|state| state.current_token())
-            .map(|token| token.text.clone());
-
-        RenderState {
-            mode: self.mode.clone(),
-            current_word,
         }
     }
 

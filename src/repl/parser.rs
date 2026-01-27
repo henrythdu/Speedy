@@ -5,7 +5,8 @@ use super::ReplCommand;
 /// Supports:
 /// - `:q` or `:quit` → Quit command
 /// - `:h` or `:help` → Help command
-/// - `@filename` → Load file command
+/// - `@filename.pdf` or `@filename.epub` → Load file command
+/// - `@@` → Load clipboard
 /// - Unknown command → Error message
 pub fn parse_repl_input(input: &str) -> ReplCommand {
     let input = input.trim();
