@@ -1,6 +1,6 @@
 # Speedy Architecture Document
 
-**Last Updated:** 2026-01-27  (TUI integration added)  
+**Last Updated:** 2026-01-27 (Task 2B-1.1 TUI polish complete)  
 **Purpose:** Document actual codebase structure, methods, structs, and architecture to prevent duplication and confusion.
 
 ## ⚠️ Important Notes
@@ -17,27 +17,29 @@
 
 ```
 src/
-├── app/                 # Application layer (state management, UI coordination)
-│   ├── app.rs          # Main App struct and business logic
-│   ├── mode.rs         # AppMode enum (Repl, Reading, Paused)
-│   └── mod.rs          # App module exports
-├── engine/             # Pure core logic (no I/O, no side effects)
-│   ├── state.rs        # ReadingState and token processing
-│   ├── timing.rs       # Token struct and timing calculations
-│   └── mod.rs          # Engine module exports
-├── ui/                 # TUI rendering layer
-│   ├── render.rs       # Rendering functions (OVP word, progress, context)
-│   ├── terminal.rs     # TuiManager with event loop and frame rendering
-│   └── mod.rs          # UI module exports
-├── repl/               # REPL-specific code
-│   ├── input.rs        # ReplInput enum and parsing
-│   └── mod.rs          # REPL module exports
-├── input/              # File input processing
-│   ├── pdf.rs          # PDF parsing
-│   ├── epub.rs         # EPUB parsing
-│   ├── clipboard.rs    # Clipboard content extraction
-│   └── mod.rs          # Input module exports
-└── main.rs             # Entry point with REPL→TUI transition on Reading mode
+ ├── app/                 # Application layer (state management, UI coordination)
+ │   ├── app.rs          # Main App struct and business logic
+ │   ├── mode.rs         # AppMode enum (Repl, Reading, Paused)
+ │   └── mod.rs          # App module exports
+ ├── engine/             # Pure core logic (no I/O, no side effects)
+ │   ├── state.rs        # ReadingState and token processing
+ │   ├── ovp.rs          # OVP anchor position calculation
+ │   ├── timing.rs       # Token struct and timing calculations
+ │   └── mod.rs          # Engine module exports
+ ├── ui/                 # TUI rendering layer
+ │   ├── render.rs       # Rendering functions (OVP word, progress, context)
+ │   ├── terminal.rs     # TuiManager with event loop and frame rendering
+ │   ├── theme.rs        # Theme configuration (Midnight colors)
+ │   └── mod.rs          # UI module exports
+ ├── repl/               # REPL-specific code
+ │   ├── input.rs        # ReplInput enum and parsing
+ │   └── mod.rs          # REPL module exports
+ ├── input/              # File input processing
+ │   ├── pdf.rs          # PDF parsing
+ │   ├── epub.rs         # EPUB parsing
+ │   ├── clipboard.rs    # Clipboard content extraction
+ │   └── mod.rs          # Input module exports
+ └── main.rs             # Entry point with REPL→TUI transition on Reading mode
 ```
 
 ---
@@ -54,6 +56,19 @@ pub struct App {
 ```
 
 **Purpose:** Coordinates between REPL, TUI, and engine layers. Manages mode transitions.
+
+### `Theme` (`src/ui/theme.rs:4`)
+UI color scheme configuration.
+```rust
+pub struct Theme {
+    pub background: Color,
+    pub text: Color,
+    pub anchor: Color,
+    pub dimmed: Color,
+}
+```
+
+**Purpose:** Centralizes color scheme for maintainability. Midnight theme (PRD Section 4.1) with explicit RGB colors to ensure dimmed modifier works correctly.
 
 ### `ReadingState` (`src/engine/state.rs:1`)
 Pure reading state with tokens and timing.
@@ -129,8 +144,8 @@ pub enum ReplInput {
 - `pub fn handle_keypress(&mut self, key: char) -> bool` - Handles keyboard input in Reading mode (line 227)
 
 **Key binding implementation (handle_keypress):**
-- `'j'/'J'` - jump to next sentence
-- `'k'/'K'` - jump to previous sentence  
+- `'j'/'J'` - jump to previous sentence (j is left on keyboard)
+- `'k'/'K'` - jump to next sentence (k is right on keyboard)  
 - `'['` - decrease WPM by 50
 - `']'` - increase WPM by 50
 - `' '` - toggle pause
@@ -156,8 +171,9 @@ pub struct TuiManager {
 
 **Render Layout:**
 - Context left (40%), word display (20%), context right (40%)
-- Progress bar at bottom
-- Gutter placeholder
+- Progress bar at bottom of main area (90% of screen)
+- Gutter on far right (3% of screen width)
+- OVP anchor position: calculates left padding to keep anchor at visual center (src/ui/render.rs:13)
 
 ### ReadingState Methods (`src/engine/state.rs`)
 
@@ -173,6 +189,16 @@ pub struct TuiManager {
 
 #### Factory Methods
 - `pub fn new_with_default_config(tokens: Vec<Token>, wpm: u32) -> Self` - Creates with default config
+
+### Theme Methods (`src/ui/theme.rs`)
+- `pub fn midnight() -> Self` - Returns midnight theme colors
+- `pub fn current() -> Self` - Returns default theme (midnight)
+
+### Theme Colors Module (`src/ui/theme.rs:44`)
+- `pub fn background() -> Color` - Midnight background (#1A1B26)
+- `pub fn text() -> Color` - Light blue text (#A9B1D6)
+- `pub fn anchor() -> Color` - Coral red anchor (#F7768E)
+- `pub fn dimmed() -> Color` - Dimmed blue (#646E96)
 
 ---
 
@@ -191,9 +217,10 @@ The project follows **pure core + thin IO adapter** pattern:
    - Delegates to engine for pure logic
 
 3. **IO Adapters** (`src/ui/`, `src/repl/`, `src/input/`) - I/O wrappers
-   - REPL input parsing
-   - File format parsing (PDF, EPUB)
-   - TUI rendering (planned)
+    - REPL input parsing
+    - File format parsing (PDF, EPUB)
+    - TUI rendering (ratatui-based, with OVP anchoring) ✅
+    - Theme configuration (centralized color schemes) ✅
 
 ### Testing Strategy
 - **Unit tests** in `engine/` modules (pure logic)
@@ -207,23 +234,20 @@ The project follows **pure core + thin IO adapter** pattern:
 ### ✅ Implemented
 - REPL with rustyline (`@filename`, `@@`, `:q`, `:h`)
 - PDF/EPUB/clipboard parsing
-- Sentence-aware navigation (j/k keys)
+- OVP anchor position calculation (`calculate_anchor_position()`) (src/engine/ovp.rs:17)
 - WPM adjustment ([ / ] keys)
 - Pause/resume (space key)
-- Mode management (Repl/Reading/Paused)
+- Mode management (Repl/Reading/Paused/Quit)
+- TUI rendering layer (`src/ui/render.rs`, `src/ui/terminal.rs`)
+- Midnight theme colors (`src/ui/theme.rs`)
+- Auto-advancement timing loop
+- OVP anchoring (left padding calculation in render_word_display) (src/ui/render.rs:10)
 
-### ❌ Missing (Task 2B-1)
-- Timing precision fix (Bead 2B-1-0)
-- OVP anchoring calculation (`calculate_anchor_position()`) (Bead 2B-1-1)
-- `App::advance_reading()` method (Bead 2B-1-2)
-- TUI rendering layer (`src/ui/render.rs`) (Bead 2B-1-3)
-- TUI terminal manager (`src/ui/terminal.rs`) (Bead 2B-1-4)
-- Integration wiring (Bead 2B-1-5)
-- Testing & validation (Bead 2B-1-6)
+### ❌ Missing
+- None (Task 2B-1 complete)
 
 ### 🚧 In Progress
-- TUI integration (Task 2B-1) - NOT STARTED
-- Auto-advancement timing loop - REQUIRES Bead 2B-1-0 (timing precision fix)
+- Performance optimization: Reduce Vec<Token> cloning in get_render_state (src/app/app.rs:143)
 
 ---
 
@@ -231,20 +255,20 @@ The project follows **pure core + thin IO adapter** pattern:
 
 | PRD Section | Implementation Status |
 |-------------|----------------------|
-| **3.1 OVP Anchoring** | ❌ Missing (`calculate_anchor_position()`) |
-| **3.2 Weighted Delay** | ✅ Partial (`current_token_duration()`) |
-| **3.3 Sentence Navigation** | ✅ Implemented (j/k keys) |
-| **4.1 Midnight Theme** | ❌ Missing (TUI rendering) |
+| **3.1 OVP Anchoring** | ✅ Implemented (`calculate_anchor_position()`, left padding in render) |
+| **3.2 Weighted Delay** | ✅ Complete (floating-point timing precision) |
+| **3.3 Sentence Navigation** | ✅ Implemented (j=left/k=right keys) |
+| **4.1 Midnight Theme** | ✅ Implemented (theme.rs with explicit RGB colors) |
 | **7.1 REPL Mode** | ✅ Complete |
-| **7.2 Reading Mode** | ✅ Partial (needs TUI) |
+| **7.2 Reading Mode** | ✅ Complete (TUI with OVP anchoring) |
 
 ---
 
 ## 7. Dependencies
 
 ### Core Crates
-- `ratatui = "0.30"` - TUI framework (not yet used)
-- `crossterm = "0.29"` - Terminal I/O (not yet used)
+- `ratatui = "0.30"` - TUI framework ✅
+- `crossterm = "0.29"` - Terminal I/O ✅
 - `rustyline = "17.0"` - REPL implementation ✅
 - `pdf-extract = "0.8"` - PDF parsing ✅
 - `epub = "0.3"` - EPUB parsing ✅

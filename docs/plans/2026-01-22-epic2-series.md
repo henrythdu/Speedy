@@ -61,7 +61,12 @@ Each epic: 4-5 tasks, manageable within 1-2 focused work sessions.
 
 ---
 
-## Epic 2B: Core Reading Experience (5 tasks)
+## Epic 2B: Core Reading Experience (5 main tasks + 1 polish sub-epic)
+
+**Note:** After completing Task 2B-1, manual testing revealed critical UX issues. These are tracked in sub-epic **2B-1.1** to maintain clean separation between initial implementation and polish work.
+
+**Sub-Epics:**
+- **Epic 2B-1.1: TUI Polish & UX Fixes** - Address testing issues before proceeding to 2B-2
 
 **Goal:** Build primary user-facing reading feature. Can read a document from start to finish with speed control.
 
