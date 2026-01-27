@@ -11,13 +11,7 @@ pub fn render_word_display(word: &str, anchor_pos: usize) -> Paragraph<'static> 
     let chars: Vec<char> = word.chars().collect();
     let word_len = chars.len();
 
-    let left_padding = if word_len == 0 {
-        0
-    } else if word_len % 2 == 1 {
-        (word_len / 2).saturating_sub(anchor_pos)
-    } else {
-        ((word_len - 1) / 2).saturating_sub(anchor_pos)
-    };
+    let left_padding = 3_i32.saturating_sub(anchor_pos as i32) as usize;
 
     let mut spans = Vec::new();
     for _ in 0..left_padding {
@@ -36,7 +30,7 @@ pub fn render_word_display(word: &str, anchor_pos: usize) -> Paragraph<'static> 
     }
 
     Paragraph::new(Line::from(spans))
-        .alignment(Alignment::Center)
+        .alignment(Alignment::Left)
         .style(Style::default().bg(colors::background()))
 }
 

@@ -92,7 +92,7 @@ impl TuiManager {
                 .direction(Direction::Horizontal)
                 .constraints([
                     Constraint::Percentage(40),
-                    Constraint::Percentage(20),
+                    Constraint::Length(30),
                     Constraint::Percentage(40),
                 ])
                 .split(main_area);
