@@ -33,6 +33,17 @@ This task introduces the first TUI rendering layer to Speedy, enabling transitio
 - **Resume capability**: ReadingState preserved on `q` command, `r` command resumes without reloading
 - **Visual TDD emphasis**: Tests require manual terminal inspection (unit tests insufficient for TUI correctness)
 
+**VERIFICATION (2026-01-27):** Most required methods already exist:
+- ✅ `App::get_wpm()` (exists at line 198)
+- ✅ `App::mode()` (exists at line 190)  
+- ✅ `App::set_mode()` (exists at line 194)
+- ✅ `App::get_render_state()` (exists at line 143)
+- ✅ `App::resume_reading()` (exists at line 134)
+- ✅ `App::handle_keypress()` (exists at line 227)
+- ✅ `ReadingState::get_wpm()` (exists at line 39 in state.rs)
+- ✅ `ReadingState::advance()` (exists at line 83 in state.rs)
+- ❌ `App::advance_reading()` - MISSING (needs implementation)
+
 ---
 
 ## 1. Architecture (Revised)
@@ -815,7 +826,7 @@ Task 2B-1 is complete when:
 1. **Missing Auto-Advancement**: Original plan had NO timing loop for RSVP reading
 2. **Architectural Mismatch**: Proposed replacing working REPL instead of augmenting it
 3. **Code Duplication**: Would have created parallel key handling logic
-4. **Missing Methods**: No `get_wpm()` or `advance_reading()` in original codebase
+4. **Missing Methods**: Only `advance_reading()` missing; all other methods already exist
 
 ### Why WPM-based Polling?
 

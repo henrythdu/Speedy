@@ -169,7 +169,34 @@ Connections: [What modules depend on this / what this depends on]
 
 ---
 
-### 7. Pre-Commit Workflow
+### 7. Architecture Documentation
+
+**MANDATORY:** Maintain `docs/ARCHITECTURE.md` as source of truth for codebase structure.
+
+**Purpose:** Prevent duplicate work and confusion by documenting what actually exists.
+
+**When to Update Architecture Doc:**
+1. **Adding new public methods** to existing structs
+2. **Creating new modules** or files  
+3. **Changing architecture** patterns
+4. **Adding significant dependencies**
+5. **Completing major features** (update implementation status)
+
+**When NOT to Update:**
+1. **Test-only changes**
+2. **Private method additions**
+3. **Refactors without API changes**
+4. **Bug fixes** (unless architecture impacted)
+
+**Documentation Standards:**
+- Use `file_path:line_number` format for references
+- Keep descriptions brief and factual
+- Only document WHAT EXISTS, not planned code
+- Include purpose for each struct/module
+
+**Verification Method:** Cross-reference with actual codebase using `serena_search_for_pattern`
+
+### 8. Pre-Commit Workflow with Architecture Updates
 
 After all beads for an epic are closed, before committing code:
 
@@ -186,13 +213,21 @@ pal_precommit
 1. Run quality gates (tests, linters, builds)
 2. Run `pal_precommit` on all changes
 3. Address any issues found
-4. Commit only after precommit passes
+4. **UPDATE ARCHITECTURE DOC** if architectural changes were made
+5. Commit only after precommit passes AND architecture doc is updated
 
-**Principle:** Quality gates are non-negotiable. Never bypass precommit validation.
+**Architecture Update Process:**
+1. **Read current ARCHITECTURE.md** to understand baseline
+2. **Review git changes** to identify architectural impacts
+3. **Update relevant sections** with new methods/modules
+4. **Verify accuracy** by cross-referencing with codebase
+5. **Update "Last Updated"** date at top of document
+
+**Principle:** Quality gates AND accurate documentation are non-negotiable. Never bypass precommit validation or skip architecture updates.
 
 ---
 
-### 8. Handling Syntax Errors & Library Changes
+### 9. Handling Syntax Errors & Library Changes
 
 When encountering syntax errors or unexpected behavior with external libraries:
 
@@ -215,7 +250,7 @@ When encountering syntax errors or unexpected behavior with external libraries:
 
 ---
 
-### 9. Serena Tools for Project Management
+### 10. Serena Tools for Project Management
 
 Serena provides powerful code analysis and project management tools. Use these for:
 
@@ -245,7 +280,7 @@ Serena provides powerful code analysis and project management tools. Use these f
 
 ---
 
-### 9. Landing the Plane (Session Completion)
+### 11. Landing the Plane (Session Completion)
 
 **When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
 
