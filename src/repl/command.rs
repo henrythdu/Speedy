@@ -11,10 +11,10 @@ pub enum ReplCommand {
     /// Show help information
     Help,
 
-    /// Load a file (text files only for now)
+    /// Load a file (PDF, EPUB supported)
     LoadFile(String),
 
-    /// Load from clipboard (not yet supported)
+    /// Load from clipboard
     LoadClipboard,
 
     /// Unknown/invalid command
@@ -29,9 +29,7 @@ pub fn command_to_app_event(command: ReplCommand) -> AppEvent {
         ReplCommand::Quit => AppEvent::Quit,
         ReplCommand::Help => AppEvent::Help,
         ReplCommand::LoadFile(path) => AppEvent::LoadFile(path),
-        ReplCommand::LoadClipboard => AppEvent::Warning(
-            "Clipboard input not yet supported. Type :q to quit or :h for help.".to_string(),
-        ),
+        ReplCommand::LoadClipboard => AppEvent::LoadClipboard,
         ReplCommand::Unknown(input) => AppEvent::InvalidCommand(input),
     }
 }
@@ -61,8 +59,7 @@ mod tests {
     #[test]
     fn test_command_to_app_event_load_clipboard() {
         let event = command_to_app_event(ReplCommand::LoadClipboard);
-        // LoadClipboard now maps to AppEvent::Warning with message
-        assert!(matches!(event, AppEvent::Warning(_)));
+        assert_eq!(event, AppEvent::LoadClipboard);
     }
 
     #[test]
