@@ -4,6 +4,7 @@ use crate::ui::render::{
     render_context_left, render_context_right, render_gutter_placeholder, render_progress_bar,
     render_word_display,
 };
+use crate::ui::theme::colors;
 use crossterm::{
     event::{self, Event, KeyCode},
     execute,
@@ -37,9 +38,11 @@ impl TuiManager {
         let render_tick = Duration::from_millis(1000 / 60);
 
         loop {
-            if app.mode() != AppMode::Reading {
-                return Ok(app.mode());
+            let current_mode = app.mode();
+            if current_mode == AppMode::Quit || current_mode == AppMode::Repl {
+                return Ok(current_mode);
             }
+            // Reading and Paused both stay in TUI
 
             let wpm = app.get_wpm();
             let timeout_ms = wpm_to_milliseconds(wpm);
@@ -54,7 +57,10 @@ impl TuiManager {
                     }
                 }
                 Ok(false) => {
-                    app.advance_reading();
+                    // Only auto-advance in Reading mode, not Paused
+                    if app.mode() == AppMode::Reading {
+                        app.advance_reading();
+                    }
                 }
                 Err(e) => {
                     // Propagate I/O errors instead of ignoring them
@@ -73,41 +79,52 @@ impl TuiManager {
         let render_state = app.get_render_state();
 
         self.terminal.draw(|frame| {
-            let chunks = Layout::default()
+            let area = frame.area();
+
+            // Main content area (top 90%)
+            let main_area = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Percentage(90), Constraint::Length(1)])
+                .split(area)[0];
+
+            // Split main content: left context, word, right context
+            let content_chunks = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([
                     Constraint::Percentage(40),
                     Constraint::Percentage(20),
                     Constraint::Percentage(40),
                 ])
-                .split(frame.area());
+                .split(main_area);
 
             let left_context =
                 render_context_left(&render_state.tokens, render_state.current_index, 3);
-            frame.render_widget(left_context, chunks[0]);
+            frame.render_widget(left_context, content_chunks[0]);
 
             if let Some(word) = &render_state.current_word {
                 let anchor_pos = crate::engine::ovp::calculate_anchor_position(word);
                 let word_display = render_word_display(word, anchor_pos);
-                frame.render_widget(word_display, chunks[1]);
+                frame.render_widget(word_display, content_chunks[1]);
             }
 
             let right_context =
                 render_context_right(&render_state.tokens, render_state.current_index, 3);
-            frame.render_widget(right_context, chunks[2]);
+            frame.render_widget(right_context, content_chunks[2]);
 
+            // Progress bar at bottom of main area
             let progress_bar = render_progress_bar(render_state.progress);
             let progress_area = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Min(1), Constraint::Length(1)])
-                .split(frame.area())[1];
+                .split(main_area)[1];
             frame.render_widget(progress_bar, progress_area);
 
+            // Gutter on far right (3% of full width)
             let gutter = render_gutter_placeholder();
             let gutter_area = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([Constraint::Percentage(97), Constraint::Percentage(3)])
-                .split(frame.area())[1];
+                .split(area)[1];
             frame.render_widget(gutter, gutter_area);
         })?;
 

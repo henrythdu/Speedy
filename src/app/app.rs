@@ -252,14 +252,14 @@ impl App {
         let reading_state = self.reading_state.as_mut().unwrap();
 
         match key {
-            // Navigation: Jump forward one sentence (PRD Section 7.2)
+            // Navigation: j is LEFT on keyboard → go BACKWARD to previous sentence
             'j' | 'J' => {
-                reading_state.jump_to_next_sentence();
+                reading_state.jump_to_previous_sentence();
                 true
             }
-            // Navigation: Jump backward one sentence (PRD Section 7.2)
+            // Navigation: k is RIGHT on keyboard → go FORWARD to next sentence
             'k' | 'K' => {
-                reading_state.jump_to_previous_sentence();
+                reading_state.jump_to_next_sentence();
                 true
             }
             // WPM: Decrease (PRD Section 7.2)
@@ -386,7 +386,7 @@ mod tests {
     }
 
     #[test]
-    fn test_keypress_j_forward_sentence() {
+    fn test_keypress_j_backward_sentence() {
         let mut app = App::new();
         // Create document with multiple sentences
         let doc = LoadedDocument {
@@ -419,14 +419,19 @@ mod tests {
         // Initially at index 0
         assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
 
-        // Press 'j' to jump forward - should go to index 2 (Second sentence)
-        let result = app.handle_keypress('j');
+        // Press 'k' to jump forward (k is right on keyboard) - should go to index 2 (Second sentence)
+        let result = app.handle_keypress('k');
         assert!(result);
         assert_eq!(app.reading_state.as_ref().unwrap().current_index, 2);
+
+        // Press 'j' to jump backward (j is left on keyboard) - should go back to index 0
+        let result = app.handle_keypress('j');
+        assert!(result);
+        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
     }
 
     #[test]
-    fn test_keypress_k_backward_sentence() {
+    fn test_keypress_k_forward_sentence() {
         let mut app = App::new();
         // Create document with multiple sentences
         let doc = LoadedDocument {
@@ -451,14 +456,13 @@ mod tests {
         };
         app.apply_loaded_document(doc);
 
-        // Jump to second sentence first
-        app.handle_keypress('j');
-        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 2);
+        // Initially at index 0
+        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
 
-        // Press 'k' to jump backward - should go back to index 0
+        // Press 'k' to jump forward (k is right on keyboard) - should go to index 2
         let result = app.handle_keypress('k');
         assert!(result);
-        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
+        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 2);
     }
 
     #[test]

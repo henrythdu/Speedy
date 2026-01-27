@@ -1,33 +1,43 @@
 use crate::engine::timing::Token;
+use crate::ui::theme::colors;
 use ratatui::{
     layout::Alignment,
-    style::{Color, Modifier, Style},
+    style::Style,
     text::{Line, Span},
     widgets::Paragraph,
 };
 
-const COLOR_BG: Color = Color::Rgb(26, 27, 38);
-const COLOR_TEXT: Color = Color::Rgb(169, 177, 214);
-const COLOR_ANCHOR: Color = Color::Rgb(247, 118, 142);
-
 pub fn render_word_display(word: &str, anchor_pos: usize) -> Paragraph<'static> {
     let chars: Vec<char> = word.chars().collect();
+    let word_len = chars.len();
+
+    let left_padding = if word_len == 0 {
+        0
+    } else if word_len % 2 == 1 {
+        (word_len / 2).saturating_sub(anchor_pos)
+    } else {
+        ((word_len - 1) / 2).saturating_sub(anchor_pos)
+    };
 
     let mut spans = Vec::new();
+    for _ in 0..left_padding {
+        spans.push(Span::styled(" ", Style::default().fg(colors::text())));
+    }
+
     for (i, ch) in chars.iter().enumerate() {
         let style = if i == anchor_pos {
             Style::default()
-                .fg(COLOR_ANCHOR)
-                .add_modifier(Modifier::BOLD)
+                .fg(colors::anchor())
+                .add_modifier(ratatui::style::Modifier::BOLD)
         } else {
-            Style::default().fg(COLOR_TEXT)
+            Style::default().fg(colors::text())
         };
         spans.push(Span::styled(ch.to_string(), style));
     }
 
     Paragraph::new(Line::from(spans))
         .alignment(Alignment::Center)
-        .style(Style::default().bg(COLOR_BG))
+        .style(Style::default().bg(colors::background()))
 }
 
 pub fn render_progress_bar(progress: (usize, usize)) -> Line<'static> {
@@ -43,13 +53,10 @@ pub fn render_progress_bar(progress: (usize, usize)) -> Line<'static> {
 
     let mut spans = Vec::new();
     for _ in 0..filled_len {
-        spans.push(Span::styled("─", Style::default().fg(COLOR_TEXT)));
+        spans.push(Span::styled("─", Style::default().fg(colors::text())));
     }
     for _ in 0..empty_len {
-        spans.push(Span::styled(
-            "─",
-            Style::default().fg(COLOR_TEXT).add_modifier(Modifier::DIM),
-        ));
+        spans.push(Span::styled("─", Style::default().fg(colors::dimmed())));
     }
 
     Line::from(spans).alignment(Alignment::Center)
@@ -70,9 +77,8 @@ pub fn render_context_left(tokens: &[Token], current: usize, window: usize) -> P
 
     Paragraph::new(text).alignment(Alignment::Right).style(
         Style::default()
-            .fg(COLOR_TEXT)
-            .add_modifier(Modifier::DIM)
-            .bg(COLOR_BG),
+            .fg(colors::dimmed())
+            .bg(colors::background()),
     )
 }
 
@@ -80,9 +86,8 @@ pub fn render_context_right(tokens: &[Token], current: usize, window: usize) -> 
     if tokens.is_empty() || current >= tokens.len() {
         return Paragraph::new("").alignment(Alignment::Left).style(
             Style::default()
-                .fg(COLOR_TEXT)
-                .add_modifier(Modifier::DIM)
-                .bg(COLOR_BG),
+                .fg(colors::dimmed())
+                .bg(colors::background()),
         );
     }
 
@@ -96,16 +101,15 @@ pub fn render_context_right(tokens: &[Token], current: usize, window: usize) -> 
 
     Paragraph::new(text).alignment(Alignment::Left).style(
         Style::default()
-            .fg(COLOR_TEXT)
-            .add_modifier(Modifier::DIM)
-            .bg(COLOR_BG),
+            .fg(colors::dimmed())
+            .bg(colors::background()),
     )
 }
 
 pub fn render_gutter_placeholder() -> Paragraph<'static> {
     Paragraph::new("│")
         .alignment(Alignment::Right)
-        .style(Style::default().fg(COLOR_TEXT).bg(COLOR_BG))
+        .style(Style::default().fg(colors::text()).bg(colors::background()))
 }
 
 #[cfg(test)]
