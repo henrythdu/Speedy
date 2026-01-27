@@ -44,6 +44,21 @@ impl App {
         self.mode = AppMode::Reading;
     }
 
+    /// Advances to the next word in the reading stream.
+    ///
+    /// Used by TuiManager for auto-advancement in Reading mode.
+    /// Returns `true` if advanced, `false` if at end or no reading state.
+    pub fn advance_reading(&mut self) -> bool {
+        match self.reading_state.as_mut() {
+            Some(state) => {
+                let before = state.current_index;
+                state.advance();
+                state.current_index > before
+            }
+            None => false,
+        }
+    }
+
     pub fn toggle_pause(&mut self) {
         match self.mode {
             AppMode::Reading => {
@@ -552,5 +567,37 @@ mod tests {
         // Not in Reading mode - keypress should return false
         let result = app.handle_keypress('j');
         assert!(!result);
+    }
+
+    // Bead 2B-1-2: Tests for advance_reading method
+
+    #[test]
+    fn test_advance_reading_moves_to_next_word() {
+        let mut app = App::new();
+        app.start_reading("hello world test", 300);
+        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
+
+        let advanced = app.advance_reading();
+        assert!(advanced);
+        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 1);
+    }
+
+    #[test]
+    fn test_advance_reading_returns_false_at_end() {
+        let mut app = App::new();
+        app.start_reading("hello", 300); // Single word
+        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
+
+        let advanced = app.advance_reading();
+        assert!(!advanced); // At end, should return false
+        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
+    }
+
+    #[test]
+    fn test_advance_reading_returns_false_with_no_state() {
+        let mut app = App::new();
+        // No reading state initialized
+        let advanced = app.advance_reading();
+        assert!(!advanced);
     }
 }
