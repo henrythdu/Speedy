@@ -41,8 +41,11 @@ impl ReadingState {
     }
 
     pub fn adjust_wpm(&mut self, delta: i32) {
-        let new_wpm = (self.wpm as i32 + delta).max(50).min(1000);
-        self.wpm = new_wpm as u32;
+        let new_wpm = self.wpm as i32 + delta;
+        self.wpm = new_wpm.clamp(
+            *self.config.wpm_range.start() as i32,
+            *self.config.wpm_range.end() as i32,
+        ) as u32;
     }
 
     fn calculate_token_duration(&self, token: &Token) -> u64 {
