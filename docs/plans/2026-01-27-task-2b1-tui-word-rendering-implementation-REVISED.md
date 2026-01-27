@@ -29,6 +29,94 @@
 
 ---
 
+## Bead 2B-1-0: Timing Precision Fix (PREREQUISITE)
+
+**Files:**
+- Modify: `src/ui/terminal.rs:661-662` (when created)
+- Test: `src/ui/terminal.rs` (add test_wpm_timing_precision)
+
+**Purpose:** Fix critical timing precision flaw per PRD Section 3.2 before any TUI implementation.
+
+**Problem:** Current calculation (60_000 / wpm as u64) truncates fractional milliseconds:
+- 350 WPM → 171ms (should be 171.428ms)
+- 333 WPM → 180ms (should be 180.18ms)
+
+**Impact:** Cumulative timing drift at high WPM (>300) violates PRD Section 3.2 precision requirements.
+
+**Step 1: Write failing test for timing precision**
+
+```rust
+// src/ui/terminal.rs (add test module)
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_wpm_timing_precision() {
+        assert_eq!(calculate_timeout(350), 171);  // 60000/350 = 171.428 → 171
+        assert_eq!(calculate_timeout(333), 180);  // 60000/333 = 180.18 → 180  
+        assert_eq!(calculate_timeout(400), 150);  // Exact value
+    }
+}
+```
+
+**Step 2: Run test to verify it fails**
+
+Run: `cargo test --lib ui::terminal::tests::test_wpm_timing_precision`
+
+Expected: FAIL (calculate_timeout not implemented)
+
+**Step 3: Add helper function with floating-point precision**
+
+```rust
+// src/ui/terminal.rs
+/// Calculates timeout in milliseconds based on WPM.
+/// Uses floating-point precision to avoid cumulative drift.
+/// PRD Section 3.2: base_delay_ms = 60000 / wpm
+fn calculate_timeout(wpm: u32) -> u64 {
+    (60_000.0 / wpm as f64).round() as u64
+}
+```
+
+**Step 4: Update run_event_loop to use floating-point calculation**
+
+```rust
+// src/ui/terminal.rs line 661-662
+// BEFORE (buggy integer division):
+let timeout_ms = 60_000 / wpm as u64;
+
+// AFTER (floating-point precision):
+let timeout_ms = calculate_timeout(wpm);
+```
+
+**Step 5: Run test to verify it passes**
+
+Run: `cargo test --lib ui::terminal::tests::test_wpm_timing_precision`
+
+Expected: PASS
+
+**Step 6: Run all tests to ensure no regressions**
+
+Run: `cargo test --lib ui`
+
+Expected: PASS
+
+**Step 7: Commit**
+
+```bash
+git add src/ui/terminal.rs
+git commit -m "fix: WPM timing precision with floating-point calculation (Bead 2B-1-0)
+
+Fix critical timing precision flaw per PRD Section 3.2:
+- Integer division 60_000/wpm truncates milliseconds
+- Floating-point .round() prevents cumulative drift at high WPM
+- Add test cases for 350 WPM (171ms), 333 WPM (180ms), 400 WPM (150ms)
+
+This bead BLOCKS all TUI work - must fix before implementing terminal manager."
+```
+
+---
+
 ## Bead 2B-1-1: OVP Calculation Logic
 
 **Files:**
@@ -1108,7 +1196,7 @@ Expected: SUCCESS
 
 From revised design doc:
 
-- [x] All 6 beads (2B-1-1 through 2B-1-6) completed
+- [x] All 7 beads (2B-1-0 through 2B-1-6) completed
 - [x] WPM-based auto-advancement works (CRITICAL NEW FEATURE)
 - [x] Key input properly interrupts auto-advancement
 - [x] All unit tests pass (`cargo test`)
@@ -1135,6 +1223,7 @@ From revised design doc:
 
 Task 2B-1 MVP complete with **auto-advancement** working:
 
+- ✅ **Bead 2B-1-0:** Timing Precision Fix (PREREQUISITE) (30 min)
 - ✅ **Bead 2B-1-1:** OVP Calculation Logic (1 hour)
 - ✅ **Bead 2B-1-2:** App Methods for Auto-Advancement (1 hour)
 - ✅ **Bead 2B-1-3:** TUI Renderer Core (1-2 hours)
@@ -1142,7 +1231,7 @@ Task 2B-1 MVP complete with **auto-advancement** working:
 - ✅ **Bead 2B-1-5:** Integration Wiring (1 hour)
 - ✅ **Bead 2B-1-6:** Testing & Validation (1 hour)
 
-**Total: 6-8 hours** (reduced from original 10 hours due to simplified integration)
+**Total: 6.5-8.5 hours** (includes prerequisite timing fix)
 
 **Critical Achievement:** RSVP auto-advancement now works based on WPM setting!
 

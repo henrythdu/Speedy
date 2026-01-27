@@ -41,7 +41,7 @@ fn is_comma(c: char) -> bool {
 }
 
 pub fn wpm_to_milliseconds(wpm: u32) -> u64 {
-    60_000 / wpm.max(1) as u64
+    (60_000.0 / wpm.max(1) as f64).round() as u64
 }
 
 /// Detects if current word starts a new sentence based on previous token.
@@ -153,6 +153,33 @@ mod tests {
         assert_eq!(tokens.len(), 1);
         assert_eq!(tokens[0].text, "hello");
         assert_eq!(tokens[0].punctuation, vec!['.', ',']);
+    }
+
+    #[test]
+    fn test_wpm_to_milliseconds_precision_350() {
+        // 350 WPM = 171.428... ms per word
+        // PRD Section 3.2: Must use floating-point precision, not integer truncation
+        // 60,000 / 350 = 171.428... → should round to 171
+        let result = wpm_to_milliseconds(350);
+        assert_eq!(result, 171);
+    }
+
+    #[test]
+    fn test_wpm_to_milliseconds_precision_333() {
+        // 333 WPM = 180.18... ms per word
+        // 60,000 / 333 = 180.18... → should round to 180
+        let result = wpm_to_milliseconds(333);
+        assert_eq!(result, 180);
+    }
+
+    #[test]
+    fn test_wpm_to_milliseconds_precision_165() {
+        // 165 WPM = 363.636... ms per word
+        // PRD Section 3.2: Must use rounding, not integer truncation
+        // 60,000 / 165 = 363.636... → should round to 364
+        // Integer truncation gives 363 (BUG), correct rounding gives 364
+        let result = wpm_to_milliseconds(165);
+        assert_eq!(result, 364);
     }
 
     #[test]

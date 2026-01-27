@@ -1,6 +1,6 @@
 # Speedy Architecture Document
 
-**Last Updated:** 2026-01-27  
+**Last Updated:** 2026-01-27  (TUI integration added)  
 **Purpose:** Document actual codebase structure, methods, structs, and architecture to prevent duplication and confusion.
 
 ## ⚠️ Important Notes
@@ -25,9 +25,10 @@ src/
 │   ├── state.rs        # ReadingState and token processing
 │   ├── timing.rs       # Token struct and timing calculations
 │   └── mod.rs          # Engine module exports
-├── ui/                 # UI rendering layer (planned, minimal exists)
-│   ├── reader.rs        # REPL input handling
-│   └── mod.rs          # UI module exports (empty)
+├── ui/                 # TUI rendering layer
+│   ├── render.rs       # Rendering functions (OVP word, progress, context)
+│   ├── terminal.rs     # TuiManager with event loop and frame rendering
+│   └── mod.rs          # UI module exports
 ├── repl/               # REPL-specific code
 │   ├── input.rs        # ReplInput enum and parsing
 │   └── mod.rs          # REPL module exports
@@ -36,7 +37,7 @@ src/
 │   ├── epub.rs         # EPUB parsing
 │   ├── clipboard.rs    # Clipboard content extraction
 │   └── mod.rs          # Input module exports
-└── main.rs             # Entry point with REPL loop
+└── main.rs             # Entry point with REPL→TUI transition on Reading mode
 ```
 
 ---
@@ -135,8 +136,28 @@ pub enum ReplInput {
 - `' '` - toggle pause
 - `'q'/'Q'` - quit to REPL
 
-#### Missing Methods (Need Implementation)
-- `advance_reading()` - Auto-advance to next word (required for TUI timing loop)
+#### TUI Integration
+- `pub fn advance_reading(&mut self) -> bool` - Auto-advance to next word, returns true if advanced (line 51)
+
+### TuiManager (`src/ui/terminal.rs:20`)
+Terminal UI manager with auto-advancement event loop.
+```rust
+pub struct TuiManager {
+    terminal: Terminal<CrosstermBackend<Stdout>>,
+}
+```
+
+**Purpose:** Manages TUI mode with word auto-advancement based on WPM timing.
+
+**Key Methods:**
+- `pub fn new() -> Result<Self, io::Error>` - Creates TUI manager, enables raw mode, enters alternate screen (line 25)
+- `pub fn run_event_loop<F>(&mut self, app: &mut App, render_frame: F) -> io::Result<AppMode>` - Main event loop with WPM-based auto-advancement (line 35)
+- `pub fn render_frame(&mut self, app: &App) -> io::Result<()>` - Renders word display with OVP anchoring (line 74)
+
+**Render Layout:**
+- Context left (40%), word display (20%), context right (40%)
+- Progress bar at bottom
+- Gutter placeholder
 
 ### ReadingState Methods (`src/engine/state.rs`)
 
@@ -192,14 +213,17 @@ The project follows **pure core + thin IO adapter** pattern:
 - Mode management (Repl/Reading/Paused)
 
 ### ❌ Missing (Task 2B-1)
-- OVP anchoring calculation (`calculate_anchor_position()`)
-- TUI rendering layer (`src/ui/render.rs`)
-- TUI terminal manager (`src/ui/terminal.rs`)
-- `App::advance_reading()` method
+- Timing precision fix (Bead 2B-1-0)
+- OVP anchoring calculation (`calculate_anchor_position()`) (Bead 2B-1-1)
+- `App::advance_reading()` method (Bead 2B-1-2)
+- TUI rendering layer (`src/ui/render.rs`) (Bead 2B-1-3)
+- TUI terminal manager (`src/ui/terminal.rs`) (Bead 2B-1-4)
+- Integration wiring (Bead 2B-1-5)
+- Testing & validation (Bead 2B-1-6)
 
 ### 🚧 In Progress
-- TUI integration (Task 2B-1)
-- Auto-advancement timing loop
+- TUI integration (Task 2B-1) - NOT STARTED
+- Auto-advancement timing loop - REQUIRES Bead 2B-1-0 (timing precision fix)
 
 ---
 
@@ -260,9 +284,10 @@ The project follows **pure core + thin IO adapter** pattern:
 ## 9. Known Architecture Gaps
 
 ### Immediate (Task 2B-1)
-1. **Missing `advance_reading()`** - Required for auto-advancement timing
-2. **No TUI rendering** - Need `render.rs` and `terminal.rs`
-3. **No OVP calculation** - Need `calculate_anchor_position()`
+1. **Timing precision fix** (Bead 2B-1-0) - REQUIRED BEFORE ANY TUI WORK
+2. **Missing `advance_reading()`** (Bead 2B-1-2) - Required for auto-advancement timing
+3. **No TUI rendering** (Bead 2B-1-3) - Need `render.rs` and `terminal.rs`
+4. **No OVP calculation** (Bead 2B-1-1) - Need `calculate_anchor_position()`
 
 ### Future
 1. **Audio metronome** (Task 2C-X) - Speed glide, thump sounds

@@ -512,6 +512,37 @@ fn test_wpm_adjustment_affects_timing() {
 
 ## 6. Implementation Order (Bead Breakdown - REVISED)
 
+### Bead 2B-1-0: Timing Precision Fix (PREREQUISITE)
+**File**: `src/ui/terminal.rs:661-662` (when created)  
+**Priority**: P0 (Critical Path - BLOCKS ALL WORK)
+
+**Purpose:** Fix critical timing precision flaw before any TUI implementation.
+
+**Problem:** Integer division `60_000 / wpm as u64` truncates fractional milliseconds:
+- 350 WPM → 171ms (should be 171.428ms)
+- 333 WPM → 180ms (should be 180.18ms)
+
+**Impact:** Cumulative timing drift at high WPM (>300) violates PRD Section 3.2 precision requirements.
+
+**Fix Required:**
+```rust
+// BEFORE (bug in current plan):
+let timeout_ms = 60_000 / wpm as u64;
+
+// AFTER (floating-point precision):
+let timeout_ms = (60_000.0 / wpm as f64).round() as u64;
+```
+
+**Tasks:**
+1. Add `calculate_timeout(wpm: u32) -> u64` helper function
+2. Use floating-point .round() for millisecond precision
+3. Add test cases: 350→171ms, 333→180ms, 400→150ms
+4. Update TuiManager::run_event_loop() to use new function
+
+**Dependency:** Must complete before ANY TUI implementation
+
+---
+
 ### Bead 2B-1-1: OVP Calculation Logic
 **File**: `src/engine/ovp.rs` (new)  
 **Priority**: P0 (Critical Path)
@@ -796,7 +827,7 @@ docs/
 
 Task 2B-1 is complete when:
 
-- [x] All 6 beads (2B-1-1 through 2B-1-6) completed or accounted for
+- [x] All 7 beads (2B-1-0 through 2B-1-6) completed or accounted for
 - [x] WPM-based auto-advancement works (CRITICAL NEW REQUIREMENT)
 - [x] Key input properly interrupts auto-advancement
 - [x] All unit tests pass (`cargo test`)
@@ -889,7 +920,8 @@ pub fn handle_keypress(&mut self, key: char) -> bool {
 ---
 
 **Design Revision Date:** 2026-01-27  
-**Total Estimated Effort:** 6 beads × 1-2 hours = 6-12 hours  
+**Total Estimated Effort:** 7 beads × 0.5-2 hours = 6.5-12.5 hours  
 **Critical Dependencies:**
+- Timing precision must be fixed FIRST (Bead 2B-1-0)
 - App must expose `get_wpm()`, `advance_reading()`, `mode()`, `set_mode()` (Bead 2B-1-2)
 - TuiManager must implement WPM-based polling (Bead 2B-1-4)
