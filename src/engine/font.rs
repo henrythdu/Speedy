@@ -48,6 +48,36 @@ pub struct FontMetrics {
     pub font_size: f32,
 }
 
+pub fn load_font_from_path<P: AsRef<std::path::Path>>(path: P) -> Option<FontRef<'static>> {
+    std::fs::read(path).ok().and_then(|bytes| {
+        // Leak the bytes to get 'static lifetime
+        let leaked_bytes: &'static [u8] = Box::leak(bytes.into_boxed_slice());
+        FontRef::try_from_slice(leaked_bytes).ok()
+    })
+}
+
+pub struct FontConfig {
+    pub custom_font_path: Option<String>,
+    pub font_size: f32,
+}
+
+impl Default for FontConfig {
+    fn default() -> Self {
+        Self {
+            custom_font_path: None,
+            font_size: 24.0,
+        }
+    }
+}
+
+pub fn get_font_with_config(config: &FontConfig) -> Option<FontRef<'static>> {
+    config
+        .custom_font_path
+        .as_ref()
+        .and_then(|path| load_font_from_path(path))
+        .or_else(|| get_font())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -92,5 +122,18 @@ mod tests {
         let width = calculate_string_width(&font, "Hello", 24.0);
 
         assert!(width > 0.0, "String width should be positive");
+    }
+
+    #[test]
+    fn test_load_font_from_path() {
+        // This test uses the embedded font path for simplicity
+        let font = load_font_from_path("assets/fonts/JetBrainsMono-Regular.otf");
+        assert!(font.is_some(), "Should load font from file path");
+    }
+
+    #[test]
+    fn test_load_font_from_invalid_path() {
+        let font = load_font_from_path("/nonexistent/font.ttf");
+        assert!(font.is_none(), "Should return None for invalid path");
     }
 }
