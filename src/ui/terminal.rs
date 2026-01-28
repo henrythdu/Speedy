@@ -98,7 +98,7 @@ impl TuiManager {
                 .split(main_area);
 
             let left_context =
-                render_context_left(&render_state.tokens, render_state.current_index, 3);
+                render_context_left(&render_state.tokens, render_state.current_index, 1);
             frame.render_widget(left_context, content_chunks[0]);
 
             if let Some(word) = &render_state.current_word {
@@ -108,7 +108,7 @@ impl TuiManager {
             }
 
             let right_context =
-                render_context_right(&render_state.tokens, render_state.current_index, 3);
+                render_context_right(&render_state.tokens, render_state.current_index, 1);
             frame.render_widget(right_context, content_chunks[2]);
 
             // Progress bar at bottom of main area
