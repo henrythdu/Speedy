@@ -8,7 +8,7 @@
 /// - 6-9 char words → position 2 (3rd letter)
 /// - 10-13 char words → position 3 (4th letter)
 /// - 14+ char words → position 3 (capped at 4th for MVP)
-
+///
 /// Calculates the anchor position for a word based on its length.
 ///
 /// Returns the 0-based index of the character that should be the anchor.
