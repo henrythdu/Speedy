@@ -5,7 +5,7 @@ const JETBRAINS_MONO_BYTES: &[u8] = include_bytes!("../../assets/fonts/JetBrains
 
 lazy_static! {
     static ref EMBEDDED_FONT: Option<FontRef<'static>> =
-        { FontRef::try_from_slice(JETBRAINS_MONO_BYTES).ok() };
+        FontRef::try_from_slice(JETBRAINS_MONO_BYTES).ok();
 }
 
 pub fn get_font() -> Option<FontRef<'static>> {
