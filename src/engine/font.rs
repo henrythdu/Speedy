@@ -4,13 +4,48 @@ use lazy_static::lazy_static;
 const JETBRAINS_MONO_BYTES: &[u8] = include_bytes!("../../assets/fonts/JetBrainsMono-Regular.otf");
 
 lazy_static! {
-    static ref EMBEDDED_FONT: Option<FontRef<'static>> = {
-        FontRef::try_from_slice(JETBRAINS_MONO_BYTES).ok()
-    };
+    static ref EMBEDDED_FONT: Option<FontRef<'static>> =
+        { FontRef::try_from_slice(JETBRAINS_MONO_BYTES).ok() };
 }
 
 pub fn get_font() -> Option<FontRef<'static>> {
     EMBEDDED_FONT.clone()
+}
+
+pub fn calculate_char_width(font: &FontRef, c: char, font_size: f32) -> f32 {
+    let scale = PxScale::from(font_size);
+    let scaled_font = font.as_scaled(scale);
+
+    let glyph_id = font.glyph_id(c);
+    scaled_font.h_advance(glyph_id)
+}
+
+pub fn calculate_string_width(font: &FontRef, text: &str, font_size: f32) -> f32 {
+    text.chars()
+        .map(|c| calculate_char_width(font, c, font_size))
+        .sum()
+}
+
+pub fn get_font_metrics(font: &FontRef, font_size: f32) -> FontMetrics {
+    let scale = PxScale::from(font_size);
+    let metrics = font.as_scaled(scale);
+
+    FontMetrics {
+        ascent: metrics.ascent(),
+        descent: metrics.descent(),
+        line_gap: metrics.line_gap(),
+        height: metrics.height(),
+        font_size,
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct FontMetrics {
+    pub ascent: f32,
+    pub descent: f32,
+    pub line_gap: f32,
+    pub height: f32,
+    pub font_size: f32,
 }
 
 #[cfg(test)]
@@ -28,9 +63,34 @@ mod tests {
         let font = get_font().expect("Font should be available");
         let scale = PxScale::from(24.0);
         let metrics = font.as_scaled(scale);
-        
+
         assert!(metrics.ascent() > 0.0, "Font should have positive ascent");
         assert!(metrics.descent() < 0.0, "Font should have negative descent");
-        assert!(metrics.line_gap() >= 0.0, "Font should have non-negative line gap");
+        assert!(
+            metrics.line_gap() >= 0.0,
+            "Font should have non-negative line gap"
+        );
+    }
+
+    #[test]
+    fn test_calculate_character_width() {
+        let font = get_font().expect("Font should be available");
+        let width = calculate_char_width(&font, 'W', 24.0);
+
+        assert!(width > 0.0, "Character width should be positive");
+        // JetBrains Mono is a monospace font, so all characters have same width
+        assert_eq!(
+            width,
+            calculate_char_width(&font, 'i', 24.0),
+            "Monospace font: 'W' and 'i' should have same width"
+        );
+    }
+
+    #[test]
+    fn test_calculate_string_width() {
+        let font = get_font().expect("Font should be available");
+        let width = calculate_string_width(&font, "Hello", 24.0);
+
+        assert!(width > 0.0, "String width should be positive");
     }
 }
