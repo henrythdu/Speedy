@@ -11,3 +11,5 @@ pdf-extract = "0.10.0"
 epub = "2.1.5"
 arboard = { version = "3.6.1", features = ["wayland-data-control"] }
 thiserror = "2.0.18"
+ab_glyph = "0.2.32"
+lazy_static = "1.5"
