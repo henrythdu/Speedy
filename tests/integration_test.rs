@@ -40,11 +40,11 @@ fn end_to_end_reading() {
 fn tui_workflow_repl_to_reading_mode() {
     let mut app = App::new();
 
-    assert_eq!(app.mode, AppMode::Repl);
+    assert_eq!(app.mode, AppMode::Command);
 
     app.handle_event(AppEvent::LoadFile("nonexistent.txt".to_string()));
 
-    assert_eq!(app.mode, AppMode::Repl);
+    assert_eq!(app.mode, AppMode::Command);
 }
 
 #[test]
@@ -82,7 +82,7 @@ fn tui_workflow_timing_precision() {
 fn tui_workflow_app_mode_transitions() {
     let mut app = App::new();
 
-    assert_eq!(app.mode, AppMode::Repl);
+    assert_eq!(app.mode, AppMode::Command);
 
     app.set_mode(AppMode::Paused);
     assert_eq!(app.mode, AppMode::Paused);
@@ -90,8 +90,8 @@ fn tui_workflow_app_mode_transitions() {
     app.set_mode(AppMode::Reading);
     assert_eq!(app.mode, AppMode::Reading);
 
-    app.set_mode(AppMode::Repl);
-    assert_eq!(app.mode, AppMode::Repl);
+    app.set_mode(AppMode::Command);
+    assert_eq!(app.mode, AppMode::Command);
 }
 
 #[test]

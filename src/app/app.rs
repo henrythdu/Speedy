@@ -279,7 +279,7 @@ impl App {
             }
             // Quit to REPL (PRD Section 7.2)
             'q' | 'Q' => {
-                self.mode = AppMode::Repl;
+                self.mode = AppMode::Command;
                 true
             }
             _ => false,
@@ -311,7 +311,7 @@ mod tests {
             source: "test.pdf".to_string(),
         };
 
-        assert_eq!(app.mode, AppMode::Repl);
+        assert_eq!(app.mode, AppMode::Command);
         assert!(app.reading_state.is_none());
 
         app.apply_loaded_document(doc);
@@ -328,7 +328,7 @@ mod tests {
         app.handle_load_file("/nonexistent.pdf");
 
         // Should stay in Repl mode, not Reading
-        assert_eq!(app.mode, AppMode::Repl);
+        assert_eq!(app.mode, AppMode::Command);
         assert!(app.reading_state.is_none());
     }
 
@@ -338,7 +338,7 @@ mod tests {
         app.handle_load_file("/document.txt");
 
         // Should stay in Repl mode, not Reading
-        assert_eq!(app.mode, AppMode::Repl);
+        assert_eq!(app.mode, AppMode::Command);
         assert!(app.reading_state.is_none());
     }
 
@@ -347,7 +347,7 @@ mod tests {
         let app = App::new();
         let render = app.get_render_state();
 
-        assert_eq!(render.mode, AppMode::Repl);
+        assert_eq!(render.mode, AppMode::Command);
         assert!(render.current_word.is_none());
     }
 
@@ -382,7 +382,7 @@ mod tests {
         let mut app = App::new();
         // This should just print to stderr, not change state
         app.handle_event(AppEvent::InvalidCommand("unknown".to_string()));
-        assert_eq!(app.mode, AppMode::Repl);
+        assert_eq!(app.mode, AppMode::Command);
     }
 
     #[test]
@@ -553,7 +553,7 @@ mod tests {
         // Press 'q' to quit to REPL
         let result = app.handle_keypress('q');
         assert!(result);
-        assert_eq!(app.mode, AppMode::Repl);
+        assert_eq!(app.mode, AppMode::Command);
     }
 
     #[test]

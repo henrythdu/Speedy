@@ -1,10 +1,8 @@
+pub mod command;
 pub mod reader;
 pub mod render;
 pub mod terminal;
 pub mod theme;
 
-pub use render::{
-    render_context_left, render_context_right, render_gutter_placeholder, render_progress_bar,
-    render_word_display,
-};
+pub use command::{command_to_app_event, parse_command, Command};
 pub use terminal::TuiManager;
