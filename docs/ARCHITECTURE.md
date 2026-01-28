@@ -1,6 +1,6 @@
 # Speedy Architecture Document
 
-**Last Updated:** 2026-01-28 (Epic 1: RsvpRenderer trait added)  
+**Last Updated:** 2026-01-28 (Epic 1: RsvpRenderer trait + capability detection added)  
 **Purpose:** Document actual codebase structure, methods, structs, and architecture to prevent duplication and confusion.
 
 ## ⚠️ Important Notes
@@ -25,6 +25,7 @@ src/
  │   ├── state.rs        # ReadingState and token processing
  │   ├── ovp.rs          # OVP anchor position calculation
  │   ├── renderer.rs     # RsvpRenderer trait for pluggable backends
+ │   ├── capability.rs   # Terminal capability detection
  │   ├── timing.rs       # Token struct and timing calculations
  │   └── mod.rs          # Engine module exports
  ├── ui/                 # TUI rendering layer
@@ -109,6 +110,30 @@ pub trait RsvpRenderer {
 ```
 
 **Purpose:** Abstracts rendering implementations (TUI CellRenderer, Kitty Graphics, future Sixel/iTerm2). Enables backend switching without changing reading logic. Object-safe trait supporting `Box<dyn RsvpRenderer>`.
+
+### `GraphicsCapability` (`src/engine/capability.rs:8`)
+Terminal graphics support level enum.
+```rust
+pub enum GraphicsCapability {
+    None,   // Pure TUI fallback
+    Kitty,  // Kitty Graphics Protocol supported
+}
+```
+
+**Purpose:** Tracks detected terminal capability for choosing appropriate renderer backend.
+
+### `CapabilityDetector` (`src/engine/capability.rs:26`)
+Terminal capability detection logic.
+```rust
+pub struct CapabilityDetector;
+impl CapabilityDetector {
+    pub fn new() -> Self;
+    pub fn detect(&self) -> GraphicsCapability;
+    pub fn detect_from_override(&self, force_kitty: bool, force_tui: bool) -> Option<GraphicsCapability>;
+}
+```
+
+**Purpose:** Detects terminal graphics capabilities via environment variables ($TERM) with fallback to TUI mode. Supports CLI override flags (`--force-kitty`, `--force-tui`) for manual control. The application layer (main.rs) displays a warning message when running in TUI fallback mode.
 
 ### `AppMode` (`src/app/mode.rs:1`)
 Application operating modes.

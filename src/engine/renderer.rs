@@ -90,9 +90,10 @@ mod tests {
 
         fn render_word(&mut self, word: &str, anchor_position: usize) -> Result<(), RendererError> {
             if anchor_position >= word.chars().count() {
-                return Err(RendererError::InvalidArguments(
-                    format!("anchor_position {} out of bounds for word '{}'", anchor_position, word)
-                ));
+                return Err(RendererError::InvalidArguments(format!(
+                    "anchor_position {} out of bounds for word '{}'",
+                    anchor_position, word
+                )));
             }
             Ok(())
         }
@@ -131,11 +132,11 @@ mod tests {
     #[test]
     fn test_render_word_validates_anchor_position() {
         let mut renderer = TestRenderer;
-        
+
         // Valid anchor positions should work
         assert!(renderer.render_word("hello", 0).is_ok());
         assert!(renderer.render_word("hello", 4).is_ok());
-        
+
         // Out of bounds should return error
         let result = renderer.render_word("hi", 5);
         assert!(result.is_err());
@@ -149,10 +150,10 @@ mod tests {
     fn test_error_display_messages() {
         let err = RendererError::InitializationFailed("test".to_string());
         assert!(err.to_string().contains("initialization failed"));
-        
+
         let err = RendererError::RenderFailed("test".to_string());
         assert!(err.to_string().contains("rendering failed"));
-        
+
         let err = RendererError::InvalidArguments("test".to_string());
         assert!(err.to_string().contains("Invalid arguments"));
     }
