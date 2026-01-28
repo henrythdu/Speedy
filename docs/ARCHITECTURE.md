@@ -1,6 +1,6 @@
 # Speedy Architecture Document
 
-**Last Updated:** 2026-01-28 (Epic 1: RsvpRenderer trait + capability detection added)  
+**Last Updated:** 2026-01-28 (Epic 1: Font loading system added)  
 **Purpose:** Document actual codebase structure, methods, structs, and architecture to prevent duplication and confusion.
 
 ## ⚠️ Important Notes
@@ -26,6 +26,7 @@ src/
  │   ├── ovp.rs          # OVP anchor position calculation
  │   ├── renderer.rs     # RsvpRenderer trait for pluggable backends
  │   ├── capability.rs   # Terminal capability detection
+ │   ├── font.rs         # Font loading and metrics calculation
  │   ├── timing.rs       # Token struct and timing calculations
  │   └── mod.rs          # Engine module exports
  ├── ui/                 # TUI rendering layer
@@ -121,6 +122,30 @@ pub enum GraphicsCapability {
 ```
 
 **Purpose:** Tracks detected terminal capability for choosing appropriate renderer backend.
+
+### `FontMetrics` (`src/engine/font.rs`)
+Font metric data for OVP calculations.
+```rust
+pub struct FontMetrics {
+    pub ascent: f32,
+    pub descent: f32,
+    pub line_gap: f32,
+    pub height: f32,
+    pub font_size: f32,
+}
+```
+**Purpose:** Holds font metrics (ascent, descent, line_gap, height) for OVP positioning calculations.
+
+**Public API:**
+- `get_font()` -> `Option<FontRef<'static>>` - Get embedded JetBrains Mono font singleton
+- `load_font_from_path(path)` -> `Option<FontRef<'static>>` - Load font from filesystem
+- `get_font_with_config(config)` -> `Option<FontRef<'static>>` - Config-based font loading
+- `calculate_char_width(font, c, font_size)` -> `f32` - Calculate character width
+- `calculate_string_width(font, text, font_size)` -> `f32` - Calculate string width
+- `get_font_metrics(font, font_size)` -> `FontMetrics` - Get full font metrics
+- `FontConfig` - Configuration struct for font loading
+
+**Key Dependencies:** `ab_glyph`, `lazy_static`
 
 ### `CapabilityDetector` (`src/engine/capability.rs:26`)
 Terminal capability detection logic.
@@ -309,6 +334,8 @@ The project follows **pure core + thin IO adapter** pattern:
 ### Core Crates
 - `ratatui = "0.30"` - TUI framework ✅
 - `crossterm = "0.29"` - Terminal I/O ✅
+- `ab_glyph = "0.2.32"` - Font parsing and metrics ✅
+- `lazy_static = "1.5"` - Font singleton ✅
 - `rustyline = "17.0"` - REPL implementation ✅
 - `pdf-extract = "0.8"` - PDF parsing ✅
 - `epub = "0.3"` - EPUB parsing ✅
