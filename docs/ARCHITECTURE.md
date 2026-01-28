@@ -1,6 +1,6 @@
 # Speedy Architecture Document
 
-**Last Updated:** 2026-01-27 (Task 2B-1.1 TUI polish complete)  
+**Last Updated:** 2026-01-28 (Epic 1: RsvpRenderer trait added)  
 **Purpose:** Document actual codebase structure, methods, structs, and architecture to prevent duplication and confusion.
 
 ## ⚠️ Important Notes
@@ -24,6 +24,7 @@ src/
  ├── engine/             # Pure core logic (no I/O, no side effects)
  │   ├── state.rs        # ReadingState and token processing
  │   ├── ovp.rs          # OVP anchor position calculation
+ │   ├── renderer.rs     # RsvpRenderer trait for pluggable backends
  │   ├── timing.rs       # Token struct and timing calculations
  │   └── mod.rs          # Engine module exports
  ├── ui/                 # TUI rendering layer
@@ -94,6 +95,20 @@ pub struct Token {
 ```
 
 **Purpose:** Basic unit for RSVP reading with punctuation and sentence metadata.
+
+### `RsvpRenderer` Trait (`src/engine/renderer.rs:37`)
+Pluggable trait for RSVP rendering backends.
+```rust
+pub trait RsvpRenderer {
+    fn initialize(&mut self) -> Result<(), RendererError>;
+    fn render_word(&mut self, word: &str, anchor_position: usize) -> Result<(), RendererError>;
+    fn clear(&mut self) -> Result<(), RendererError>;
+    fn supports_subpixel_ovp(&self) -> bool;
+    fn cleanup(&mut self) -> Result<(), RendererError>;
+}
+```
+
+**Purpose:** Abstracts rendering implementations (TUI CellRenderer, Kitty Graphics, future Sixel/iTerm2). Enables backend switching without changing reading logic. Object-safe trait supporting `Box<dyn RsvpRenderer>`.
 
 ### `AppMode` (`src/app/mode.rs:1`)
 Application operating modes.
