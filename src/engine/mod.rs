@@ -1,6 +1,7 @@
 pub mod capability;
 pub mod config;
 pub mod error;
+pub mod font;
 pub mod ovp;
 pub mod renderer;
 pub mod state;
