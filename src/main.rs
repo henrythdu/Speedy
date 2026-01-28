@@ -7,6 +7,7 @@ mod ui;
 
 use crate::app::App;
 use crate::engine::capability::{get_tui_fallback_warning, CapabilityDetector, GraphicsCapability};
+use crate::engine::font::{get_font, get_font_metrics};
 use crate::ui::TuiManager;
 use std::env;
 
@@ -34,6 +35,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Show warning if in TUI fallback mode
     if capability == GraphicsCapability::None {
         eprintln!("{}", get_tui_fallback_warning());
+    }
+
+    // Initialize font
+    match get_font() {
+        Some(font) => {
+            let metrics = get_font_metrics(&font, 24.0);
+            eprintln!("Font loaded: height={:.1}", metrics.height);
+        }
+        None => {
+            eprintln!("Warning: Failed to load embedded font");
+            std::process::exit(1);
+        }
     }
 
     let mut app = App::new();
