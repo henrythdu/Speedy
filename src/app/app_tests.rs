@@ -27,7 +27,7 @@ fn test_app_handle_event_help() {
 fn test_app_get_render_state_returns_correct_initial_state() {
     let app = App::new();
     let state = app.get_render_state();
-    assert_eq!(state.mode, AppMode::Repl);
+    assert_eq!(state.mode, AppMode::Command);
     assert_eq!(state.current_word, None);
     let _render_state: RenderState = state;
 }

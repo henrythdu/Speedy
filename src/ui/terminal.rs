@@ -39,7 +39,7 @@ impl TuiManager {
 
         loop {
             let current_mode = app.mode();
-            if current_mode == AppMode::Quit || current_mode == AppMode::Repl {
+            if current_mode == AppMode::Quit || current_mode == AppMode::Command {
                 return Ok(current_mode);
             }
             // Reading and Paused both stay in TUI
