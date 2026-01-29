@@ -80,6 +80,11 @@ impl CapabilityDetector {
             }
         }
 
+        // Check $KONSOLE_VERSION - Konsole sets this even when $TERM=xterm-256color
+        if let Ok(_konsole_version) = env::var("KONSOLE_VERSION") {
+            return Some(GraphicsCapability::Kitty);
+        }
+
         None
     }
 
@@ -157,6 +162,19 @@ mod tests {
         let detector = CapabilityDetector::new();
         let result = detector.detect_from_override(true, true);
         assert_eq!(result, Some(GraphicsCapability::Kitty));
+    }
+
+    #[test]
+    fn test_detect_konsole_via_konsole_version_env() {
+        // Konsole sets $KONSOLE_VERSION even when $TERM=xterm-256color
+        let detector = CapabilityDetector::new();
+        std::env::set_var("TERM", "xterm-256color");
+        std::env::set_var("KONSOLE_VERSION", "220400");
+        let result = detector.detect_from_env();
+        assert_eq!(result, Some(GraphicsCapability::Kitty));
+        // Cleanup
+        std::env::remove_var("KONSOLE_VERSION");
+        std::env::remove_var("TERM");
     }
 
     #[test]
