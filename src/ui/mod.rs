@@ -1,5 +1,6 @@
 pub mod command;
 pub mod reader;
+pub mod reader_component;
 pub mod render;
 pub mod terminal;
 pub mod theme;

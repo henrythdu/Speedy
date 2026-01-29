@@ -1,4 +1,5 @@
 pub mod capability;
+pub mod cell_renderer;
 pub mod config;
 pub mod error;
 pub mod font;
