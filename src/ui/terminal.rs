@@ -19,6 +19,7 @@ use std::time::{Duration, Instant};
 
 pub struct TuiManager {
     terminal: Terminal<CrosstermBackend<Stdout>>,
+    command_buffer: String,
 }
 
 impl TuiManager {
@@ -29,7 +30,7 @@ impl TuiManager {
         let backend = CrosstermBackend::new(io::stdout());
         let terminal = Terminal::new(backend)?;
 
-        Ok(TuiManager { terminal })
+        Ok(TuiManager { terminal, command_buffer: String::new() })
     }
 
     pub fn run_event_loop(&mut self, app: &mut App) -> io::Result<AppMode> {
@@ -60,14 +61,90 @@ impl TuiManager {
                         
                         match key.code {
                             KeyCode::Char(c) => {
-                                app.handle_keypress(c);
+                                if app.mode() == AppMode::Command {
+                                    // In command mode, collect input
+                                    self.command_buffer.push(c);
+                                } else {
+                                    // In reading/paused mode, use app key handling
+                                    app.handle_keypress(c);
+                                }
                             }
                             KeyCode::Enter => {
-                                // TODO: Execute command when in Command mode
+                                if app.mode() == AppMode::Command && !self.command_buffer.is_empty() {
+                                    // Execute the command
+                                    let command = self.command_buffer.clone();
+                                    self.command_buffer.clear();
+                                    
+                                    // Parse and execute
+                                    use crate::ui::command::{parse_command, Command};
+                                    match parse_command(&command) {
+                                        Command::LoadFile(path) => {
+                                            // Load the file using input module
+                                            use crate::input::pdf;
+                                            match pdf::load(&path) {
+                                                Ok(doc) => {
+                                                    let text: String = doc.tokens.iter()
+                                                        .map(|t| {
+                                                            let mut s = t.text.clone();
+                                                            for p in &t.punctuation {
+                                                                s.push(*p);
+                                                            }
+                                                            s
+                                                        })
+                                                        .collect::<Vec<_>>()
+                                                        .join(" ");
+                                                    app.start_reading(&text, 300);
+                                                }
+                                                Err(e) => {
+                                                    eprintln!("Failed to load file: {}", e);
+                                                }
+                                            }
+                                        }
+                                        Command::LoadClipboard => {
+                                            // Load from clipboard
+                                            use crate::input::clipboard;
+                                            match clipboard::load() {
+                                                Ok(doc) => {
+                                                    let text: String = doc.tokens.iter()
+                                                        .map(|t| {
+                                                            let mut s = t.text.clone();
+                                                            for p in &t.punctuation {
+                                                                s.push(*p);
+                                                            }
+                                                            s
+                                                        })
+                                                        .collect::<Vec<_>>()
+                                                        .join(" ");
+                                                    app.start_reading(&text, 300);
+                                                }
+                                                Err(e) => {
+                                                    eprintln!("Failed to load clipboard: {}", e);
+                                                }
+                                            }
+                                        }
+                                        Command::Quit => {
+                                            app.set_mode(AppMode::Quit);
+                                            return Ok(AppMode::Quit);
+                                        }
+                                        Command::Help => {
+                                            // Show help - for now just stay in command mode
+                                        }
+                                        Command::Unknown(_) => {
+                                            // Invalid command - could show error in UI
+                                            eprintln!("Unknown command: {}", command);
+                                        }
+                                    }
+                                }
+                            }
+                            KeyCode::Backspace => {
+                                if app.mode() == AppMode::Command {
+                                    self.command_buffer.pop();
+                                }
                             }
                             KeyCode::Esc => {
                                 if app.mode() == AppMode::Reading || app.mode() == AppMode::Paused {
                                     app.set_mode(AppMode::Command);
+                                    self.command_buffer.clear();
                                 }
                             }
                             _ => {}
@@ -145,7 +222,7 @@ impl TuiManager {
             frame.render_widget(gutter, reading_layout[3]);
 
             // Command deck area
-            render_command_deck(frame, command_area, app.mode());
+            render_command_deck(frame, command_area, app.mode(), &self.command_buffer);
         })?;
 
         Ok(())
