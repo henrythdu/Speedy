@@ -5,12 +5,11 @@
 
 use crate::engine::cell_renderer::CellRenderer;
 use crate::engine::renderer::RsvpRenderer;
+use crate::ui::theme;
 use ratatui::{
-    layout::{Alignment, Rect},
-    prelude::Widget,
-    style::{Color, Modifier, Style},
+    layout::Rect,
+    style::{Modifier, Style},
     text::{Line, Span},
-    widgets::Paragraph,
     Frame,
 };
 
@@ -34,8 +33,8 @@ impl ReaderComponent {
 
     /// Render the current word in the reading area
     ///
-    /// Uses Ratatui's layout system for proper Unicode character handling
-    /// and applies different styles for the prefix, anchor, and suffix.
+    /// Positions the word so the anchor character is at the visual center (OVP).
+    /// Uses calculate_start_column() from CellRenderer for accurate positioning.
     pub fn render(&mut self, frame: &mut Frame, area: Rect) {
         // Update terminal size in renderer
         self.renderer.update_terminal_size(area.width, area.height);
@@ -46,25 +45,34 @@ impl ReaderComponent {
             // Split the word into graphemes for proper Unicode handling
             let graphemes: Vec<&str> = word.graphemes(true).collect();
 
-            if anchor_position >= graphemes.len() {
-                // Fallback: render the whole word if anchor is out of bounds
-                let paragraph = Paragraph::new(word).alignment(Alignment::Center);
-                paragraph.render(area, frame.buffer_mut());
-                return;
-            }
+            // Calculate the starting position using OVP anchoring
+            let start_col = match self.renderer.calculate_start_column(word, anchor_position) {
+                Ok(col) => col,
+                Err(_) => {
+                    // Fallback: render the whole word centered if calculation fails
+                    let line = Line::from(word);
+                    let center_row = area.y + area.height / 2;
+                    frame
+                        .buffer_mut()
+                        .set_line(area.x, center_row, &line, area.width);
+                    return;
+                }
+            };
+
+            let center_row = area.y + self.renderer.get_center_row();
 
             // Split word into three parts: prefix, anchor, suffix
             let prefix = graphemes[..anchor_position].join("");
             let anchor_char = graphemes[anchor_position];
             let suffix = graphemes[anchor_position + 1..].join("");
 
-            // Theme colors from PRD Section 4.1 (Midnight theme)
+            // Use theme colors instead of hard-coded values
             let text_style = Style::default()
-                .fg(Color::Rgb(169, 177, 214)) // #A9B1D6 Light Blue
+                .fg(theme::colors::text())
                 .add_modifier(Modifier::BOLD);
 
             let anchor_style = Style::default()
-                .fg(Color::Rgb(247, 118, 142)) // #F7768E Coral Red (anchor color)
+                .fg(theme::colors::anchor())
                 .add_modifier(Modifier::BOLD);
 
             // Create a Line with different styles for each segment
@@ -74,9 +82,11 @@ impl ReaderComponent {
                 Span::styled(suffix, text_style),
             ]);
 
-            // Use Ratatui's Paragraph for proper centering and rendering
-            let paragraph = Paragraph::new(line).alignment(Alignment::Center);
-            paragraph.render(area, frame.buffer_mut());
+            // Position the word with anchor at center using set_line
+            // This places the anchor character at the calculated OVP position
+            frame
+                .buffer_mut()
+                .set_line(area.x + start_col, center_row, &line, line.width() as u16);
         }
     }
 
