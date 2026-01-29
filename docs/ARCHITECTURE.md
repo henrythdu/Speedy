@@ -1,6 +1,6 @@
 # Speedy Architecture Document
 
-**Last Updated:** 2026-01-29 (Epic 1: CellRenderer TUI Fallback added)  
+**Last Updated:** 2026-01-29 (Epic 1: Viewport Overlay Pattern with Cell Querying added)  
 **Purpose:** Document actual codebase structure, methods, structs, and architecture to prevent duplication and confusion.
 
 ## ⚠️ Important Notes
@@ -26,6 +26,7 @@ src/
   │   ├── ovp.rs          # OVP anchor position calculation
   │   ├── renderer.rs     # RsvpRenderer trait for pluggable backends
   │   ├── cell_renderer.rs # CellRenderer TUI fallback implementation
+  │   ├── viewport.rs     # Viewport coordinate management (cell-to-pixel)
   │   ├── capability.rs   # Terminal capability detection
   │   ├── font.rs         # Font loading and metrics calculation
   │   ├── timing.rs       # Token struct and timing calculations
@@ -136,6 +137,33 @@ pub struct CellRenderer {
 - Uses `unicode-segmentation` crate for emoji/CJK width calculation
 - NO dependency on `font.rs` (terminal controls fonts in TUI mode)
 - Implements all `RsvpRenderer` trait methods
+
+### `Viewport` (`src/engine/viewport.rs:38`)
+Viewport coordinate management for graphics overlay pattern.
+```rust
+pub struct Viewport {
+    dimensions: Option<TerminalDimensions>,
+}
+
+pub struct TerminalDimensions {
+    pixel_size: (u32, u32),  // Total text area in pixels
+    cell_count: (u16, u16),  // Total cells (columns, rows)
+    cell_size: (f32, f32),   // Size of single cell in pixels
+}
+```
+
+**Public API:**
+- `new() -> Self` - Create new viewport manager
+- `query_dimensions() -> Result<TerminalDimensions, ViewportError>` - Send CSI 14t/18t queries
+- `set_dimensions(dimensions)` - Set dimensions manually (for testing)
+- `get_dimensions() -> Option<TerminalDimensions>` - Get current dimensions
+- `convert_rect_to_pixels(x, y, w, h) -> Option<(u32, u32, u32, u32)>` - Convert Ratatui Rect to pixels
+
+**Key Behaviors:**
+- Queries terminal using CSI 14t (pixel size) and 18t (cell count)
+- Calculates cell dimensions: pixel_size / cell_count
+- Converts Ratatui cell coordinates to pixel coordinates for graphics rendering
+- Enables Viewport Overlay Pattern (PRD Section 4.2, Design Doc v2.0 Section 2.1)
 
 ### `GraphicsCapability` (`src/engine/capability.rs:8`)
 Terminal graphics support level enum.
