@@ -1,7 +1,7 @@
 //! Integration tests for CellRenderer
 
-use speedy::engine::cell_renderer::CellRenderer;
-use speedy::engine::renderer::RsvpRenderer;
+use speedy::rendering::cell::CellRenderer;
+use speedy::rendering::renderer::RsvpRenderer;
 use unicode_width::UnicodeWidthStr;
 
 #[test]

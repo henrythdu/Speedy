@@ -2,5 +2,7 @@ pub mod app;
 pub mod audio;
 pub mod engine;
 pub mod input;
+pub mod reading;
+pub mod rendering;
 pub mod storage;
 pub mod ui;

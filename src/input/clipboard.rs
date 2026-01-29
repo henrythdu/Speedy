@@ -1,5 +1,5 @@
 use super::{LoadError, LoadedDocument};
-use crate::engine::timing::tokenize_text;
+use crate::engine::tokenize_text;
 
 /// Load text from system clipboard using arboard crate.
 ///
@@ -20,7 +20,7 @@ pub fn load() -> Result<LoadedDocument, LoadError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::timing::Token;
+    use crate::reading::token::Token;
 
     /// Test successful clipboard load with mocked arboard.
     /// This test verifies tokenization works correctly with clipboard content.

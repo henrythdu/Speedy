@@ -1,5 +1,5 @@
 use super::{LoadError, LoadedDocument};
-use crate::engine::timing::tokenize_text;
+use crate::engine::tokenize_text;
 use std::path::Path;
 
 /// Load text from EPUB file using epub crate.
@@ -84,7 +84,7 @@ fn extract_plain_text(html: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::timing::Token;
+    use crate::engine::Token;
 
     /// Test that load returns FileNotFound for non-existent files.
     #[test]

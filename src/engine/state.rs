@@ -1,5 +1,6 @@
 use crate::engine::config::TimingConfig;
-use crate::engine::timing::{wpm_to_milliseconds, Token};
+use crate::reading::timing::wpm_to_milliseconds;
+use crate::reading::token::Token;
 
 pub struct ReadingState {
     pub tokens: Vec<Token>,

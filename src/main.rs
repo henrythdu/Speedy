@@ -2,12 +2,16 @@ mod app;
 mod audio;
 mod engine;
 mod input;
+mod reading;
+mod rendering;
 mod storage;
 mod ui;
 
 use crate::app::App;
-use crate::engine::capability::{get_tui_fallback_warning, CapabilityDetector, GraphicsCapability};
-use crate::engine::font::{get_font, get_font_metrics};
+use crate::rendering::capability::{
+    get_tui_fallback_warning, CapabilityDetector, GraphicsCapability,
+};
+use crate::rendering::font::{get_font, get_font_metrics};
 use crate::ui::TuiManager;
 use std::env;
 

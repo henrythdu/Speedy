@@ -1,9 +1,9 @@
 use speedy::app::mode::AppMode;
 use speedy::app::{App, AppEvent};
 use speedy::engine::error::load_file_safe;
-use speedy::engine::ovp::calculate_anchor_position;
-use speedy::engine::state::ReadingState;
-use speedy::engine::timing::{tokenize_text, wpm_to_milliseconds};
+use speedy::reading::ovp::calculate_anchor_position;
+use speedy::reading::state::ReadingState;
+use speedy::reading::timing::{tokenize_text, wpm_to_milliseconds};
 use std::fs::{self, File};
 use std::io::Write;
 

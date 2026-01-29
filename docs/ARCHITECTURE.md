@@ -1,6 +1,6 @@
 # Speedy Architecture Document
 
-**Last Updated:** 2026-01-29 (Epic 1: Viewport Overlay Pattern with Cell Querying added)  
+**Last Updated:** 2026-01-29 (Epic 2: Codebase Reorganization - Task 3 complete)
 **Purpose:** Document actual codebase structure, methods, structs, and architecture to prevent duplication and confusion.
 
 ## ⚠️ Important Notes
@@ -17,35 +17,48 @@
 
 ```
 src/
- ├── app/                 # Application layer (state management, UI coordination)
- │   ├── app.rs          # Main App struct and business logic
- │   ├── mode.rs         # AppMode enum (Repl, Reading, Paused)
- │   └── mod.rs          # App module exports
-├── engine/             # Pure core logic (no I/O, no side effects)
-  │   ├── state.rs        # ReadingState and token processing
-  │   ├── ovp.rs          # OVP anchor position calculation
-  │   ├── renderer.rs     # RsvpRenderer trait for pluggable backends
-  │   ├── cell_renderer.rs # CellRenderer TUI fallback implementation
-  │   ├── viewport.rs     # Viewport coordinate management (cell-to-pixel)
-  │   ├── capability.rs   # Terminal capability detection
-  │   ├── font.rs         # Font loading and metrics calculation
-  │   ├── timing.rs       # Token struct and timing calculations
-  │   └── mod.rs          # Engine module exports
+├── app/                 # Application layer (state management, UI coordination)
+│   ├── app.rs          # Main App struct and business logic
+│   ├── event.rs        # AppEvent enum for event handling
+│   ├── mode.rs         # AppMode enum (Repl, Reading, Paused, Command)
+│   ├── render_state.rs # RenderState struct for TUI rendering data
+│   └── mod.rs          # App module exports
+├── engine/             # Shared logic (config, errors, re-exports)
+│   ├── config.rs       # ReadingConfig timing configuration
+│   ├── error.rs        # SpeedyError enum
+│   └── mod.rs          # Engine module (re-exports from reading/ and rendering/)
+├── reading/            # Core RSVP reading logic domain
+│   ├── token.rs        # Token struct
+│   ├── timing.rs       # Tokenization, WPM calculations, sentence boundaries
+│   ├── state.rs        # ReadingState with navigation and timing
+│   ├── ovp.rs          # OVP anchor position calculation
+│   └── mod.rs          # Reading module exports
+├── rendering/          # Rendering backends domain
+│   ├── cell.rs         # CellRenderer TUI fallback
+│   ├── renderer.rs     # RsvpRenderer trait and RendererError
+│   ├── viewport.rs     # Viewport coordinates and terminal dimensions
+│   ├── font.rs         # Font loading and metrics
+│   ├── capability.rs   # Terminal capability detection
+│   └── mod.rs          # Rendering module exports
 ├── ui/                 # TUI rendering layer
-  │   ├── render.rs       # Rendering functions (OVP word, progress, context)
-  │   ├── terminal.rs     # TuiManager with event loop and frame rendering
-  │   ├── reader_component.rs  # ReaderComponent wrapping CellRenderer for TUI fallback
-  │   ├── theme.rs        # Theme configuration (Midnight colors)
-  │   └── mod.rs          # UI module exports
- ├── repl/               # REPL-specific code
- │   ├── input.rs        # ReplInput enum and parsing
- │   └── mod.rs          # REPL module exports
- ├── input/              # File input processing
- │   ├── pdf.rs          # PDF parsing
- │   ├── epub.rs         # EPUB parsing
- │   ├── clipboard.rs    # Clipboard content extraction
- │   └── mod.rs          # Input module exports
- └── main.rs             # Entry point with REPL→TUI transition on Reading mode
+│   ├── reader/         # Reader feature module
+│   │   ├── component.rs # ReaderComponent wrapping CellRenderer
+│   │   └── view.rs     # Render functions (OVP word, progress, context)
+│   ├── command.rs      # Command parsing for REPL
+│   ├── terminal.rs     # TuiManager with event loop and frame rendering
+│   ├── terminal_guard.rs # TerminalGuard for raw mode/alternate screen RAII
+│   ├── theme.rs        # Theme configuration (Midnight colors)
+│   └── mod.rs          # UI module exports
+├── input/              # File input processing
+│   ├── pdf.rs          # PDF parsing
+│   ├── epub.rs         # EPUB parsing
+│   ├── clipboard.rs    # Clipboard content extraction
+│   └── mod.rs          # Input module exports
+├── audio/              # Audio feedback (metronome, etc.)
+│   └── mod.rs          # Audio module exports
+├── storage/            # Persistence (settings, history)
+│   └── mod.rs          # Storage module exports
+└── main.rs             # Entry point with capability detection and TUI launch
 ```
 
 ---
@@ -225,7 +238,7 @@ pub enum AppMode {
 
 **Purpose:** Tracks which UI layer is active and handles transitions.
 
-### `ReaderComponent` (`src/ui/reader_component.rs:9`)
+### `ReaderComponent` (`src/ui/reader/component.rs:9`)
 Reader UI component wrapping CellRenderer for TUI fallback mode.
 ```rust
 pub struct ReaderComponent {
@@ -300,15 +313,26 @@ pub struct TuiManager {
 **Purpose:** Manages TUI mode with word auto-advancement based on WPM timing.
 
 **Key Methods:**
-- `pub fn new() -> Result<Self, io::Error>` - Creates TUI manager, enables raw mode, enters alternate screen (line 25)
-- `pub fn run_event_loop<F>(&mut self, app: &mut App, render_frame: F) -> io::Result<AppMode>` - Main event loop with WPM-based auto-advancement (line 35)
-- `pub fn render_frame(&mut self, app: &App) -> io::Result<()>` - Renders word display with OVP anchoring (line 74)
+- `pub fn new() -> Result<Self, io::Error>` - Creates TUI manager, enables raw mode, enters alternate screen (src/ui/terminal.rs:26)
+- `pub fn run_event_loop(&mut self, app: &mut App) -> io::Result<AppMode>` - Main event loop with WPM-based auto-advancement (src/ui/terminal.rs:36)
+- `pub fn render_frame(&mut self, app: &App) -> io::Result<()>` - Renders word display with OVP anchoring (src/ui/terminal.rs:78)
 
 **Render Layout:**
 - Context left (40%), word display (20%), context right (40%)
 - Progress bar at bottom of main area (90% of screen)
 - Gutter on far right (3% of screen width)
-- OVP anchor position: calculates left padding to keep anchor at visual center (src/ui/render.rs:13)
+- OVP anchor position: calculates left padding to keep anchor at visual center (src/ui/reader/view.rs:10)
+
+### TerminalGuard (`src/ui/terminal_guard.rs:10`)
+RAII guard for terminal raw mode and alternate screen.
+```rust
+pub struct TerminalGuard;
+```
+
+**Purpose:** Ensures proper terminal cleanup on panic or normal exit. Enables raw mode and enters alternate screen on construction, restores on drop.
+
+**Key Methods:**
+- `pub fn new() -> Result<Self, io::Error>` - Creates guard, enables raw mode, enters alternate screen (src/ui/terminal_guard.rs:14)
 
 ### ReadingState Methods (`src/engine/state.rs`)
 
@@ -366,25 +390,28 @@ The project follows **pure core + thin IO adapter** pattern:
 
 ## 5. Current Implementation Status
 
-### ✅ Implemented
+### ✅ Implemented (Epic 2 Complete)
 - REPL with rustyline (`@filename`, `@@`, `:q`, `:h`)
 - PDF/EPUB/clipboard parsing
-- OVP anchor position calculation (`calculate_anchor_position()`) (src/engine/ovp.rs:17)
+- OVP anchor position calculation (`calculate_anchor_position()`) (src/reading/ovp.rs:17)
 - WPM adjustment ([ / ] keys)
 - Pause/resume (space key)
-- Mode management (Repl/Reading/Paused/Quit)
-- TUI rendering layer (`src/ui/render.rs`, `src/ui/terminal.rs`)
+- Mode management (Repl/Reading/Paused/Command/Quit)
+- TUI rendering layer (`src/ui/reader/view.rs`, `src/ui/terminal.rs`)
 - Midnight theme colors (`src/ui/theme.rs`)
 - Auto-advancement timing loop
-- OVP anchoring (left padding calculation in render_word_display) (src/ui/render.rs:10)
-- CellRenderer TUI fallback with RsvpRenderer trait (src/engine/cell_renderer.rs)
-- ReaderComponent UI wrapper (src/ui/reader_component.rs)
+- OVP anchoring (left padding calculation in render_word_display) (src/ui/reader/view.rs:10)
+- CellRenderer TUI fallback with RsvpRenderer trait (src/rendering/cell.rs)
+- ReaderComponent UI wrapper (src/ui/reader/component.rs)
+- Domain-based organization (reading/ and rendering/ modules)
+- Application layer refactoring (app.rs split into event.rs, render_state.rs)
+- UI layer refactoring (reader/ subdirectory with component.rs and view.rs)
 
-### ❌ Missing
-- None (Task 2B-1 complete)
-
-### 🚧 In Progress
-- Performance optimization: Reduce Vec<Token> cloning in get_render_state (src/app/app.rs:143)
+### 🚧 Ready for Epic 3
+- Ghost words feature
+- Reading progress caching
+- Enhanced progress bar
+- Rapid navigation enhancements
 
 ---
 
