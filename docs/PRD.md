@@ -24,16 +24,23 @@
 
 ### 2.1 Launch Patterns
 
-```bash
-# From any directory
-speedy
+**Speedy** starts in full-screen TUI mode with an integrated command deck at the bottom (similar to OpenCode's command section).
 
-# Interactive prompt appears:
-speedy> @document.pdf           # Read PDF file
-speedy> @@                      # Read clipboard contents
-speedy> @chapter.epub           # Read EPUB file
-speedy> :q                      # Quit
-```
+**Command Deck Input:**
+- Type commands directly into command area (no `speedy>` prompt)
+- Commands appear and are executed immediately
+- Similar to VS Code/Neovim command mode
+
+**Supported Commands:**
+- `@filename.pdf` or `@filename.epub` → Load file (PDF/EPUB)
+- `@@` → Load clipboard contents
+- `:q` or `:quit` → Quit application
+- `:h` or `:help` → Show help/instructions
+
+**Startup Behavior:**
+- App launches directly into full TUI mode
+- If previous reading state exists, it's restored
+- Command deck is always visible at bottom of screen
 
 ### 2.2 Supported Formats (MVP)
 
