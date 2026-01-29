@@ -1,4 +1,4 @@
-use crate::engine::timing::Token;
+use crate::engine::Token;
 use crate::ui::theme::colors;
 use ratatui::{
     layout::Alignment,
@@ -9,7 +9,7 @@ use ratatui::{
 
 pub fn render_word_display(word: &str, anchor_pos: usize) -> Paragraph<'static> {
     let chars: Vec<char> = word.chars().collect();
-    let word_len = chars.len();
+    let _word_len = chars.len();
 
     let left_padding = 3_i32.saturating_sub(anchor_pos as i32) as usize;
 

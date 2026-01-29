@@ -1,10 +1,9 @@
 use crate::app::{mode::AppMode, App};
-use crate::engine::timing::wpm_to_milliseconds;
-use crate::ui::render::{
+use crate::engine::wpm_to_milliseconds;
+use crate::ui::reader::view::{
     render_context_left, render_context_right, render_gutter_placeholder, render_progress_bar,
     render_word_display,
 };
-use crate::ui::theme::colors;
 use crossterm::{
     event::{self, Event, KeyCode},
     execute,
@@ -102,7 +101,7 @@ impl TuiManager {
             frame.render_widget(left_context, content_chunks[0]);
 
             if let Some(word) = &render_state.current_word {
-                let anchor_pos = crate::engine::ovp::calculate_anchor_position(word);
+                let anchor_pos = crate::reading::calculate_anchor_position(word);
                 let word_display = render_word_display(word, anchor_pos);
                 frame.render_widget(word_display, content_chunks[1]);
             }

@@ -1,8 +1,10 @@
-#[allow(clippy::module_inception)]
 pub mod app;
-
 #[cfg(test)]
 mod app_tests;
+pub mod event;
 pub mod mode;
+pub mod render_state;
 
-pub use app::{App, AppEvent, RenderState};
+pub use app::App;
+pub use event::AppEvent;
+pub use render_state::RenderState;

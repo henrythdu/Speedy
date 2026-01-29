@@ -1,29 +1,9 @@
-use super::mode::AppMode;
-use crate::engine::state::ReadingState;
-use crate::engine::timing::{tokenize_text, Token};
+use crate::app::event::AppEvent;
+use crate::app::mode::AppMode;
+use crate::app::render_state::RenderState;
+use crate::engine::{tokenize_text, ReadingState};
 use crate::input::{clipboard, epub, pdf, LoadError, LoadedDocument};
 use std::path::Path;
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum AppEvent {
-    LoadFile(String),
-    LoadClipboard,
-    Quit,
-    Help,
-    Warning(String),
-    InvalidCommand(String),
-    None,
-}
-
-pub struct RenderState {
-    pub mode: AppMode,
-    pub current_word: Option<String>,
-    pub tokens: Vec<Token>,
-    pub current_index: usize,
-    pub context_left: Vec<String>,
-    pub context_right: Vec<String>,
-    pub progress: (usize, usize),
-}
 
 pub struct App {
     pub mode: AppMode,
@@ -157,48 +137,13 @@ impl App {
 
     pub fn get_render_state(&self) -> RenderState {
         match &self.reading_state {
-            Some(state) => {
-                let current_index = state.current_index;
-                let tokens = &state.tokens;
-                let context_window = 3;
-
-                // Get context words before current
-                let start = if current_index > context_window {
-                    current_index - context_window
-                } else {
-                    0
-                };
-                let context_left: Vec<String> = tokens[start..current_index]
-                    .iter()
-                    .map(|t| t.text.clone())
-                    .collect();
-
-                // Get context words after current
-                let end = std::cmp::min(current_index + context_window + 1, tokens.len());
-                let context_right: Vec<String> = tokens[current_index + 1..end]
-                    .iter()
-                    .map(|t| t.text.clone())
-                    .collect();
-
-                RenderState {
-                    mode: self.mode.clone(),
-                    current_word: tokens.get(current_index).map(|t| t.text.clone()),
-                    tokens: tokens.clone(),
-                    current_index,
-                    context_left,
-                    context_right,
-                    progress: (current_index, tokens.len()),
-                }
-            }
-            None => RenderState {
-                mode: self.mode.clone(),
-                current_word: None,
-                tokens: vec![],
-                current_index: 0,
-                context_left: vec![],
-                context_right: vec![],
-                progress: (0, 0),
-            },
+            Some(state) => RenderState::from_reading_state(
+                self.mode.clone(),
+                state.tokens.clone(),
+                state.current_index,
+                3, // context_window
+            ),
+            None => RenderState::empty(self.mode.clone()),
         }
     }
 
@@ -290,7 +235,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::timing::Token;
+    use crate::reading::token::Token;
 
     #[test]
     fn test_apply_loaded_document() {

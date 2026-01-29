@@ -1,5 +1,5 @@
 use super::{LoadError, LoadedDocument};
-use crate::engine::timing::tokenize_text;
+use crate::engine::tokenize_text;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
@@ -35,7 +35,7 @@ pub fn load(path: &str) -> Result<LoadedDocument, LoadError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::timing::Token;
+    use crate::engine::Token;
 
     /// Test that load returns FileNotFound for non-existent files.
     #[test]

@@ -20,7 +20,7 @@ pub enum LoadError {
 }
 
 pub struct LoadedDocument {
-    pub tokens: Vec<crate::engine::timing::Token>,
+    pub tokens: Vec<crate::reading::token::Token>,
     pub source: String,
 }
 

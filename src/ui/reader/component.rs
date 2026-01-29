@@ -3,8 +3,8 @@
 //! This is a new component that wraps CellRenderer for TUI fallback mode.
 //! It keeps the existing simple reader.rs function unchanged.
 
-use crate::engine::cell_renderer::CellRenderer;
-use crate::engine::renderer::RsvpRenderer;
+use crate::rendering::cell::CellRenderer;
+use crate::rendering::renderer::RsvpRenderer;
 use crate::ui::theme;
 use ratatui::{
     layout::Rect,
@@ -43,7 +43,7 @@ impl ReaderComponent {
             use unicode_segmentation::UnicodeSegmentation;
 
             // Split the word into graphemes for proper Unicode handling
-            let graphemes: Vec<&str> = word.graphemes(true).collect();
+            let graphemes = word.graphemes(true).collect::<Vec<&str>>();
 
             // Calculate the starting position using OVP anchoring
             let start_col = match self.renderer.calculate_start_column(word, anchor_position) {
@@ -95,12 +95,12 @@ impl ReaderComponent {
         &mut self,
         word: &str,
         anchor_position: usize,
-    ) -> Result<(), crate::engine::renderer::RendererError> {
+    ) -> Result<(), crate::rendering::renderer::RendererError> {
         self.renderer.render_word(word, anchor_position)
     }
 
     /// Clear the display
-    pub fn clear(&mut self) -> Result<(), crate::engine::renderer::RendererError> {
+    pub fn clear(&mut self) -> Result<(), crate::rendering::renderer::RendererError> {
         self.renderer.clear()
     }
 }
