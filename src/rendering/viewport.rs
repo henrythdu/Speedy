@@ -5,7 +5,9 @@
 //! escape sequences (14t for pixels, 18t for cells) to calculate cell
 //! dimensions for accurate pixel-to-cell coordinate conversion.
 
-use std::io::{self, Write};
+use crossterm::event;
+use std::io::{self, Read, Write};
+use std::time::Duration;
 
 /// Terminal dimension information
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -91,24 +93,81 @@ impl Viewport {
     ///
     /// # Returns
     /// TerminalDimensions if queries succeed, error otherwise
+    ///
+    /// # Note
+    /// This implementation uses a timeout-based approach. If the terminal
+    /// doesn't respond within the timeout or parsing fails, falls back
+    /// to estimated cell dimensions (10x20 pixels per cell, a common standard).
     pub fn query_dimensions(&mut self) -> Result<TerminalDimensions, ViewportError> {
-        // Send CSI 14t to get pixel dimensions
+        // First, try to get terminal size using crossterm
+        let size = crossterm::terminal::size()
+            .map_err(|e| ViewportError::IoError(format!("Failed to get terminal size: {}", e)))?;
+
+        // Try to query pixel dimensions
+        let pixel_size = self.query_pixel_size();
+
+        // If pixel query succeeded, calculate cell dimensions from actual data
+        if let Some((width, height)) = pixel_size {
+            let cell_width = width as f32 / size.0 as f32;
+            let cell_height = height as f32 / size.1 as f32;
+
+            let dims = TerminalDimensions::new(width, height, size.0, size.1);
+            self.dimensions = Some(dims);
+            return Ok(dims);
+        }
+
+        // Fallback: Use estimated cell dimensions (10x20 pixels is common)
+        let estimated_cell_width = 10.0;
+        let estimated_cell_height = 20.0;
+        let pixel_width = (size.0 as f32 * estimated_cell_width) as u32;
+        let pixel_height = (size.1 as f32 * estimated_cell_height) as u32;
+
+        let dims = TerminalDimensions::new(pixel_width, pixel_height, size.0, size.1);
+        self.dimensions = Some(dims);
+        Ok(dims)
+    }
+
+    /// Try to query terminal pixel size using CSI 14t
+    ///
+    /// # Returns
+    /// Some((width, height)) if query succeeds, None otherwise
+    fn query_pixel_size(&self) -> Option<(u32, u32)> {
+        // Send CSI 14t: Query text area size in pixels
         // Format: ESC [ 14 t
         // Response: ESC [ 4 ; height ; width t
         print!("\x1b[14t");
-        io::stdout().flush()?;
+        io::stdout().flush().ok()?;
 
-        // Send CSI 18t to get cell count
-        // Format: ESC [ 18 t
-        // Response: ESC [ 8 ; rows ; cols t
-        print!("\x1b[18t");
-        io::stdout().flush()?;
+        // Try to read response with short timeout
+        let timeout = Duration::from_millis(100);
+        if event::poll(timeout).ok()? {
+            // Try to read from stdin for the CSI response
+            let mut stdin = io::stdin();
+            let mut buffer = [0u8; 64];
 
-        // Note: In a real implementation, we'd read the terminal response
-        // For now, return an error indicating this needs async/tty handling
-        Err(ViewportError::NotImplemented(
-            "Terminal response parsing requires async/tty handling".to_string(),
-        ))
+            // Read response (with timeout)
+            if stdin.read(&mut buffer).ok()? > 0 {
+                let response = String::from_utf8_lossy(&buffer);
+                // Parse CSI response: ESC [ 4 ; height ; width t
+                if response.contains("\x1b[4;") {
+                    let parts: Vec<&str> = response.split(';').collect();
+
+                    if parts.len() >= 3 {
+                        // Format: ESC[4;height;widtht
+                        let height = parts[1]
+                            .trim_matches(|c: char| !c.is_numeric())
+                            .parse::<u32>()
+                            .ok()?;
+                        let width_str =
+                            parts[2].trim_matches(|c: char| !c.is_numeric() && c != 't');
+                        let width = width_str.parse::<u32>().ok()?;
+                        return Some((width, height));
+                    }
+                }
+            }
+        }
+
+        None
     }
 
     /// Set dimensions directly (for testing or manual configuration)

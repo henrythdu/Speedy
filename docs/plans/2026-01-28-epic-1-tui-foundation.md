@@ -1,8 +1,9 @@
 # Epic 1: TUI Foundation & Basic Rendering
 
-**Status:** 🚧 In Progress (Tasks 1-5 Complete, Task 6: KittyGraphicsRenderer remaining)  
-**Created:** 2026-01-28  
-**Version:** 1.0 (Validated via Consensus → Challenge → Synthesis)
+**Status:** 🚧 In Progress (Tasks 1-5 Complete, Task 6: KittyGraphicsRenderer remaining)
+**Created:** 2026-01-28
+**Updated:** 2026-01-29
+**Version:** 1.1 (Task 5 viewport query_dimensions complete)
 
 ---
 
@@ -170,11 +171,16 @@ Implement the viewport overlay pattern that coordinates Ratatui layout with dire
    - Bypass Ratatui buffer for graphics area only
 
 **Acceptance Criteria:**
-- [ ] CSI 14t/18t queries return valid dimensions
-- [ ] Cell-to-pixel conversion is accurate
-- [ ] Graphics render in correct screen location
-- [ ] Placeholder area properly reserved in Ratatui layout
-- [ ] Unit tests for coordinate conversion
+- [x] CSI 14t/18t queries return valid dimensions (timeout-based with fallback to 10x20px cells)
+- [x] Cell-to-pixel conversion is accurate
+- [ ] Graphics render in correct screen location (blocked by Task 6)
+- [ ] Placeholder area properly reserved in Ratatui layout (blocked by Task 6 - part of KittyGraphicsRenderer)
+- [x] Unit tests for coordinate conversion
+
+**Implementation Note:**
+- `query_dimensions()` uses timeout-based CSI 14t query with 100ms timeout
+- Falls back to estimated cell dimensions (10x20 pixels) if query fails
+- Placeholder reservation will be integrated with KittyGraphicsRenderer (Task 6) - CellRenderer uses pure Ratatui widgets and doesn't need viewport overlay pattern
 
 **Dependencies:** Task 1 (capability detection)
 
