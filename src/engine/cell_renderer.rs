@@ -28,6 +28,23 @@ impl CellRenderer {
         }
     }
 
+    /// Validate anchor position is within word bounds
+    fn validate_anchor_position(
+        &self,
+        word: &str,
+        anchor_position: usize,
+    ) -> Result<(), RendererError> {
+        let word_len = word.chars().count();
+        if anchor_position >= word_len {
+            Err(RendererError::InvalidArguments(format!(
+                "anchor_position {} out of bounds for word '{}' (length: {})",
+                anchor_position, word, word_len
+            )))
+        } else {
+            Ok(())
+        }
+    }
+
     /// Update terminal size from Ratatui
     pub fn update_terminal_size(&mut self, width: u16, height: u16) {
         self.terminal_size = (width, height);
@@ -69,13 +86,7 @@ impl CellRenderer {
         word: &str,
         anchor_position: usize,
     ) -> Result<u16, RendererError> {
-        let word_len = word.chars().count();
-        if anchor_position >= word_len {
-            return Err(RendererError::InvalidArguments(format!(
-                "anchor_position {} out of bounds for word '{}' (length: {})",
-                anchor_position, word, word_len
-            )));
-        }
+        self.validate_anchor_position(word, anchor_position)?;
 
         let (terminal_width, _) = self.terminal_size;
         let center_col = terminal_width / 2;
@@ -106,14 +117,7 @@ impl RsvpRenderer for CellRenderer {
     }
 
     fn render_word(&mut self, word: &str, anchor_position: usize) -> Result<(), RendererError> {
-        // Validate anchor position
-        let word_len = word.chars().count();
-        if anchor_position >= word_len {
-            return Err(RendererError::InvalidArguments(format!(
-                "anchor_position {} out of bounds for word '{}' (length: {})",
-                anchor_position, word, word_len
-            )));
-        }
+        self.validate_anchor_position(word, anchor_position)?;
 
         // Store both the word and the anchor position for rendering
         self.current_word_state = Some((word.to_string(), anchor_position));
@@ -133,8 +137,7 @@ impl RsvpRenderer for CellRenderer {
     }
 
     fn cleanup(&mut self) -> Result<(), RendererError> {
-        self.current_word_state = None;
-        Ok(())
+        self.clear()
     }
 }
 
