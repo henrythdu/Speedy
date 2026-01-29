@@ -376,7 +376,7 @@ The project follows **pure core + thin IO adapter** pattern:
    - Delegates to engine for pure logic
 
 3. **IO Adapters** (`src/ui/`, `src/repl/`, `src/input/`) - I/O wrappers
-    - REPL input parsing
+    - Commands parsed via rustyline in command deck
     - File format parsing (PDF, EPUB)
     - TUI rendering (ratatui-based, with OVP anchoring) ✅
     - Theme configuration (centralized color schemes) ✅
@@ -407,7 +407,7 @@ The project follows **pure core + thin IO adapter** pattern:
 - Application layer refactoring (app.rs split into event.rs, render_state.rs)
 - UI layer refactoring (reader/ subdirectory with component.rs and view.rs)
 
-### 🚧 Ready for Epic 3
+### 🚧 In Progress (Epic 1: TUI Foundation - Tasks 1-5 Complete, Task 6: KittyGraphicsRenderer remaining)
 - Ghost words feature
 - Reading progress caching
 - Enhanced progress bar
@@ -452,25 +452,35 @@ The project follows **pure core + thin IO adapter** pattern:
 
 ## 8. Key Design Decisions
 
-### 1. REPL-First Architecture
-- REPL remains primary interface
-- TUI launched as modal session from REPL
-- Users can load files, check help, then enter reading mode
+### 1. TUI-First Command Deck Architecture
 
-### 2. Pure Core Separation
-- Engine layer has no I/O dependencies
-- Enables comprehensive unit testing
-- Clear separation of concerns
+- **Command Deck (Bottom 15%):** Integrated command area using rustyline for input
+- Commands typed directly (no prompt like `speedy>`)
+- Commands execute immediately (similar to OpenCode/Neovim command mode)
+- Reading Zone (Top 85%): Displays RSVP content or instructions
+- Mode transitions: Command ↔ Reading ↔ Paused
+- `:q` in Command Mode exits application entirely
 
-### 3. State Preservation
-- ReadingState preserved on `q` command
-- `r` command resumes without reloading
-- Enables multi-document workflow
+**Purpose:** Modern TUI workflow with integrated command input, no REPL prompt
 
-### 4. Delegated Key Handling
-- TUI delegates to `app.handle_keypress()`
-- Avoids duplicate key binding logic
-- Centralized input processing
+### 2. Full TUI Always-On
+- Application launches in full TUI mode immediately (no REPL prompt)
+- ReadingState preserved across mode changes
+- Last reading position restored if available
+- Commands integrated into bottom command deck (rustyline input)
+
+**Purpose:** Modern TUI experience with integrated workflow
+
+### 3. Integrated Command Deck
+- Command deck always visible at bottom of TUI
+- ReadingState preserved across sessions
+- Last reading position restored on app launch
+- Quit command (`:q`) exits application entirely
+
+### 4. Integrated Input Handling
+- Command deck uses rustyline for command input (like OpenCode command section)
+- TUI delegates command parsing to `app.handle_event()`
+- Centralized input processing in command deck area
 
 ---
 

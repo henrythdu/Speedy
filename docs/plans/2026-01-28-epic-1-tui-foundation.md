@@ -1,6 +1,6 @@
 # Epic 1: TUI Foundation & Basic Rendering
 
-**Status:** Ready for Implementation  
+**Status:** 🚧 In Progress (Tasks 1-5 Complete, Task 6: KittyGraphicsRenderer remaining)  
 **Created:** 2026-01-28  
 **Version:** 1.0 (Validated via Consensus → Challenge → Synthesis)
 
@@ -23,9 +23,13 @@ Without the foundation established here, subsequent epics (caching, ghosting, pr
 
 ## 2. Background & Context
 
-### 2.1 Architecture Pivot
-- **From:** REPL loop (`speedy> @file.pdf`) → Launch TUI → Return to REPL
-- **To:** TUI-only startup with integrated command deck at bottom
+### 2.1 Architecture (TUI Command Deck Model - Per PRD v2.0 & Design Doc v2)
+- **Always-On TUI:** Application launches in full-screen TUI mode immediately
+- **Command Layer (Ratatui):** Command deck at bottom using rustyline for input, handles user commands
+- **Rendering Layer (Graphics Engine):** Pixel-perfect RSVP display with sub-pixel OVP anchoring
+- **Viewport Overlay Pattern:** Ratatui renders layout and reserves placeholder for reading zone, graphics engine writes pixels directly
+- **Mode Transitions:** Command ↔ Reading ↔ Paused (within TUI)
+- **Quit Behavior:** `:q` in Command Mode exits application entirely
 
 ### 2.2 Dual-Engine Design
 - **Command Layer (Ratatui):** Input handling, layout, progress bars, standard TUI widgets
@@ -75,7 +79,7 @@ Implement terminal graphics capability detection that works reliably across term
 Define the core renderer trait that abstracts both TUI and graphics backends, enabling future protocol support (Sixel, iTerm2).
 
 **Technical Details:**
-- Define `RsvpRenderer` trait in `src/engine/renderer.rs` with methods: initialize, render_word, clear, supports_subpixel_ovp, cleanup
+- Define `RsvpRenderer` trait in `src/rendering/renderer.rs` with methods: initialize, render_word, clear, supports_subpixel_ovp, cleanup
 - Add lifecycle methods (initialize, cleanup) now to avoid breaking changes later
 - Design for future backend implementations
 - Document trait evolution plan for Sixel/iTerm2
