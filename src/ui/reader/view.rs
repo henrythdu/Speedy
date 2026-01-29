@@ -118,6 +118,54 @@ pub fn render_gutter_placeholder() -> Paragraph<'static> {
         .style(Style::default().fg(colors::text()).bg(colors::background()))
 }
 
+pub fn render_placeholder() -> Paragraph<'static> {
+    let text = "Type @filename to load a file\nOr @@ to load from clipboard\n:q to quit";
+    Paragraph::new(text)
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(colors::dimmed()).bg(colors::background()))
+}
+
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::widgets::{Block, Borders, Clear};
+use ratatui::Frame;
+use crate::app::mode::AppMode;
+
+pub fn render_command_deck(frame: &mut Frame, area: Rect, mode: AppMode) {
+    // Clear the command area first
+    frame.render_widget(Clear, area);
+
+    // Create layout with left accent bar and input area
+    let layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Length(1), Constraint::Min(1)])
+        .split(area);
+
+    // Left accent bar
+    let accent_bar = Paragraph::new("▌")
+        .style(Style::default().fg(colors::anchor()).bg(colors::surface()));
+    frame.render_widget(accent_bar, layout[0]);
+
+    // Command input area
+    let mode_indicator = match mode {
+        AppMode::Command => " COMMAND ",
+        AppMode::Reading => " READING ",
+        AppMode::Paused => " PAUSED ",
+        AppMode::Peek => " PEEK ",
+        AppMode::Quit => " QUIT ",
+    };
+
+    let input_text = format!("{} Type @file.pdf, @@, or :q", mode_indicator);
+    
+    let input_widget = Paragraph::new(input_text)
+        .block(Block::default()
+            .borders(Borders::TOP)
+            .border_style(Style::default().fg(colors::dimmed()))
+        )
+        .style(Style::default().fg(colors::text()).bg(colors::surface()));
+    
+    frame.render_widget(input_widget, layout[1]);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
