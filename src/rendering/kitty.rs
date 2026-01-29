@@ -22,6 +22,7 @@ use crate::rendering::font::{calculate_string_width, get_font, get_font_metrics,
 use crate::rendering::renderer::{RendererError, RsvpRenderer};
 use crate::rendering::viewport::{TerminalDimensions, Viewport};
 use ab_glyph::FontRef;
+use base64::{engine::general_purpose, Engine as _};
 use imageproc::image::{ImageBuffer, Rgba};
 use std::io::{self, Write};
 
@@ -110,11 +111,11 @@ impl KittyGraphicsRenderer {
             return None;
         }
 
-        // Create RGBA buffer with Midnight theme background
-        let mut image = ImageBuffer::from_pixel(width, height, Rgba([26, 27, 38, 255]));
+        // Create RGBA buffer with transparent background (non-intrusive stub)
+        let image = ImageBuffer::from_pixel(width, height, Rgba([0, 0, 0, 0]));
 
         // TODO: Use ab_glyph to render text into the buffer
-        // For now, return empty buffer (will be implemented)
+        // For now, return transparent buffer (will be implemented)
 
         Some(image)
     }
@@ -122,7 +123,7 @@ impl KittyGraphicsRenderer {
     /// Encode image to base64 for Kitty protocol
     fn encode_image_base64(&self, image: &ImageBuffer<Rgba<u8>, Vec<u8>>) -> String {
         let raw_bytes: Vec<u8> = image.as_raw().to_vec();
-        base64::encode(&raw_bytes)
+        general_purpose::STANDARD.encode(&raw_bytes)
     }
 
     /// Send Kitty Graphics Protocol transmission
@@ -225,11 +226,39 @@ impl RsvpRenderer for KittyGraphicsRenderer {
             ));
         }
 
-        // Rasterize word (placeholder - full implementation in next iteration)
-        let _start_x = self.calculate_start_x(word, anchor_position);
+        // Calculate sub-pixel OVP position
+        let start_x = self.calculate_start_x(word, anchor_position);
 
-        // TODO: Complete rasterization and transmission
-        // For now, just increment image ID to show method works
+        // Move cursor to calculated position using CSI sequence
+        // Convert pixel X to approximate cell column for cursor positioning
+        let cell_x = (start_x / 10.0).max(0.0) as u16;
+        let cell_y = (self.reading_zone_center.1 as f32 / 20.0).max(0.0) as u16;
+        print!("\x1b[{};{}H", cell_y + 1, cell_x + 1);
+        io::stdout()
+            .flush()
+            .map_err(|e| RendererError::RenderFailed(e.to_string()))?;
+
+        // Rasterize word to image buffer
+        let image = match self.rasterize_word(word) {
+            Some(img) => img,
+            None => {
+                return Err(RendererError::RenderFailed(
+                    "Failed to rasterize word".to_string(),
+                ))
+            }
+        };
+
+        // Encode to base64
+        let base64_data = self.encode_image_base64(&image);
+
+        // Get image dimensions
+        let (width, height) = (image.width(), image.height());
+
+        // Transmit via Kitty Graphics Protocol
+        self.transmit_graphics(self.current_image_id, width, height, &base64_data)
+            .map_err(|e| RendererError::RenderFailed(e.to_string()))?;
+
+        // Increment image ID for next word
         self.current_image_id += 1;
 
         Ok(())
