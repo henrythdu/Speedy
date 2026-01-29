@@ -38,10 +38,12 @@ impl TuiManager {
 
         loop {
             let current_mode = app.mode();
-            if current_mode == AppMode::Quit || current_mode == AppMode::Command {
+            if current_mode == AppMode::Quit {
                 return Ok(current_mode);
             }
-            // Reading and Paused both stay in TUI
+            // Command, Reading, and Paused all stay in TUI
+            // Command mode shows the command deck for input
+            // Reading and Paused modes show the RSVP display
 
             let wpm = app.get_wpm();
             let timeout_ms = wpm_to_milliseconds(wpm);
