@@ -1,6 +1,6 @@
 # Speedy Architecture Document
 
-**Last Updated:** 2026-01-28 (Epic 1: Font loading system added)  
+**Last Updated:** 2026-01-29 (Epic 1: CellRenderer TUI Fallback added)  
 **Purpose:** Document actual codebase structure, methods, structs, and architecture to prevent duplication and confusion.
 
 ## ⚠️ Important Notes
@@ -21,19 +21,21 @@ src/
  │   ├── app.rs          # Main App struct and business logic
  │   ├── mode.rs         # AppMode enum (Repl, Reading, Paused)
  │   └── mod.rs          # App module exports
- ├── engine/             # Pure core logic (no I/O, no side effects)
- │   ├── state.rs        # ReadingState and token processing
- │   ├── ovp.rs          # OVP anchor position calculation
- │   ├── renderer.rs     # RsvpRenderer trait for pluggable backends
- │   ├── capability.rs   # Terminal capability detection
- │   ├── font.rs         # Font loading and metrics calculation
- │   ├── timing.rs       # Token struct and timing calculations
- │   └── mod.rs          # Engine module exports
- ├── ui/                 # TUI rendering layer
- │   ├── render.rs       # Rendering functions (OVP word, progress, context)
- │   ├── terminal.rs     # TuiManager with event loop and frame rendering
- │   ├── theme.rs        # Theme configuration (Midnight colors)
- │   └── mod.rs          # UI module exports
+├── engine/             # Pure core logic (no I/O, no side effects)
+  │   ├── state.rs        # ReadingState and token processing
+  │   ├── ovp.rs          # OVP anchor position calculation
+  │   ├── renderer.rs     # RsvpRenderer trait for pluggable backends
+  │   ├── cell_renderer.rs # CellRenderer TUI fallback implementation
+  │   ├── capability.rs   # Terminal capability detection
+  │   ├── font.rs         # Font loading and metrics calculation
+  │   ├── timing.rs       # Token struct and timing calculations
+  │   └── mod.rs          # Engine module exports
+├── ui/                 # TUI rendering layer
+  │   ├── render.rs       # Rendering functions (OVP word, progress, context)
+  │   ├── terminal.rs     # TuiManager with event loop and frame rendering
+  │   ├── reader_component.rs  # ReaderComponent wrapping CellRenderer for TUI fallback
+  │   ├── theme.rs        # Theme configuration (Midnight colors)
+  │   └── mod.rs          # UI module exports
  ├── repl/               # REPL-specific code
  │   ├── input.rs        # ReplInput enum and parsing
  │   └── mod.rs          # REPL module exports
@@ -112,6 +114,29 @@ pub trait RsvpRenderer {
 
 **Purpose:** Abstracts rendering implementations (TUI CellRenderer, Kitty Graphics, future Sixel/iTerm2). Enables backend switching without changing reading logic. Object-safe trait supporting `Box<dyn RsvpRenderer>`.
 
+### `CellRenderer` (`src/engine/cell_renderer.rs:17`)
+TUI fallback renderer using pure Ratatui widgets.
+```rust
+pub struct CellRenderer {
+    terminal_size: (u16, u16),  // (columns, rows)
+    current_word: Option<String>,
+}
+```
+
+**Public API:**
+- `new() -> Self` - Create new instance
+- `update_terminal_size(width, height)` - Update terminal dimensions
+- `get_center_row() -> u16` - Calculate vertically centered row
+- `get_current_word() -> Option<&str>` - Get current word if any
+- `calculate_start_column(word, anchor) -> Result<u16, RendererError>` - OVP cell-based anchoring
+
+**Key Behaviors:**
+- OVP anchoring snaps to nearest character cell (not sub-pixel)
+- Words centered horizontally and vertically in viewport
+- Uses `unicode-segmentation` crate for emoji/CJK width calculation
+- NO dependency on `font.rs` (terminal controls fonts in TUI mode)
+- Implements all `RsvpRenderer` trait methods
+
 ### `GraphicsCapability` (`src/engine/capability.rs:8`)
 Terminal graphics support level enum.
 ```rust
@@ -171,6 +196,23 @@ pub enum AppMode {
 ```
 
 **Purpose:** Tracks which UI layer is active and handles transitions.
+
+### `ReaderComponent` (`src/ui/reader_component.rs:9`)
+Reader UI component wrapping CellRenderer for TUI fallback mode.
+```rust
+pub struct ReaderComponent {
+    renderer: CellRenderer,
+}
+```
+
+**Public API:**
+- `new() -> Self` - Create new component instance
+- `renderer(&mut self) -> &mut CellRenderer` - Get mutable renderer access
+- `render(&mut self, frame: &mut Frame, area: Rect)` - Render word to TUI buffer
+- `display_word(&mut self, word: &str, anchor: usize) -> Result<(), RendererError>` - Display word with OVP
+- `clear(&mut self) -> Result<(), RendererError>` - Clear the display
+
+**Purpose:** Bridges CellRenderer with Ratatui UI layer. Separates state logic from rendering.
 
 ### `ReplInput` (`src/repl/input.rs:15`)
 REPL command variants.
@@ -307,6 +349,8 @@ The project follows **pure core + thin IO adapter** pattern:
 - Midnight theme colors (`src/ui/theme.rs`)
 - Auto-advancement timing loop
 - OVP anchoring (left padding calculation in render_word_display) (src/ui/render.rs:10)
+- CellRenderer TUI fallback with RsvpRenderer trait (src/engine/cell_renderer.rs)
+- ReaderComponent UI wrapper (src/ui/reader_component.rs)
 
 ### ❌ Missing
 - None (Task 2B-1 complete)
@@ -324,8 +368,10 @@ The project follows **pure core + thin IO adapter** pattern:
 | **3.2 Weighted Delay** | ✅ Complete (floating-point timing precision) |
 | **3.3 Sentence Navigation** | ✅ Implemented (j=left/k=right keys) |
 | **4.1 Midnight Theme** | ✅ Implemented (theme.rs with explicit RGB colors) |
+| **4.2 Dual-Engine** | ✅ RsvpRenderer trait + CellRenderer TUI fallback |
 | **7.1 REPL Mode** | ✅ Complete |
 | **7.2 Reading Mode** | ✅ Complete (TUI with OVP anchoring) |
+| **9.2 Fallback Mode** | ✅ CellRenderer TUI fallback for non-graphics terminals |
 
 ---
 
@@ -340,6 +386,7 @@ The project follows **pure core + thin IO adapter** pattern:
 - `pdf-extract = "0.8"` - PDF parsing ✅
 - `epub = "0.3"` - EPUB parsing ✅
 - `clipboard = "0.5"` - Clipboard access ✅
+- `unicode-segmentation` - Unicode width handling for emoji/CJK (Cargo.toml)
 
 ### Development
 - `cargo test` - Unit and integration tests
