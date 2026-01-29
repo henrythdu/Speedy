@@ -130,7 +130,7 @@ use ratatui::widgets::{Block, Borders, Clear};
 use ratatui::Frame;
 use crate::app::mode::AppMode;
 
-pub fn render_command_deck(frame: &mut Frame, area: Rect, mode: AppMode) {
+pub fn render_command_deck(frame: &mut Frame, area: Rect, mode: AppMode, command_buffer: &str) {
     // Clear the command area first
     frame.render_widget(Clear, area);
 
@@ -154,7 +154,11 @@ pub fn render_command_deck(frame: &mut Frame, area: Rect, mode: AppMode) {
         AppMode::Quit => " QUIT ",
     };
 
-    let input_text = format!("{} Type @file.pdf, @@, or :q", mode_indicator);
+    let input_text = if command_buffer.is_empty() {
+        format!("{} Type @file.pdf, @@, or :q", mode_indicator)
+    } else {
+        format!("{} {}", mode_indicator, command_buffer)
+    };
     
     let input_widget = Paragraph::new(input_text)
         .block(Block::default()
