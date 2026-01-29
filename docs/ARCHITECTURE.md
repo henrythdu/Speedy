@@ -1,6 +1,6 @@
 # Speedy Architecture Document
 
-**Last Updated:** 2026-01-29 (Epic 2: Codebase Reorganization - Task 3 complete)
+**Last Updated:** 2026-01-29 (Epic 2: Codebase Reorganization - Cleanup duplicate tests complete)
 **Purpose:** Document actual codebase structure, methods, structs, and architecture to prevent duplication and confusion.
 
 ## ⚠️ Important Notes
@@ -89,7 +89,7 @@ pub struct Theme {
 
 **Purpose:** Centralizes color scheme for maintainability. Midnight theme (PRD Section 4.1) with explicit RGB colors to ensure dimmed modifier works correctly.
 
-### `ReadingState` (`src/engine/state.rs:1`)
+### `ReadingState` (`src/reading/state.rs:1`)
 Pure reading state with tokens and timing.
 ```rust
 pub struct ReadingState {
@@ -102,7 +102,7 @@ pub struct ReadingState {
 
 **Purpose:** Holds tokenized document, position, and timing state. Pure core logic only.
 
-### `Token` (`src/engine/timing.rs:1`)
+### `Token` (`src/reading/token.rs:1`)
 A word with punctuation and metadata.
 ```rust
 pub struct Token {
@@ -114,7 +114,7 @@ pub struct Token {
 
 **Purpose:** Basic unit for RSVP reading with punctuation and sentence metadata.
 
-### `RsvpRenderer` Trait (`src/engine/renderer.rs:37`)
+### `RsvpRenderer` Trait (`src/rendering/renderer.rs:37`)
 Pluggable trait for RSVP rendering backends.
 ```rust
 pub trait RsvpRenderer {
@@ -128,7 +128,7 @@ pub trait RsvpRenderer {
 
 **Purpose:** Abstracts rendering implementations (TUI CellRenderer, Kitty Graphics, future Sixel/iTerm2). Enables backend switching without changing reading logic. Object-safe trait supporting `Box<dyn RsvpRenderer>`.
 
-### `CellRenderer` (`src/engine/cell_renderer.rs:17`)
+### `CellRenderer` (`src/rendering/cell.rs:17`)
 TUI fallback renderer using pure Ratatui widgets.
 ```rust
 pub struct CellRenderer {
@@ -151,7 +151,7 @@ pub struct CellRenderer {
 - NO dependency on `font.rs` (terminal controls fonts in TUI mode)
 - Implements all `RsvpRenderer` trait methods
 
-### `Viewport` (`src/engine/viewport.rs:38`)
+### `Viewport` (`src/rendering/viewport.rs:38`)
 Viewport coordinate management for graphics overlay pattern.
 ```rust
 pub struct Viewport {
@@ -178,7 +178,7 @@ pub struct TerminalDimensions {
 - Converts Ratatui cell coordinates to pixel coordinates for graphics rendering
 - Enables Viewport Overlay Pattern (PRD Section 4.2, Design Doc v2.0 Section 2.1)
 
-### `GraphicsCapability` (`src/engine/capability.rs:8`)
+### `GraphicsCapability` (`src/rendering/capability.rs:8`)
 Terminal graphics support level enum.
 ```rust
 pub enum GraphicsCapability {
@@ -189,7 +189,7 @@ pub enum GraphicsCapability {
 
 **Purpose:** Tracks detected terminal capability for choosing appropriate renderer backend.
 
-### `FontMetrics` (`src/engine/font.rs`)
+### `FontMetrics` (`src/rendering/font.rs`)
 Font metric data for OVP calculations.
 ```rust
 pub struct FontMetrics {
@@ -213,7 +213,7 @@ pub struct FontMetrics {
 
 **Key Dependencies:** `ab_glyph`, `lazy_static`
 
-### `CapabilityDetector` (`src/engine/capability.rs:26`)
+### `CapabilityDetector` (`src/rendering/capability.rs:26`)
 Terminal capability detection logic.
 ```rust
 pub struct CapabilityDetector;
@@ -334,7 +334,7 @@ pub struct TerminalGuard;
 **Key Methods:**
 - `pub fn new() -> Result<Self, io::Error>` - Creates guard, enables raw mode, enters alternate screen (src/ui/terminal_guard.rs:14)
 
-### ReadingState Methods (`src/engine/state.rs`)
+### ReadingState Methods (`src/reading/state.rs`)
 
 #### Navigation
 - `pub fn advance(&mut self)` - Moves to next token (line 83)
