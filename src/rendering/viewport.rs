@@ -158,8 +158,7 @@ impl Viewport {
                             .trim_matches(|c: char| !c.is_numeric())
                             .parse::<u32>()
                             .ok()?;
-                        let width_str =
-                            parts[2].trim_matches(|c: char| !c.is_numeric() && c != 't');
+                        let width_str = parts[2].trim_matches(|c: char| !c.is_numeric());
                         let width = width_str.parse::<u32>().ok()?;
                         return Some((width, height));
                     }
