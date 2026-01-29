@@ -4,6 +4,7 @@ use ratatui::style::Color;
 #[derive(Debug, Clone, Copy)]
 pub struct Theme {
     pub background: Color,
+    pub surface: Color,
     pub text: Color,
     pub anchor: Color,
     pub dimmed: Color,
@@ -20,6 +21,7 @@ impl Theme {
     pub fn midnight() -> Self {
         Self {
             background: Color::Rgb(26, 27, 38), // #1A1B26 Stormy Dark
+            surface: Color::Rgb(36, 40, 59),    // #24283B Dark Slate (command deck)
             text: Color::Rgb(169, 177, 214),    // #A9B1D6 Light Blue
             anchor: Color::Rgb(247, 118, 142),  // #F7768E Coral Red
             dimmed: Color::Rgb(100, 110, 150),  // #646E96 Dimmed Blue
@@ -48,5 +50,8 @@ pub mod colors {
     }
     pub fn dimmed() -> Color {
         Theme::current().dimmed
+    }
+    pub fn surface() -> Color {
+        Theme::current().surface
     }
 }
