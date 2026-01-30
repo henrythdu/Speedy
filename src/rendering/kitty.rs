@@ -52,6 +52,7 @@ impl Default for KittyGraphicsRenderer {
         Self::new()
     }
 
+}
 impl KittyGraphicsRenderer {
     /// Create a new KittyGraphicsRenderer with default font size
     pub fn new() -> Self {
