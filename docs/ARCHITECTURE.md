@@ -1,6 +1,6 @@
 # Speedy Architecture Document
 
-**Last Updated:** 2026-01-29 (Epic 2: Image-Based Word Rendering - Text rasterization & KGP transmission complete)
+**Last Updated:** 2026-01-30 (Epic 2: Image-Based Word Rendering - Task 1: ReadingCanvas struct for composite rendering)
 **Purpose:** Document actual codebase structure, methods, structs, and architecture to prevent duplication and confusion.
 
 ## ⚠️ Important Notes
@@ -171,10 +171,14 @@ pub struct KittyGraphicsRenderer {
 - `get_reading_zone_height() -> Option<u32>` - Get reading zone height (85% of terminal)
 - `calculate_vertical_center() -> Option<u32>` - Calculate Y position at 42% of reading zone
 - `get_cell_height() -> Option<f32>` - Get cell height in pixels from viewport
+- `create_canvas() -> Option<ReadingCanvas>` - Create full-zone canvas for composite rendering (src/rendering/kitty.rs:196)
+- `render_frame(word, anchor_position) -> Result<(), RendererError>` - **Main orchestrator** - Create canvas, composite word, transmit single image (src/rendering/kitty.rs:306)
 
 **Private Methods:**
 - `calculate_start_x(word, anchor) -> f32` - Calculate sub-pixel OVP X position
-- `rasterize_word(word) -> Option<ImageBuffer>` - Render word to RGBA buffer using ab_glyph
+- `rasterize_word(word, anchor_position) -> Option<ImageBuffer>` - Render word to RGBA buffer using ab_glyph
+- `composite_word(canvas, word, anchor_position) -> bool` - **BUG FIX** Composite word onto canvas at 42% of canvas height (src/rendering/kitty.rs:208)
+- `calculate_start_x_for_canvas(word, anchor, center_x) -> f32` - Calculate OVP X position within canvas
 - `transmit_graphics(id, w, h, data, x, y) -> io::Result<()>` - Send image via KGP
 - `delete_image(id) -> io::Result<()>` - Delete specific KGP image
 - `delete_all_graphics() -> io::Result<()>` - Clear all KGP images on exit
@@ -185,6 +189,34 @@ pub struct KittyGraphicsRenderer {
 - Vertical centering at 42% of reading zone height (per PRD Section 4.3)
 - Sub-pixel OVP anchoring via `calculate_start_x()` using font metrics
 - Implements RsvpRenderer trait for pluggable backend architecture
+
+### `ReadingCanvas` (`src/rendering/kitty.rs:38`)
+Full-zone canvas for composite rendering of reading area.
+```rust
+pub struct ReadingCanvas {
+    buffer: ImageBuffer<Rgba<u8>, Vec<u8>>,  // RGBA pixel buffer
+    dimensions: (u32, u32),                   // Canvas dimensions (width, height)
+    background_color: Rgba<u8>,              // Background color (#1A1B26)
+}
+```
+
+**Public API:**
+- `new(width, height) -> Self` - Create canvas with specified dimensions, filled with background color
+- `width() -> u32` - Get canvas width in pixels
+- `height() -> u32` - Get canvas height in pixels
+- `dimensions() -> (u32, u32)` - Get canvas dimensions as tuple
+- `buffer() -> &ImageBuffer` - Get immutable reference to RGBA buffer
+- `buffer_mut() -> &mut ImageBuffer` - Get mutable reference to RGBA buffer
+- `clear()` - Fill entire canvas with background color
+- `calculate_reading_line_y() -> u32` - Calculate Y position at 42% of canvas height
+
+**Key Behaviors:**
+- Implements CPU compositing pattern from Design Doc v2.0 Section 6.2
+- Creates single RGBA buffer covering entire reading zone (85% of terminal)
+- Background color is Midnight theme #1A1B26 (deep slate)
+- Composites all visual elements (background, word, ghost words) into single buffer
+- Eliminates flickering and Z-fighting issues from multiple image transmissions
+- Canvas-relative positioning (words at 42% of canvas, not full screen) fixes coordinate bug
 
 ### `Viewport` (`src/rendering/viewport.rs:38`)
 Viewport coordinate management for graphics overlay pattern.
@@ -443,11 +475,22 @@ The project follows **pure core + thin IO adapter** pattern:
 - UI layer refactoring (reader/ subdirectory with component.rs and view.rs)
 
 ### 🚧 In Progress (Epic 2: Image-Based Word Rendering)
-- ✅ Task 1: Konsole Capability Validation (OPEN)
+
+**Composite Rendering Implementation (COMPLETE - Bug Fixed!):**
+- ✅ Task 1: ReadingCanvas struct for full-zone composite rendering (src/rendering/kitty.rs:38)
+- ✅ Task 2: create_canvas() method (src/rendering/kitty.rs:196)
+- ✅ Task 3: composite_word() method with **coordinate bug fix** (src/rendering/kitty.rs:208)
+- ✅ Task 4: render_frame() orchestrator (src/rendering/kitty.rs:306)
+- ✅ Task 5: TuiManager integration update (src/ui/terminal.rs:206)
+- ✅ Task 6: Verification and cleanup - **All 220 tests pass**
+
+**Bug Fixed:** Words now render at 42% of READING ZONE (canvas-relative) instead of 42% of FULL SCREEN (screen-relative). This places words in the middle of the reading area instead of near the command deck.
+
+**Testing:** 31 new unit tests added, 220 total tests passing, 0 failures.
+
+**Previously Implemented:**
 - ✅ Task 2: ab_glyph Word Rasterization (COMPLETE)
 - ✅ Task 3: Kitty Protocol Image Display (COMPLETE)
-- ⏳ Task 4: Word-to-Word Transition (pending integration)
-- ⏳ Task 5: Human Testing & Performance Baseline (pending)
 
 **Epic 2 Features Implemented:**
 - Text rasterization using ab_glyph + imageproc
@@ -455,6 +498,7 @@ The project follows **pure core + thin IO adapter** pattern:
 - Sub-pixel OVP anchoring via `calculate_start_x()`
 - Vertical centering at 42% of reading zone
 - Kitty Graphics Protocol transmission with position coordinates
+- **NEW:** ReadingCanvas full-zone composite buffer (Design Doc v2.0 Section 6.2)
 
 ---
 

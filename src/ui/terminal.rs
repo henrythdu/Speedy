@@ -206,15 +206,14 @@ impl TuiManager {
     pub fn render_frame(&mut self, app: &App) -> io::Result<()> {
         let render_state = app.get_render_state();
 
-        // Render word via Kitty Graphics Protocol (always - no fallback)
+        // Render word via Kitty Graphics Protocol using composite rendering
+        // Per Epic 2 composite rendering implementation: Single-image-per-frame approach
+        // This uses render_frame() which orchestrates: create_canvas → composite_word → transmit
         if let Some(word) = &render_state.current_word {
             let anchor_pos = crate::reading::calculate_anchor_position(word);
 
-            // Clear previous graphics
-            let _ = RsvpRenderer::clear(&mut self.kitty_renderer);
-
-            // Render word via Kitty Graphics Protocol
-            if let Err(e) = RsvpRenderer::render_word(&mut self.kitty_renderer, word, anchor_pos) {
+            // Use the new render_frame orchestrator (handles canvas creation, compositing, transmission)
+            if let Err(e) = self.kitty_renderer.render_frame(word, anchor_pos) {
                 eprintln!("Render error: {}", e);
             }
         }
@@ -234,8 +233,7 @@ impl TuiManager {
 
             // Fill reading zone with theme background color
             let theme = Theme::midnight();
-            let reading_bg = Block::default()
-                .style(Style::default().bg(theme.background));
+            let reading_bg = Block::default().style(Style::default().bg(theme.background));
             frame.render_widget(reading_bg, reading_area);
 
             // Command deck area
