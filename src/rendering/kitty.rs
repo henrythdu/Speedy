@@ -18,7 +18,7 @@
 //! - Rasterization: <3ms (cache hit: <0.5ms, cache miss: <3ms)
 //! - Encoding + transmission: <7ms
 
-use crate::rendering::font::{calculate_string_width, get_font, get_font_metrics, FontMetrics};
+use crate::rendering::font::{calculate_char_width, calculate_string_width, get_font, get_font_metrics, FontMetrics};
 use crate::rendering::renderer::{RendererError, RsvpRenderer};
 use crate::rendering::viewport::Viewport;
 use ab_glyph::{FontRef, PxScale};
@@ -144,10 +144,9 @@ impl KittyGraphicsRenderer {
 
     /// Rasterize word to RGBA buffer with text rendered using ab_glyph and imageproc
     ///
-    /// Creates an image buffer sized to fit the word with padding for visual clarity,
-    /// fills it with the theme background color, and renders the text.
-    /// The buffer is sized to match the reading zone height for proper vertical positioning.
-    fn rasterize_word(&self, word: &str) -> Option<ImageBuffer<Rgba<u8>, Vec<u8>>> {
+    /// Creates an image buffer sized to fit the word, fills it with theme background color,
+    /// and renders the text with anchor character highlighted in coral red per PRD Section 4.1.
+    fn rasterize_word(&self, word: &str, anchor_position: usize) -> Option<ImageBuffer<Rgba<u8>, Vec<u8>>> {
         if self.font.is_none() || self.font_metrics.is_none() {
             return None;
         }
@@ -167,34 +166,46 @@ impl KittyGraphicsRenderer {
             return None;
         }
 
-        // Get reading zone height for canvas size (None means use text height)
-        let canvas_height = self.get_reading_zone_height().unwrap_or(height);
-
-        // Create RGBA buffer with theme background color (#1A1B26 = Rgba(26, 27, 38, 255))
-        let mut image = ImageBuffer::from_pixel(width, canvas_height, Rgba([26, 27, 38, 255]));
+        // Create RGBA buffer with transparent background
+        // The reading area has theme background (#1A1B26), word is transparent overlay
+        let mut image = ImageBuffer::from_pixel(width, height, Rgba([0, 0, 0, 0]));
 
         // Use imageproc's draw_text_mut to render text
         // ab_glyph requires PxScale for scaling
         let scale = PxScale::from(self.font_size);
 
-        // Text color: anchor color #F7768E = Rgba(247, 118, 142, 255)
-        let text_color = Rgba([247, 118, 142, 255]);
-
-        // Calculate vertical offset to center text in the reading zone
-        // Text should be positioned at 42% of reading zone height (per PRD)
-        let vertical_offset =
-            ((canvas_height as f32 * 0.42) - (height as f32 / 2.0)).max(0.0) as i32;
-
-        // Draw text at calculated vertical offset
-        draw_text_mut(
-            &mut image,
-            text_color,
-            0,
-            vertical_offset,
-            scale,
-            font,
-            word,
-        );
+        // Split word into: prefix (before anchor), anchor_char, suffix (after anchor)
+        let chars: Vec<char> = word.chars().collect();
+        let anchor_idx = anchor_position.min(chars.len().saturating_sub(1));
+        
+        let prefix: String = chars.iter().take(anchor_idx).collect();
+        let anchor_char = chars.get(anchor_idx).copied().unwrap_or(' ');
+        let suffix: String = chars.iter().skip(anchor_idx + 1).collect();
+        
+        // Calculate pixel widths
+        let prefix_width = calculate_string_width(font, &prefix, self.font_size);
+        let anchor_width = calculate_char_width(font, anchor_char, self.font_size);
+        
+        // Theme colors from PRD Section 4.1
+        let text_color = Rgba([169, 177, 214, 255]);      // #A9B1D6 Light Blue
+        let anchor_color = Rgba([247, 118, 142, 255]);    // #F7768E Coral Red
+        
+        // Draw prefix (before anchor) in text color
+        let mut x_offset = 0i32;
+        if !prefix.is_empty() {
+            draw_text_mut(&mut image, text_color, x_offset, 0, scale, font, &prefix);
+            x_offset += prefix_width.ceil() as i32;
+        }
+        
+        // Draw anchor character in anchor color
+        let anchor_str = anchor_char.to_string();
+        draw_text_mut(&mut image, anchor_color, x_offset, 0, scale, font, &anchor_str);
+        x_offset += anchor_width.ceil() as i32;
+        
+        // Draw suffix (after anchor) in text color
+        if !suffix.is_empty() {
+            draw_text_mut(&mut image, text_color, x_offset, 0, scale, font, &suffix);
+        }
 
         Some(image)
     }
@@ -216,16 +227,16 @@ impl KittyGraphicsRenderer {
         pos_y: u32,
     ) -> io::Result<()> {
         // Kitty Graphics Protocol: APC sequence
-        // Format: ESC _ G a=T f=32 s=<width> v=<height> i=<image_id> p=<x>,<y> m=1 <data> ESC \
+        // Format: ESC _ G a=T f=32 s=<width> v=<height> i=<image_id> x=<x> y=<y> m=0 <data> ESC \
         // f=32 means 32-bit RGBA
-        // p=x,y specifies pixel position (top-left corner of image)
+        // x and y specify pixel position (top-left corner of image)
         let apc_start = "\x1b_G";
         let apc_end = "\x1b\\";
 
         // If data fits in single transmission
         if base64_data.len() <= 4096 {
             let command = format!(
-                "{}a=T,f=32,s={},v={},i={},p={},{}m=0;{}{}",
+                "{}a=T,f=32,s={},v={},i={},x={},y={},m=0;{}{}",
                 apc_start, width, height, image_id, pos_x, pos_y, base64_data, apc_end
             );
             print!("{}", command);
@@ -241,7 +252,7 @@ impl KittyGraphicsRenderer {
             for (i, chunk) in chunks.iter().enumerate() {
                 let more = if i == chunks.len() - 1 { 0 } else { 1 };
                 let command = format!(
-                    "{}a=T,f=32,s={},v={},i={},p={},{}m={};{}{}",
+                    "{}a=T,f=32,s={},v={},i={},x={},y={},m={};{}{}",
                     apc_start, width, height, image_id, pos_x, pos_y, more, chunk, apc_end
                 );
                 print!("{}", command);
@@ -292,6 +303,11 @@ impl RsvpRenderer for KittyGraphicsRenderer {
     }
 
     fn render_word(&mut self, word: &str, anchor_position: usize) -> Result<(), RendererError> {
+        // Guard against empty words
+        if word.is_empty() {
+            return Ok(());
+        }
+
         // Validate anchor position
         let word_len = word.chars().count();
         if anchor_position >= word_len {
@@ -311,18 +327,11 @@ impl RsvpRenderer for KittyGraphicsRenderer {
         // Calculate sub-pixel OVP position
         let start_x = self.calculate_start_x(word, anchor_position);
 
-        // Calculate vertical position (reading zone center)
-        let vertical_center = self.calculate_vertical_center().unwrap_or(0);
+        // Calculate vertical center of reading zone (42% of reading zone height per PRD)
+        let reading_zone_center_y = self.calculate_vertical_center().unwrap_or(0);
 
-        // Debug output
-        eprintln!(
-            "DEBUG render_word: word='{}', anchor={}, start_x={}, vertical_center={}",
-            word, anchor_position, start_x, vertical_center
-        );
-        eprintln!("DEBUG: reading_zone_center={:?}", self.reading_zone_center);
-
-        // Rasterize word to image buffer
-        let image = match self.rasterize_word(word) {
+        // Rasterize word with anchor highlighting
+        let image = match self.rasterize_word(word, anchor_position) {
             Some(img) => img,
             None => {
                 return Err(RendererError::RenderFailed(
@@ -330,6 +339,12 @@ impl RsvpRenderer for KittyGraphicsRenderer {
                 ))
             }
         };
+
+        // Calculate Y position: center the text vertically at reading_zone_center_y
+        // The text is drawn at y=0 in the image, so we position the image so the text
+        // middle aligns with reading_zone_center_y
+        let text_height = image.height();
+        let pos_y = reading_zone_center_y.saturating_sub(text_height / 2);
 
         // Encode to base64
         let base64_data = self.encode_image_base64(&image);
@@ -345,7 +360,7 @@ impl RsvpRenderer for KittyGraphicsRenderer {
             height,
             &base64_data,
             start_x as u32,
-            vertical_center,
+            pos_y,
         )
         .map_err(|e| RendererError::RenderFailed(e.to_string()))?;
 
