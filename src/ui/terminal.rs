@@ -3,6 +3,7 @@ use crate::engine::wpm_to_milliseconds;
 use crate::rendering::kitty::KittyGraphicsRenderer;
 use crate::rendering::renderer::RsvpRenderer;
 use crate::ui::reader::view::render_command_deck;
+use crate::ui::theme::Theme;
 
 use crossterm::{
     event::{self, Event, KeyCode},
@@ -12,6 +13,8 @@ use crossterm::{
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout},
+    style::Style,
+    widgets::{Block, Clear},
     Terminal,
 };
 use std::io::{self, Stdout};
@@ -47,16 +50,7 @@ impl TuiManager {
 
             // Calculate font size for 5-line height (using cell height * 5)
             renderer.calculate_font_size_from_cell_height(dims.cell_size.1);
-
-            eprintln!(
-                "DEBUG: Set reading zone center to ({}, {}), font_size={}",
-                center_x,
-                center_y,
-                renderer.font_size()
-            );
         }
-
-        eprintln!("KittyGraphicsRenderer initialized with viewport");
 
         Ok(TuiManager {
             terminal,
@@ -221,7 +215,7 @@ impl TuiManager {
 
             // Render word via Kitty Graphics Protocol
             if let Err(e) = RsvpRenderer::render_word(&mut self.kitty_renderer, word, anchor_pos) {
-                eprintln!("Kitty render failed: {}", e);
+                eprintln!("Render error: {}", e);
             }
         }
 
@@ -235,9 +229,14 @@ impl TuiManager {
                 .constraints([Constraint::Percentage(85), Constraint::Percentage(15)])
                 .split(area);
 
+            let reading_area = main_layout[0];
             let command_area = main_layout[1];
 
-            // Reading zone is empty - word rendered via Kitty Graphics Protocol
+            // Fill reading zone with theme background color
+            let theme = Theme::midnight();
+            let reading_bg = Block::default()
+                .style(Style::default().bg(theme.background));
+            frame.render_widget(reading_bg, reading_area);
 
             // Command deck area
             render_command_deck(frame, command_area, app.mode(), &self.command_buffer);
