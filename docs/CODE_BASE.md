@@ -1,6 +1,6 @@
 # Code Base Documentation
 
-**Last Updated:** 2026-01-30 (input module reviewed)
+**Last Updated:** 2026-01-30 (reading module reviewed, math bug fixed)
 
 ## Overview
 
@@ -66,7 +66,7 @@ src/
 | audio/ | ✅ Stub | Planned feature (PRD Section 5) - 2 lines |
 | engine/ | ✅ Reviewed | Simplified config.rs: 260→49 lines, error.rs: 87→27 lines |
 | input/ | ✅ Reviewed | PDF/EPUB/Clipboard loading (352 lines) |
-| reading/ | ⏳ Pending | 5 files |
+| reading/ | ✅ Reviewed | Fixed math bug, removed 67 lines (620→553) |
 | rendering/ | ⏳ Pending | 6 files (kitty.rs already reviewed) |
 | storage/ | ✅ Stub | Planned feature (PRD Section 6.1) - 2 lines |
 | ui/ | ⏳ Pending | 7 files |
@@ -268,6 +268,225 @@ fn extract_plain_text(html: &str) -> String {
 **Redundancy:** None
 **Tests:** 3 tests pass (load success, source field, punctuation preservation)
 **Used by:** app/app.rs `handle_load_clipboard()` (lines 110-113)
+
+---
+
+#### `src/reading/mod.rs` (10 lines)
+**Purpose:** Reading module exports
+**Status:** ✅ KEEP - Essential
+
+**What it is:**
+- Module declarations for ovp, state, timing, token
+- Public exports for reading functionality
+- `calculate_anchor_position`, `ReadingState`, `detect_sentence_boundary`, `tokenize_text`, `wpm_to_milliseconds`, `Token`
+
+**PRD Alignment:**
+- ✅ Section 3.1 - OVP anchor calculation
+- ✅ Section 3.2 - Weighted delay algorithm
+- ✅ Section 3.3 - Sentence-aware navigation
+
+**Dependencies:** std (no external dependencies)
+**Complexity:** Minimal - module organization
+**Redundancy:** None
+
+---
+
+#### `src/reading/token.rs` (10 lines)
+**Purpose:** Token struct for RSVP reading
+**Status:** ✅ KEEP - Essential
+
+**What it is:**
+- `Token` struct with `text` (String), `punctuation` (Vec<char>), `is_sentence_start` (bool)
+- Punctuation stores trailing characters (e.g., ['?', '!'] for "word?!")
+- `is_sentence_start` marks if token begins new sentence per PRD Section 3.3
+
+**PRD Alignment:**
+- ✅ Section 3.2 - Punctuation stacking with max rule
+- ✅ Section 3.3 - Sentence boundary detection
+
+**Dependencies:** std
+**Complexity:** Minimal - simple data structure
+**Redundancy:** None
+
+---
+
+#### `src/reading/ovp.rs` (99 lines)
+**Purpose:** OVP (Optimal Viewing Position) anchor calculation
+**Status:** ✅ KEEP - Essential
+
+**What it does:**
+- `calculate_anchor_position(word)` returns 0-based index of anchor character
+- Implements PRD Section 3.1 formula:
+  - 1 char → position 0 (1st letter)
+  - 2-5 chars → position 1 (2nd letter)
+  - 6-9 chars → position 2 (3rd letter)
+  - 10-13 chars → position 3 (4th letter)
+  - 14+ chars → position 3 (capped at 4th for MVP)
+
+**OVP Calculation Example:**
+```rust
+match word_length {
+    0..=1 => 0,      // "I" → position 0
+    2..=5 => 1,      // "Hello" → position 1 (e is anchor)
+    6..=9 => 2,      // "reading" → position 2 (a is anchor)
+    _ => 3,           // "extraordinary" → position 3 (t is anchor, capped)
+}
+```
+
+**PRD Alignment:**
+- ✅ Section 3.1 - Fixed-Axis OVP Anchoring formula implemented exactly
+- ✅ Section 4.3 - Pixel-perfect positioning (used by rendering layer)
+
+**Dependencies:** std
+**Complexity:** Low - straightforward match expression
+**Redundancy:** None
+**Tests:** 11 tests pass (all word lengths, boundary cases)
+**Used by:** ui/terminal.rs:240 (calculate anchor for rendering)
+
+---
+
+#### `src/reading/state.rs` (325 lines, math bug fixed)
+**Purpose:** Reading state management and token duration calculation
+**Status:** ✅ KEEP - Essential, bug fixed
+
+**What it does:**
+- `ReadingState` struct with tokens Vec, current_index, wpm, TimingConfig
+- `new()` and `new_with_default_config()` constructors
+- `current_token()` - Get current token from reading state
+- `current_token_duration()` - **Calculate delay using PRD Section 3.2 formula**
+- `get_wpm()` - Return current WPM setting
+- `adjust_wpm()` - Increase/decrease WPM with clamping to [50, 1000]
+- `advance()` - Move to next word
+- `find_next_sentence_start()` / `jump_to_next_sentence()` - Forward navigation
+- `find_previous_sentence_start()` / `jump_to_previous_sentence()` - Backward navigation
+
+**Token Duration Calculation (FIXED - lines 51-85):**
+```rust
+// PRD Section 3.2: Weighted Delay Algorithm
+let base_delay_ms = wpm_to_milliseconds(self.wpm);
+
+// Punctuation multipliers: max(.),?,!) = 3.0x, max(,) = 1.5x, max(\n) = 4.0x
+let punctuation_multiplier = max(punctuation_multipliers);
+
+// Word length penalty: >10 chars = 1.15x (configurable)
+let length_penalty = if word_length > 10 { 1.15 } else { 1.0 };
+
+// PRD: Apply MAX of punctuation and length penalty, NOT multiply them
+// WRONG (old): delay = base × punctuation × length
+// CORRECT (new): delay = base × max(punctuation, length)
+let combined_multiplier = punctuation_multiplier.max(length_penalty);
+(base_delay_ms as f64 * combined_multiplier).round() as u64
+```
+
+**Bug Fix Applied:**
+- **Old behavior:** `200 × 3.0 × 1.15 = 690ms` (over 0.5s for one word)
+- **New behavior:** `200 × max(3.0, 1.15) = 200 × 3.0 = 600ms`
+- **Rationale:** PRD Section 3.2 says "apply maximum multiplier only", not multiply all together
+- **Impact:** Long words with punctuation now display faster (600ms instead of 690ms)
+
+**Example Calculations at 300 WPM (200ms base):**
+| Word | Punctuation | Length >10? | Multipliers | Delay |
+|-------|--------------|---------------|--------------|--------|
+| "hello" | none | No | max(1.0, 1.0) = 1.0x | 200ms |
+| "world." | period | No | max(3.0, 1.0) = 3.0x | 600ms |
+| "extraordinarily" | none | Yes | max(1.0, 1.15) = 1.15x | 230ms |
+| "extraordinarily." | period | Yes | max(3.0, 1.15) = 3.0x | 600ms |
+
+**PRD Alignment:**
+- ✅ Section 3.2 - Weighted Delay Algorithm (multipliers, penalties, rounding)
+- ✅ Section 3.3 - Sentence-Aware Navigation (j/k land at sentence starts)
+
+**Dependencies:** engine::config::TimingConfig, engine::Token
+**Complexity:** Medium - state management with timing calculations
+**Redundancy:** Fixed - removed duplicate delay calculation
+**Tests:** 13 tests pass (navigation, duration calculation, WPM adjustment)
+
+---
+
+#### `src/reading/timing.rs` (553 lines, reduced from 620 by removing 67 lines)
+**Purpose:** Timing calculations and text tokenization
+**Status:** ✅ REVIEWED & SIMPLIFIED
+
+**What it does:**
+- `wpm_to_milliseconds(wpm)` - Convert WPM to base delay in ms
+- `tokenize_text(text)` - Tokenize text into Token Vec with sentence boundaries
+- `extract_punctuation(word)` - Extract trailing punctuation characters
+- `is_sentence_terminator(c)` - Check if char is .?!
+- `is_comma(c)` - Check if char is comma
+- `is_abbreviation(word)` - Check against abbreviation list (Dr., Mr., etc.)
+- `is_decimal_number(word)` - Check if word is decimal (3.14, 2.5)
+
+**Removed (67 lines of dead code):**
+- `calculate_word_delay()` function - unused public function (only used in tests)
+- `get_punctuation_multiplier()` helper - only for calculate_word_delay()
+- `get_max_punctuation_multiplier()` helper - only for calculate_word_delay()
+- `get_word_length_penalty()` helper - only for calculate_word_delay()
+- 5 tests for calculate_word_delay()
+- 6 tests for helper functions
+- **Rationale:** state.rs has working `calculate_token_duration()` method; duplication removed
+
+**WPM to Milliseconds Formula (timing.rs:70-72):**
+```rust
+pub fn wpm_to_milliseconds(wpm: u32) -> u64 {
+    (60_000.0 / wpm.max(1) as f64).round() as u64
+}
+```
+- **PRD formula:** `base_delay_ms = 60000 / wpm`
+- **Examples:**
+  - 300 WPM → 60000/300 = **200ms** (exact)
+  - 350 WPM → 60000/350 = 171.43 → **171ms** (rounded)
+  - 600 WPM → 60000/600 = **100ms** (exact)
+  - 165 WPM → 60000/165 = 363.64 → **364ms** (rounded)
+
+**Punctuation Multipliers (PRD Section 3.2):**
+| Punctuation | Multiplier | Note |
+|-------------|-------------|-------|
+| `.` | 3.0x | Full stop |
+| `,` | 1.5x | Brief pause |
+| `?` | 3.0x | Question |
+| `!` | 3.0x | Exclamation |
+| `\n` | 4.0x | Paragraph break |
+
+**Sentence Boundary Detection (timing.rs:101-143):**
+```rust
+pub fn detect_sentence_boundary(prev_token: Option<&Token>, current_word: &str) -> bool {
+    if prev_token.is_none() {
+        return true; // First token always starts sentence
+    }
+
+    let has_terminator = prev.punctuation.contains('.' | '?' | '!');
+
+    if !has_terminator {
+        return false; // No terminator = same sentence
+    }
+
+    // Don't break at abbreviations (Dr., Mr., Mrs., etc.)
+    if is_abbreviation(full_prev_word) {
+        return false;
+    }
+
+    // Don't break at decimal numbers (3.14, 2.5)
+    if is_decimal_number(full_prev_word) {
+        return false;
+    }
+
+    // New sentence = terminator + next word starts with capital letter
+    current_word.chars().next().map(|c| c.is_ascii_uppercase()).unwrap_or(false)
+}
+```
+
+**PRD Alignment:**
+- ✅ Section 3.2 - Punctuation multipliers, word length penalty, rounding
+- ✅ Section 3.3 - Sentence boundary rules (abbreviations, decimals, capital letters)
+
+**Dependencies:** std
+**Complexity:** Medium - text parsing and rule-based detection
+**Redundancy:** Fixed - removed 67 lines of unused dead code
+**Tests:** 33 tests pass (WPM precision, tokenization, sentence boundaries, abbreviations, decimals)
+**Used by:**
+- All input loaders (pdf, epub, clipboard) - tokenize_text()
+- app/app.rs - tokenize_text() for direct text input
+- ui/terminal.rs - wpm_to_milliseconds() for timeout
 
 ---
 

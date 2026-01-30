@@ -69,7 +69,7 @@ impl ReadingState {
                 .fold(1.0, f64::max)
         };
 
-        // PRD Section 3.2: Word Length Penalty
+        // PRD Section 3.2: Word Length Penalty - take MAX with punctuation, NOT multiply
         let word_length = token.text.chars().count();
         let length_penalty = if word_length > self.config.long_word_threshold {
             self.config.long_word_penalty
@@ -77,7 +77,12 @@ impl ReadingState {
             1.0
         };
 
-        (base_delay_ms as f64 * punctuation_multiplier * length_penalty) as u64
+        // PRD: Apply MAX of punctuation and length penalty, NOT multiply them
+        // Example: 300 WPM = 200ms, period (3.0x), length >10 (1.15x)
+        // Wrong: 200 * 3.0 * 1.15 = 690ms
+        // Correct: 200 * max(3.0, 1.15) = 200 * 3.0 = 600ms
+        let combined_multiplier = punctuation_multiplier.max(length_penalty);
+        (base_delay_ms as f64 * combined_multiplier).round() as u64
     }
 
     pub fn advance(&mut self) {
@@ -239,15 +244,16 @@ mod tests {
 
     #[test]
     fn test_current_token_duration_long_word() {
-        // Create a token with a long word (> 10 chars)
+        // Create a token with a long word (> 10 chars), no punctuation
         let tokens = vec![Token {
             text: "extraordinarily".to_string(),
             punctuation: vec![],
             is_sentence_start: true,
         }];
         let state = ReadingState::new_with_default_config(tokens, 300);
-        // 300 WPM = 200ms per word * 1.15 (long word penalty) = 229ms (rounded)
-        assert_eq!(state.current_token_duration(), 229);
+        // 300 WPM = 200ms per word * max(1.0, 1.15) = 230ms
+        // PRD: Apply MAX of punctuation (1.0) and length penalty (1.15)
+        assert_eq!(state.current_token_duration(), 230);
     }
 
     #[test]
@@ -258,7 +264,8 @@ mod tests {
             is_sentence_start: true,
         }];
         let state = ReadingState::new_with_default_config(tokens, 300);
-        // 300 WPM = 200ms per word * 3.0 (period multiplier) = 600ms
+        // 300 WPM = 200ms per word * max(3.0, 1.0) = 600ms
+        // PRD: Apply MAX of punctuation (3.0) and length penalty (1.0)
         assert_eq!(state.current_token_duration(), 600);
     }
 
