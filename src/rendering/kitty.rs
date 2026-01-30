@@ -1,22 +1,3 @@
-//! KittyGraphicsRenderer - Pixel-perfect RSVP rendering using Kitty Graphics Protocol
-//!
-//! Implements RsvpRenderer trait for terminals with Kitty Graphics Protocol support
-//! (Konsole 24.12+, Kitty 0.35+). Provides sub-pixel OVP anchoring with pixel-perfect
-//! positioning using font metrics and direct escape sequence implementation.
-//!
-//! ## Protocol Details
-//!
-//! Kitty Graphics Protocol uses APC (Application Program Command) sequences:
-//! - `ESC _ G f=<format>... <data> ESC \` - Transmit image
-//! - `ESC _ G a=T f=<format> s=<width> v=<height> m=<more>... <data> ESC \` - Transmit in chunks
-//! - `ESC _ G a=d d=A` - Delete all graphics on screen
-//!
-//! ## Performance
-//!
-//! Per Epic 1 requirements:
-//! - Target WPM: 1000+ (requires <10ms per frame)
-//! - Rasterization: <3ms (cache hit: <0.5ms, cache miss: <3ms)
-//! - Encoding + transmission: <7ms
 
 use crate::rendering::font::{
     calculate_char_width, calculate_string_width, get_font, get_font_metrics, FontMetrics,

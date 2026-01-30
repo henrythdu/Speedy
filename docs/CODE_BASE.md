@@ -63,12 +63,12 @@ src/
 | main.rs | ✅ Reviewed | Essential - entry point (52 lines) |
 | lib.rs | ✅ Reviewed | Essential - required for integration tests (9 lines) |
 | app/ | ✅ Reviewed | Simplified - removed RenderState, app_tests.rs |
-| audio/ | ⏳ Pending | 1 file |
-| engine/ | ⏳ Pending | 3 files |
+| audio/ | ✅ Stub | Planned feature (PRD Section 5) - 2 lines |
+| engine/ | ✅ Reviewed | Simplified - removed 100+ lines of unused config |
 | input/ | ⏳ Pending | 4 files |
 | reading/ | ⏳ Pending | 5 files |
 | rendering/ | ⏳ Pending | 6 files (kitty.rs already reviewed) |
-| storage/ | ⏳ Pending | 1 file |
+| storage/ | ✅ Stub | Planned feature (PRD Section 6.1) - 2 lines |
 | ui/ | ⏳ Pending | 7 files |
 
 ## Decision Framework
@@ -115,9 +115,33 @@ For each file, we evaluate:
 
 ---
 
-#### `src/app/mod.rs` (8 lines, reduced from 11)
-**Purpose:** Module exports
-**Status:** ✅ KEEP - Essential
+#### `src/engine/config.rs` (49 lines, reduced from 164)
+**Purpose:** Timing configuration only
+**Status:** ✅ REVIEWED & SIMPLIFIED
+
+**What it is:**
+- `TimingConfig` struct with WPM, punctuation multipliers, word length penalty
+- All PRD Section 3.2 values correctly implemented
+- Used by `reading/state.rs` to create ReadingState
+
+**Removed (115 lines of dead code):**
+- `ThemeConfig` - Future theming (not used)
+- `GutterConfig` - Future progress bars (not used)
+- `AudioConfig` - Future audio features (not used)
+- `TactileConfig` - Future tactile controls (not used)
+- `Config` master struct (combined unused configs)
+- All commented out with Phase references
+
+**Remaining PRD Alignment:**
+- ✅ Timing defaults match PRD exactly (WPM 300, multipliers, penalties)
+- ⏳ Other configs are for Phase 2+ - removed and documented in comments
+
+**Dependencies:** std
+**Complexity:** Low - well-structured
+**Redundancy:** Fixed - removed 115 lines of unused future configs
+
+---
+
 
 **What it does:**
 - Exports App, AppEvent, AppMode
@@ -159,9 +183,41 @@ For each file, we evaluate:
 
 ---
 
-#### `src/app/mode.rs` (24 lines)
-**Purpose:** Application mode enum
-**Status:** ✅ KEEP - Essential
+#### `src/audio/mod.rs` (2 lines)
+**Purpose:** Stub for future audio epic (PRD Section 5)
+**Status:** ✅ KEEP - Planned feature
+
+**What it is:**
+- Comment: "Audio module - stub for future epic"
+- Empty module body
+- Declared in lib.rs and main.rs
+
+**PRD Reference:** Section 5 - AUDITORY & KINESTHETIC LAYERS
+- Auditory Metronome (paragraph "thump", speed glide)
+- Tactile Controls (tab-peek, tactical throttle)
+- Audio profiles (Minimal/Subtle/Pronounced)
+
+**Rationale:** Keep as placeholder for Phase 4+ implementation. Will add audio playback when implementing these features.
+
+---
+
+#### `src/storage/mod.rs` (2 lines)
+**Purpose:** Stub for future storage epic (PRD Section 6.1)
+**Status:** ✅ KEEP - Planned feature
+
+**What it is:**
+- Comment: "Storage module - stub for future epic"
+- Empty module body
+- Declared in lib.rs and main.rs
+
+**PRD Reference:** Section 6.1 - Project Structure shows `storage/history.rs`
+- Recent files history
+- Reading position persistence
+
+**Rationale:** Keep as placeholder for future persistence features. Will add history.rs when implementing file history and position saving.
+
+---
+
 
 **What it does:**
 - Defines AppMode enum (Command, Reading, Paused, Peek, Quit)

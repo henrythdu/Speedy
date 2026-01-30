@@ -1,6 +1,5 @@
 // Configuration for Speedy engine and UI components
 // All values derived from PRD specifications with defaults as documented
-
 use std::ops::RangeInclusive;
 
 /// Timing configuration per PRD Section 3.2
@@ -25,6 +24,103 @@ pub struct TimingConfig {
     pub exclamation_multiplier: f64, // default 3.0x
     pub newline_multiplier: f64,     // default 4.0x
 }
+
+impl Default for TimingConfig {
+    fn default() -> Self {
+        Self {
+            wpm: 300,
+            wpm_range: 50..=1000,
+            long_word_threshold: 10,
+            long_word_penalty: 1.15,
+            period_multiplier: 3.0,
+            comma_multiplier: 1.5,
+            question_multiplier: 3.0,
+            exclamation_multiplier: 3.0,
+            newline_multiplier: 4.0,
+        }
+    }
+}
+
+// Future config structs (for Phase 2+ implementation)
+// Uncomment when implementing:
+// - Theme customization (PRD Section 4.1)
+// - Progress bars with ghost words (PRD Section 4.4)
+// - Audio metronome (PRD Section 5.1)
+// - Tactile controls (PRD Section 5.2)
+//
+// #[derive(Debug, Clone, PartialEq)]
+// pub struct ThemeConfig {
+//     pub background_color: String,
+//     pub text_color: String,
+//     pub anchor_color: String,
+// }
+//
+// #[derive(Debug, Clone, PartialEq)]
+// pub struct GutterConfig {
+//     pub words_before: usize,
+//     pub words_after: usize,
+//     pub reading_opacity_percent: u8,
+//     pub paused_opacity_percent: u8,
+//     pub opacity_levels: Vec<u8>,
+// }
+//
+// #[derive(Debug, Clone, PartialEq)]
+// pub struct AudioConfig {
+//     pub thump_frequency_hz: u16,
+//     pub thump_frequency_range: RangeInclusive<u16>,
+//     pub speed_glide_range_hz: RangeInclusive<u16>,
+// }
+//
+// #[derive(Debug, Clone, PartialEq)]
+// pub struct TactileConfig {
+//     pub throttle_percent: u8,
+//     pub ramp_up_seconds: u8,
+//     pub ramp_start_percent: u8,
+//     pub ramp_end_percent: u8,
+// }
+//
+// impl Default for ThemeConfig {
+//     fn default() -> Self {
+//         Self {
+//             background_color: "#1A1B26".to_string(),
+//             text_color: "#A9B1D6".to_string(),
+//             anchor_color: "#F7768E".to_string(),
+//         }
+//     }
+// }
+//
+// impl Default for GutterConfig {
+//     fn default() -> Self {
+//         Self {
+//             words_before: 3,
+//             words_after: 3,
+//             reading_opacity_percent: 20,
+//             paused_opacity_percent: 100,
+//             opacity_levels: vec![100, 80, 60, 40],
+//         }
+//     }
+// }
+//
+// impl Default for AudioConfig {
+//     fn default() -> Self {
+//         Self {
+//             thump_frequency_hz: 100,
+//             thump_frequency_range: 80..=120,
+//             speed_glide_range_hz: 440..=880,
+//         }
+//     }
+// }
+//
+// impl Default for TactileConfig {
+//     fn default() -> Self {
+//         Self {
+//             throttle_percent: 50,
+//             ramp_up_seconds: 5,
+//             ramp_start_percent: 70,
+//             ramp_end_percent: 100,
+//         }
+//     }
+// }
 
 impl Default for TimingConfig {
     fn default() -> Self {
