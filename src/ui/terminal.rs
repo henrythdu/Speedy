@@ -206,19 +206,8 @@ impl TuiManager {
     pub fn render_frame(&mut self, app: &App) -> io::Result<()> {
         let render_state = app.get_render_state();
 
-        // Render word via Kitty Graphics Protocol using composite rendering
-        // Per Epic 2 composite rendering implementation: Single-image-per-frame approach
-        // This uses render_frame() which orchestrates: create_canvas → composite_word → transmit
-        if let Some(word) = &render_state.current_word {
-            let anchor_pos = crate::reading::calculate_anchor_position(word);
-
-            // Use the new render_frame orchestrator (handles canvas creation, compositing, transmission)
-            if let Err(e) = self.kitty_renderer.render_frame(word, anchor_pos) {
-                eprintln!("Render error: {}", e);
-            }
-        }
-
-        // Always render via Ratatui for UI (commands, etc.)
+        // Step 1: Render via Ratatui FIRST to establish background (reading zone + command deck)
+        // This draws the persistent UI that never changes
         self.terminal.draw(|frame| {
             let area = frame.area();
 
@@ -236,9 +225,28 @@ impl TuiManager {
             let reading_bg = Block::default().style(Style::default().bg(theme.background));
             frame.render_widget(reading_bg, reading_area);
 
-            // Command deck area
+            // Command deck area - this NEVER goes away
             render_command_deck(frame, command_area, app.mode(), &self.command_buffer);
         })?;
+
+        // Step 2: Clear previous word from Kitty Graphics Protocol
+        // This must happen BEFORE rendering the new word to prevent stacking
+        if let Err(e) = RsvpRenderer::clear(&mut self.kitty_renderer) {
+            eprintln!("Warning: Failed to clear previous word: {}", e);
+        }
+
+        // Step 3: Render word via Kitty Graphics Protocol ON TOP of Ratatui background
+        // Only the word is transmitted (transparent background), not a full canvas
+        // This creates a smooth RSVP experience where only the word changes at WPM rate
+        if let Some(word) = &render_state.current_word {
+            let anchor_pos = crate::reading::calculate_anchor_position(word);
+
+            // Use render_word which only transmits the word image (not full canvas)
+            // The word has transparent background so Ratatui background shows through
+            if let Err(e) = RsvpRenderer::render_word(&mut self.kitty_renderer, word, anchor_pos) {
+                eprintln!("Render error: {}", e);
+            }
+        }
 
         Ok(())
     }

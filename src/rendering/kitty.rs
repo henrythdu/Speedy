@@ -341,14 +341,16 @@ impl KittyGraphicsRenderer {
     ///
     /// Per Design Doc v2.0 Section 6.2: Single-image-per-frame approach.
     /// This method:
-    /// 1. Creates a ReadingCanvas covering the reading zone
-    /// 2. Composites the word onto the canvas with OVP anchoring
-    /// 3. Transmits the entire canvas as a single image via KGP
+    /// 1. Clears previous frame (deletes old KGP image)
+    /// 2. Creates a ReadingCanvas covering the reading zone
+    /// 3. Composites the word onto the canvas with OVP anchoring
+    /// 4. Transmits the entire canvas as a single image via KGP
     ///
     /// **Advantages:**
     /// - No flickering (single image transmission)
     /// - No Z-fighting (all elements composited in CPU first)
     /// - Clean transitions (background + word in one buffer)
+    /// - No ghosting (previous frame always cleared first)
     ///
     /// Returns Ok(()) on success, Err on failure
     pub fn render_frame(
@@ -356,7 +358,12 @@ impl KittyGraphicsRenderer {
         word: &str,
         anchor_position: usize,
     ) -> Result<(), RendererError> {
-        // Step 1: Validate inputs
+        // Step 1: Clear previous frame
+        if let Err(e) = self.clear() {
+            eprintln!("Warning: Failed to clear previous frame: {}", e);
+        }
+
+        // Step 2: Validate inputs
         if word.is_empty() {
             return Ok(()); // Nothing to render
         }
@@ -369,7 +376,7 @@ impl KittyGraphicsRenderer {
             )));
         }
 
-        // Step 2: Create canvas
+        // Step 3: Create canvas
         let mut canvas = match self.create_canvas() {
             Some(c) => c,
             None => {
@@ -379,7 +386,7 @@ impl KittyGraphicsRenderer {
             }
         };
 
-        // Step 3: Composite word onto canvas
+        // Step 4: Composite word onto canvas
         let composite_success = self.composite_word(&mut canvas, word, anchor_position);
         if !composite_success {
             return Err(RendererError::RenderFailed(
@@ -387,12 +394,12 @@ impl KittyGraphicsRenderer {
             ));
         }
 
-        // Step 4: Encode canvas buffer
+        // Step 5: Encode canvas buffer
         let buffer = canvas.buffer();
         let base64_data = self.encode_image_base64(buffer);
         let (width, height) = (buffer.width(), buffer.height());
 
-        // Step 5: Transmit via Kitty Graphics Protocol
+        // Step 6: Transmit via Kitty Graphics Protocol
         // Position at top-left (0, 0) - canvas covers the reading zone
         self.transmit_graphics(
             self.current_image_id,
@@ -404,7 +411,7 @@ impl KittyGraphicsRenderer {
         )
         .map_err(|e| RendererError::RenderFailed(format!("Transmission failed: {}", e)))?;
 
-        // Step 6: Increment image ID for next frame
+        // Step 7: Increment image ID for next frame
         self.current_image_id += 1;
 
         Ok(())
@@ -651,10 +658,19 @@ impl RsvpRenderer for KittyGraphicsRenderer {
         };
 
         // Calculate Y position: center the text vertically at reading_zone_center_y
-        // The text is drawn at y=0 in the image, so we position the image so the text
-        // middle aligns with reading_zone_center_y
-        let text_height = image.height();
-        let pos_y = reading_zone_center_y.saturating_sub(text_height / 2);
+        // The text is drawn at y=0 in the image (baseline), so we position it so
+        // the text center aligns with reading_zone_center_y
+        // FIX: Use font metrics for accurate vertical centering
+        let metrics = self.font_metrics.as_ref().unwrap();
+        let text_ascent = metrics.ascent;
+        let text_descent = metrics.descent;
+        let text_height = text_ascent + text_descent.abs();
+
+        // Position so that the visual center of text aligns with reading zone center
+        // Baseline should be at: center_y - (ascent - descent)/2 + descent
+        let pos_y = reading_zone_center_y
+            .saturating_sub((text_height / 2.0) as u32)
+            .saturating_sub(text_descent.abs() as u32);
 
         // Encode to base64
         let base64_data = self.encode_image_base64(&image);
