@@ -1,6 +1,6 @@
 # Speedy Architecture Document
 
-**Last Updated:** 2026-01-29 (Epic 2: Codebase Reorganization - Cleanup duplicate tests complete)
+**Last Updated:** 2026-01-29 (Epic 2: Image-Based Word Rendering - Text rasterization & KGP transmission complete)
 **Purpose:** Document actual codebase structure, methods, structs, and architecture to prevent duplication and confusion.
 
 ## ⚠️ Important Notes
@@ -150,6 +150,41 @@ pub struct CellRenderer {
 - Uses `unicode-segmentation` crate for emoji/CJK width calculation
 - NO dependency on `font.rs` (terminal controls fonts in TUI mode)
 - Implements all `RsvpRenderer` trait methods
+
+### `KittyGraphicsRenderer` (`src/rendering/kitty.rs:31`)
+Pixel-perfect RSVP renderer using Kitty Graphics Protocol with sub-pixel OVP anchoring.
+```rust
+pub struct KittyGraphicsRenderer {
+    viewport: Viewport,
+    font: Option<FontRef<'static>>,
+    font_size: f32,
+    font_metrics: Option<FontMetrics>,
+    current_image_id: u32,
+    reading_zone_center: (u32, u32),
+}
+```
+
+**Public API:**
+- `new() -> Self` - Create new KittyGraphicsRenderer instance
+- `set_reading_zone_center(x, y)` - Set center position for OVP anchoring
+- `calculate_font_size_from_cell_height(cell_height_px)` - Calculate font size for 5-line height
+- `get_reading_zone_height() -> Option<u32>` - Get reading zone height (85% of terminal)
+- `calculate_vertical_center() -> Option<u32>` - Calculate Y position at 42% of reading zone
+- `get_cell_height() -> Option<f32>` - Get cell height in pixels from viewport
+
+**Private Methods:**
+- `calculate_start_x(word, anchor) -> f32` - Calculate sub-pixel OVP X position
+- `rasterize_word(word) -> Option<ImageBuffer>` - Render word to RGBA buffer using ab_glyph
+- `transmit_graphics(id, w, h, data, x, y) -> io::Result<()>` - Send image via KGP
+- `delete_image(id) -> io::Result<()>` - Delete specific KGP image
+- `delete_all_graphics() -> io::Result<()>` - Clear all KGP images on exit
+
+**Key Behaviors:**
+- Uses embedded JetBrains Mono font via ab_glyph for text rasterization
+- Creates RGBA buffer with theme background (#1A1B26) and anchor color (#F7768E)
+- Vertical centering at 42% of reading zone height (per PRD Section 4.3)
+- Sub-pixel OVP anchoring via `calculate_start_x()` using font metrics
+- Implements RsvpRenderer trait for pluggable backend architecture
 
 ### `Viewport` (`src/rendering/viewport.rs:38`)
 Viewport coordinate management for graphics overlay pattern.
@@ -407,11 +442,19 @@ The project follows **pure core + thin IO adapter** pattern:
 - Application layer refactoring (app.rs split into event.rs, render_state.rs)
 - UI layer refactoring (reader/ subdirectory with component.rs and view.rs)
 
-### 🚧 In Progress (Epic 1: TUI Foundation - Tasks 1-5 Complete, Task 6: KittyGraphicsRenderer remaining)
-- Ghost words feature
-- Reading progress caching
-- Enhanced progress bar
-- Rapid navigation enhancements
+### 🚧 In Progress (Epic 2: Image-Based Word Rendering)
+- ✅ Task 1: Konsole Capability Validation (OPEN)
+- ✅ Task 2: ab_glyph Word Rasterization (COMPLETE)
+- ✅ Task 3: Kitty Protocol Image Display (COMPLETE)
+- ⏳ Task 4: Word-to-Word Transition (pending integration)
+- ⏳ Task 5: Human Testing & Performance Baseline (pending)
+
+**Epic 2 Features Implemented:**
+- Text rasterization using ab_glyph + imageproc
+- Pixel-perfect RGBA buffer creation with theme colors
+- Sub-pixel OVP anchoring via `calculate_start_x()`
+- Vertical centering at 42% of reading zone
+- Kitty Graphics Protocol transmission with position coordinates
 
 ---
 

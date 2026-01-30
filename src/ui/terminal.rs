@@ -1,9 +1,9 @@
 use crate::app::{mode::AppMode, App};
 use crate::engine::wpm_to_milliseconds;
-use crate::ui::reader::view::{
-    render_command_deck, render_context_left, render_context_right, render_gutter_placeholder,
-    render_placeholder, render_progress_bar, render_word_display,
-};
+use crate::rendering::kitty::KittyGraphicsRenderer;
+use crate::rendering::renderer::RsvpRenderer;
+use crate::ui::reader::view::render_command_deck;
+
 use crossterm::{
     event::{self, Event, KeyCode},
     execute,
@@ -20,6 +20,7 @@ use std::time::{Duration, Instant};
 pub struct TuiManager {
     terminal: Terminal<CrosstermBackend<Stdout>>,
     command_buffer: String,
+    kitty_renderer: KittyGraphicsRenderer,
 }
 
 impl TuiManager {
@@ -30,7 +31,38 @@ impl TuiManager {
         let backend = CrosstermBackend::new(io::stdout());
         let terminal = Terminal::new(backend)?;
 
-        Ok(TuiManager { terminal, command_buffer: String::new() })
+        // Initialize Kitty Graphics renderer (always required - no fallback)
+        let mut renderer = KittyGraphicsRenderer::new();
+        <KittyGraphicsRenderer as crate::rendering::renderer::RsvpRenderer>::initialize(
+            &mut renderer,
+        )
+        .expect("Failed to initialize KittyGraphicsRenderer");
+
+        // Query terminal dimensions and set reading zone center
+        let _ = renderer.viewport().query_dimensions();
+        if let Some(dims) = renderer.viewport().get_dimensions() {
+            let center_x = dims.pixel_size.0 / 2;
+            let center_y = (dims.pixel_size.1 as f32 * 0.42) as u32; // 42% of screen height per PRD
+            renderer.set_reading_zone_center(center_x, center_y);
+
+            // Calculate font size for 5-line height (using cell height * 5)
+            renderer.calculate_font_size_from_cell_height(dims.cell_size.1);
+
+            eprintln!(
+                "DEBUG: Set reading zone center to ({}, {}), font_size={}",
+                center_x,
+                center_y,
+                renderer.font_size()
+            );
+        }
+
+        eprintln!("KittyGraphicsRenderer initialized with viewport");
+
+        Ok(TuiManager {
+            terminal,
+            command_buffer: String::new(),
+            kitty_renderer: renderer,
+        })
     }
 
     pub fn run_event_loop(&mut self, app: &mut App) -> io::Result<AppMode> {
@@ -54,11 +86,13 @@ impl TuiManager {
                 Ok(true) => {
                     if let Event::Key(key) = event::read()? {
                         // Handle Ctrl+C to quit
-                        if key.code == KeyCode::Char('c') && key.modifiers.contains(event::KeyModifiers::CONTROL) {
+                        if key.code == KeyCode::Char('c')
+                            && key.modifiers.contains(event::KeyModifiers::CONTROL)
+                        {
                             app.set_mode(AppMode::Quit);
                             return Ok(AppMode::Quit);
                         }
-                        
+
                         match key.code {
                             KeyCode::Char(c) => {
                                 if app.mode() == AppMode::Command {
@@ -70,11 +104,12 @@ impl TuiManager {
                                 }
                             }
                             KeyCode::Enter => {
-                                if app.mode() == AppMode::Command && !self.command_buffer.is_empty() {
+                                if app.mode() == AppMode::Command && !self.command_buffer.is_empty()
+                                {
                                     // Execute the command
                                     let command = self.command_buffer.clone();
                                     self.command_buffer.clear();
-                                    
+
                                     // Parse and execute
                                     use crate::ui::command::{parse_command, Command};
                                     match parse_command(&command) {
@@ -83,7 +118,9 @@ impl TuiManager {
                                             use crate::input::pdf;
                                             match pdf::load(&path) {
                                                 Ok(doc) => {
-                                                    let text: String = doc.tokens.iter()
+                                                    let text: String = doc
+                                                        .tokens
+                                                        .iter()
                                                         .map(|t| {
                                                             let mut s = t.text.clone();
                                                             for p in &t.punctuation {
@@ -105,7 +142,9 @@ impl TuiManager {
                                             use crate::input::clipboard;
                                             match clipboard::load() {
                                                 Ok(doc) => {
-                                                    let text: String = doc.tokens.iter()
+                                                    let text: String = doc
+                                                        .tokens
+                                                        .iter()
                                                         .map(|t| {
                                                             let mut s = t.text.clone();
                                                             for p in &t.punctuation {
@@ -173,6 +212,20 @@ impl TuiManager {
     pub fn render_frame(&mut self, app: &App) -> io::Result<()> {
         let render_state = app.get_render_state();
 
+        // Render word via Kitty Graphics Protocol (always - no fallback)
+        if let Some(word) = &render_state.current_word {
+            let anchor_pos = crate::reading::calculate_anchor_position(word);
+
+            // Clear previous graphics
+            let _ = RsvpRenderer::clear(&mut self.kitty_renderer);
+
+            // Render word via Kitty Graphics Protocol
+            if let Err(e) = RsvpRenderer::render_word(&mut self.kitty_renderer, word, anchor_pos) {
+                eprintln!("Kitty render failed: {}", e);
+            }
+        }
+
+        // Always render via Ratatui for UI (commands, etc.)
         self.terminal.draw(|frame| {
             let area = frame.area();
 
@@ -182,44 +235,9 @@ impl TuiManager {
                 .constraints([Constraint::Percentage(85), Constraint::Percentage(15)])
                 .split(area);
 
-            let reading_area = main_layout[0];
             let command_area = main_layout[1];
 
-            // Reading zone: Left context | Center word | Right context | Gutter
-            let reading_layout = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([
-                    Constraint::Percentage(35),  // Left context
-                    Constraint::Percentage(30),  // Center word
-                    Constraint::Percentage(32),  // Right context
-                    Constraint::Percentage(3),   // Gutter
-                ])
-                .split(reading_area);
-
-            // Render left context
-            let left_context =
-                render_context_left(&render_state.tokens, render_state.current_index, 3);
-            frame.render_widget(left_context, reading_layout[0]);
-
-            // Render center word with OVP anchoring
-            if let Some(word) = &render_state.current_word {
-                let anchor_pos = crate::reading::calculate_anchor_position(word);
-                let word_display = render_word_display(word, anchor_pos);
-                frame.render_widget(word_display, reading_layout[1]);
-            } else {
-                // Show placeholder when no content loaded
-                let placeholder = render_placeholder();
-                frame.render_widget(placeholder, reading_layout[1]);
-            }
-
-            // Render right context
-            let right_context =
-                render_context_right(&render_state.tokens, render_state.current_index, 3);
-            frame.render_widget(right_context, reading_layout[2]);
-
-            // Render gutter
-            let gutter = render_gutter_placeholder();
-            frame.render_widget(gutter, reading_layout[3]);
+            // Reading zone is empty - word rendered via Kitty Graphics Protocol
 
             // Command deck area
             render_command_deck(frame, command_area, app.mode(), &self.command_buffer);
@@ -231,6 +249,9 @@ impl TuiManager {
 
 impl Drop for TuiManager {
     fn drop(&mut self) {
+        // Cleanup Kitty graphics before exiting
+        let _ = RsvpRenderer::cleanup(&mut self.kitty_renderer);
+
         let _ = disable_raw_mode();
         let _ = execute!(io::stdout(), LeaveAlternateScreen);
     }

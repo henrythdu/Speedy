@@ -120,15 +120,17 @@ pub fn render_gutter_placeholder() -> Paragraph<'static> {
 
 pub fn render_placeholder() -> Paragraph<'static> {
     let text = "Type @filename to load a file\nOr @@ to load from clipboard\n:q to quit";
-    Paragraph::new(text)
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(colors::dimmed()).bg(colors::background()))
+    Paragraph::new(text).alignment(Alignment::Center).style(
+        Style::default()
+            .fg(colors::dimmed())
+            .bg(colors::background()),
+    )
 }
 
+use crate::app::mode::AppMode;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::widgets::{Block, Borders, Clear};
 use ratatui::Frame;
-use crate::app::mode::AppMode;
 
 pub fn render_command_deck(frame: &mut Frame, area: Rect, mode: AppMode, command_buffer: &str) {
     // Clear the command area first
@@ -141,8 +143,8 @@ pub fn render_command_deck(frame: &mut Frame, area: Rect, mode: AppMode, command
         .split(area);
 
     // Left accent bar
-    let accent_bar = Paragraph::new("▌")
-        .style(Style::default().fg(colors::anchor()).bg(colors::surface()));
+    let accent_bar =
+        Paragraph::new("▌").style(Style::default().fg(colors::anchor()).bg(colors::surface()));
     frame.render_widget(accent_bar, layout[0]);
 
     // Command input area
@@ -159,14 +161,15 @@ pub fn render_command_deck(frame: &mut Frame, area: Rect, mode: AppMode, command
     } else {
         format!("{} {}", mode_indicator, command_buffer)
     };
-    
+
     let input_widget = Paragraph::new(input_text)
-        .block(Block::default()
-            .borders(Borders::TOP)
-            .border_style(Style::default().fg(colors::dimmed()))
+        .block(
+            Block::default()
+                .borders(Borders::TOP)
+                .border_style(Style::default().fg(colors::dimmed())),
         )
         .style(Style::default().fg(colors::text()).bg(colors::surface()));
-    
+
     frame.render_widget(input_widget, layout[1]);
 }
 

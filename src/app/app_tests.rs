@@ -1,6 +1,5 @@
 use crate::app::mode::AppMode;
 use crate::app::{App, AppEvent, RenderState};
-use crate::reading::state::ReadingState;
 
 #[test]
 fn test_app_event_enum_exists() {
