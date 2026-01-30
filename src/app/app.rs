@@ -1,6 +1,5 @@
 use crate::app::event::AppEvent;
 use crate::app::mode::AppMode;
-use crate::app::render_state::RenderState;
 use crate::engine::{tokenize_text, ReadingState};
 use crate::input::{clipboard, epub, pdf, LoadError, LoadedDocument};
 use std::path::Path;
@@ -135,16 +134,14 @@ impl App {
         }
     }
 
-    pub fn get_render_state(&self) -> RenderState {
-        match &self.reading_state {
-            Some(state) => RenderState::from_reading_state(
-                self.mode.clone(),
-                state.tokens.clone(),
-                state.current_index,
-                3, // context_window
-            ),
-            None => RenderState::empty(self.mode.clone()),
-        }
+    /// Get current word for rendering
+    ///
+    /// Returns the word at current reading position, or None if no reading state.
+    pub fn get_current_word(&self) -> Option<&str> {
+        self.reading_state
+            .as_ref()
+            .and_then(|s| s.tokens.get(s.current_index))
+            .map(|t| t.text.as_str())
     }
 
     pub fn mode(&self) -> AppMode {
@@ -288,16 +285,13 @@ mod tests {
     }
 
     #[test]
-    fn test_get_render_state_no_reading() {
+    fn test_get_current_word_no_reading() {
         let app = App::new();
-        let render = app.get_render_state();
-
-        assert_eq!(render.mode, AppMode::Command);
-        assert!(render.current_word.is_none());
+        assert!(app.get_current_word().is_none());
     }
 
     #[test]
-    fn test_get_render_state_reading() {
+    fn test_get_current_word_reading() {
         let mut app = App::new();
         let doc = LoadedDocument {
             tokens: vec![Token {
@@ -309,10 +303,7 @@ mod tests {
         };
         app.apply_loaded_document(doc);
 
-        let render = app.get_render_state();
-
-        assert_eq!(render.mode, AppMode::Reading);
-        assert_eq!(render.current_word, Some("hello".to_string()));
+        assert_eq!(app.get_current_word(), Some("hello"));
     }
 
     #[test]

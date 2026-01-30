@@ -204,8 +204,6 @@ impl TuiManager {
     }
 
     pub fn render_frame(&mut self, app: &App) -> io::Result<()> {
-        let render_state = app.get_render_state();
-
         // Step 1: Render via Ratatui FIRST to establish background (reading zone + command deck)
         // This draws the persistent UI that never changes
         self.terminal.draw(|frame| {
@@ -236,12 +234,12 @@ impl TuiManager {
         }
 
         // Step 3: Render word via Kitty Graphics Protocol ON TOP of Ratatui background
-        // Only the word is transmitted (transparent background), not a full canvas
+        // Only word is transmitted (transparent background), not a full canvas
         // This creates a smooth RSVP experience where only the word changes at WPM rate
-        if let Some(word) = &render_state.current_word {
+        if let Some(word) = app.get_current_word() {
             let anchor_pos = crate::reading::calculate_anchor_position(word);
 
-            // Use render_word which only transmits the word image (not full canvas)
+            // Use render_word which only transmits word image (not full canvas)
             // The word has transparent background so Ratatui background shows through
             if let Err(e) = RsvpRenderer::render_word(&mut self.kitty_renderer, word, anchor_pos) {
                 eprintln!("Render error: {}", e);
