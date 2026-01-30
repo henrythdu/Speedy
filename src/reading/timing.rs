@@ -31,13 +31,73 @@ fn is_comma(c: char) -> bool {
     c == ','
 }
 
+fn is_abbreviation(word: &str) -> bool {
+    const ABBREVIATIONS: &[&str] = &[
+        "Dr.", "Mr.", "Mrs.", "Ms.", "St.", "Jr.", "e.g.", "i.e.", "vs.", "etc.",
+    ];
+    ABBREVIATIONS.contains(&word)
+}
+
+fn is_decimal_number(word: &str) -> bool {
+    let parts: Vec<&str> = word.split('.').collect();
+    if parts.len() == 2 && !parts[0].is_empty() && !parts[1].is_empty() {
+        let has_digit_before = parts[0].chars().all(|c| c.is_ascii_digit());
+        let has_digit_after = parts[1].chars().all(|c| c.is_ascii_digit());
+        has_digit_before && has_digit_after
+    } else {
+        false
+    }
+}
+
+fn get_punctuation_multiplier(punctuation: char) -> f64 {
+    match punctuation {
+        '.' => 3.0,
+        ',' => 1.5,
+        '?' => 3.0,
+        '!' => 3.0,
+        '\n' => 4.0,
+        _ => 1.0,
+    }
+}
+
+fn get_max_punctuation_multiplier(punctuation_list: &[char]) -> f64 {
+    punctuation_list
+        .iter()
+        .map(|&p| get_punctuation_multiplier(p))
+        .fold(1.0, f64::max)
+}
+
 pub fn wpm_to_milliseconds(wpm: u32) -> u64 {
     (60_000.0 / wpm.max(1) as f64).round() as u64
+}
+
+fn get_word_length_penalty(word: &str, penalty_multiplier: f64) -> f64 {
+    if word.chars().count() > 10 {
+        penalty_multiplier
+    } else {
+        1.0
+    }
+}
+
+pub fn calculate_word_delay(
+    word: &str,
+    punctuation: &[char],
+    wpm: u32,
+    penalty_multiplier: f64,
+) -> u64 {
+    let base_delay = wpm_to_milliseconds(wpm) as f64;
+    let punctuation_multiplier = get_max_punctuation_multiplier(punctuation);
+    let word_length_penalty = get_word_length_penalty(word, penalty_multiplier);
+    let delay_ms = base_delay * punctuation_multiplier * word_length_penalty;
+    delay_ms.round() as u64
 }
 
 /// Detects if current word starts a new sentence based on previous token.
 /// MVP: Period/question/exclamation followed by capital letter A-Z, or newline.
 /// First token always returns true (PRD Section 3.3 requirement).
+/// Exceptions:
+/// - Abbreviations (Dr., Mr., Mrs., etc.) do NOT end sentences
+/// - Decimal numbers (3.14, 2.5) do NOT end sentences
 pub fn detect_sentence_boundary(prev_token: Option<&Token>, current_word: &str) -> bool {
     if prev_token.is_none() {
         return true;
@@ -56,6 +116,22 @@ pub fn detect_sentence_boundary(prev_token: Option<&Token>, current_word: &str) 
         .any(|&p| p == '.' || p == '?' || p == '!');
 
     if !has_terminator {
+        return false;
+    }
+
+    // Reconstruct full word with punctuation for abbreviation/decimal checking
+    let mut full_prev_word = prev.text.clone();
+    for &p in &prev.punctuation {
+        full_prev_word.push(p);
+    }
+
+    // Don't break sentence if previous word is an abbreviation
+    if is_abbreviation(&full_prev_word) {
+        return false;
+    }
+
+    // Don't break sentence if previous word is a decimal number
+    if is_decimal_number(&full_prev_word) {
         return false;
     }
 
@@ -305,5 +381,239 @@ mod tests {
                 i + 1
             );
         }
+    }
+
+    // Timing Algorithm Tests (PRD Section 3.2, 3.3)
+
+    #[test]
+    fn test_punctuation_multiplier_period() {
+        assert_eq!(get_punctuation_multiplier('.'), 3.0);
+    }
+
+    #[test]
+    fn test_punctuation_multiplier_comma() {
+        assert_eq!(get_punctuation_multiplier(','), 1.5);
+    }
+
+    #[test]
+    fn test_punctuation_multiplier_question() {
+        assert_eq!(get_punctuation_multiplier('?'), 3.0);
+    }
+
+    #[test]
+    fn test_punctuation_multiplier_exclamation() {
+        assert_eq!(get_punctuation_multiplier('!'), 3.0);
+    }
+
+    #[test]
+    fn test_punctuation_multiplier_newline() {
+        assert_eq!(get_punctuation_multiplier('\n'), 4.0);
+    }
+
+    #[test]
+    fn test_punctuation_multiplier_unknown() {
+        assert_eq!(get_punctuation_multiplier('a'), 1.0);
+    }
+
+    #[test]
+    fn test_max_punctuation_multiplier_single() {
+        assert_eq!(get_max_punctuation_multiplier(&['.']), 3.0);
+    }
+
+    #[test]
+    fn test_max_punctuation_multiplier_multiple_same() {
+        assert_eq!(get_max_punctuation_multiplier(&['.', '.']), 3.0);
+    }
+
+    #[test]
+    fn test_max_punctuation_multiplier_multiple_different() {
+        assert_eq!(get_max_punctuation_multiplier(&['?', '!']), 3.0);
+    }
+
+    #[test]
+    fn test_max_punctuation_multiplier_stacking_rule() {
+        // PRD Section 3.2: If word has multiple punctuation types, apply MAXIMUM only
+        assert_eq!(get_max_punctuation_multiplier(&['.', '!']), 3.0);
+    }
+
+    #[test]
+    fn test_word_length_penalty_short_word() {
+        assert_eq!(get_word_length_penalty("hello", 1.15), 1.0);
+    }
+
+    #[test]
+    fn test_word_length_penalty_exactly_ten() {
+        assert_eq!(get_word_length_penalty("tenchars!", 1.15), 1.0);
+    }
+
+    #[test]
+    fn test_word_length_penalty_long_word() {
+        assert_eq!(get_word_length_penalty("extraordinarily", 1.15), 1.15);
+    }
+
+    #[test]
+    fn test_word_length_penalty_custom_multiplier() {
+        assert_eq!(get_word_length_penalty("extraordinarily", 1.2), 1.2);
+    }
+
+    #[test]
+    fn test_calculate_word_delay_basic() {
+        // 300 WPM = 200ms base, no punctuation, short word
+        let delay = calculate_word_delay("hello", &[], 300, 1.15);
+        assert_eq!(delay, 200);
+    }
+
+    #[test]
+    fn test_calculate_word_delay_with_period() {
+        // 300 WPM = 200ms base, period multiplier 3.0
+        let delay = calculate_word_delay("hello", &['.'], 300, 1.15);
+        assert_eq!(delay, 600); // 200 * 3.0
+    }
+
+    #[test]
+    fn test_calculate_word_delay_with_comma() {
+        // 300 WPM = 200ms base, comma multiplier 1.5
+        let delay = calculate_word_delay("hello", &[','], 300, 1.15);
+        assert_eq!(delay, 300); // 200 * 1.5
+    }
+
+    #[test]
+    fn test_calculate_word_delay_long_word() {
+        // 300 WPM = 200ms base, 14 chars = 1.15x penalty
+        let delay = calculate_word_delay("extraordinarily", &[], 300, 1.15);
+        assert_eq!(delay, 230); // 200 * 1.15 = 230
+    }
+
+    #[test]
+    fn test_calculate_word_delay_combined() {
+        // 300 WPM = 200ms base, period 3.0x, 14 chars 1.15x
+        // 200 * 3.0 * 1.15 = 690
+        let delay = calculate_word_delay("extraordinarily", &['.'], 300, 1.15);
+        assert_eq!(delay, 690);
+    }
+
+    #[test]
+    fn test_is_abbreviation_dr() {
+        assert!(is_abbreviation("Dr."));
+    }
+
+    #[test]
+    fn test_is_abbreviation_mr() {
+        assert!(is_abbreviation("Mr."));
+    }
+
+    #[test]
+    fn test_is_abbreviation_mrs() {
+        assert!(is_abbreviation("Mrs."));
+    }
+
+    #[test]
+    fn test_is_abbreviation_ms() {
+        assert!(is_abbreviation("Ms."));
+    }
+
+    #[test]
+    fn test_is_abbreviation_st() {
+        assert!(is_abbreviation("St."));
+    }
+
+    #[test]
+    fn test_is_abbreviation_jr() {
+        assert!(is_abbreviation("Jr."));
+    }
+
+    #[test]
+    fn test_is_abbreviation_eg() {
+        assert!(is_abbreviation("e.g."));
+    }
+
+    #[test]
+    fn test_is_abbreviation_ie() {
+        assert!(is_abbreviation("i.e."));
+    }
+
+    #[test]
+    fn test_is_abbreviation_vs() {
+        assert!(is_abbreviation("vs."));
+    }
+
+    #[test]
+    fn test_is_abbreviation_etc() {
+        assert!(is_abbreviation("etc."));
+    }
+
+    #[test]
+    fn test_is_abbreviation_negative() {
+        assert!(!is_abbreviation("hello."));
+    }
+
+    #[test]
+    fn test_is_decimal_number_simple() {
+        assert!(is_decimal_number("3.14"));
+    }
+
+    #[test]
+    fn test_is_decimal_number_two_point_five() {
+        assert!(is_decimal_number("2.5"));
+    }
+
+    #[test]
+    fn test_is_decimal_number_negative() {
+        assert!(!is_decimal_number("hello."));
+    }
+
+    #[test]
+    fn test_is_decimal_number_no_digits_after() {
+        assert!(!is_decimal_number("3."));
+    }
+
+    #[test]
+    fn test_is_decimal_number_no_digits_before() {
+        assert!(!is_decimal_number(".5"));
+    }
+
+    #[test]
+    fn test_sentence_boundary_abbreviation() {
+        // PRD Section 3.3: Don't break sentences at abbreviations
+        let text = "Dr. Smith went to St. Paul.";
+        let tokens = tokenize_text(text);
+
+        // Expected: [Dr., Smith, went, to, St., Paul.]
+        // Only first token should be sentence start (Dr.)
+        assert!(tokens[0].is_sentence_start);
+        assert!(!tokens[1].is_sentence_start); // Smith should NOT be sentence start after "Dr."
+        assert!(!tokens[2].is_sentence_start);
+        assert!(!tokens[3].is_sentence_start);
+        assert!(!tokens[4].is_sentence_start); // Paul should NOT be sentence start after "St."
+    }
+
+    #[test]
+    fn test_sentence_boundary_decimal_number() {
+        // PRD Section 3.3: Period after number is NOT sentence terminator
+        let text = "The value is 3.14. Another sentence.";
+        let tokens = tokenize_text(text);
+
+        // Expected: [The, value, is, 3.14., Another, sentence.]
+        // 3.14 should NOT cause sentence boundary (it's a decimal)
+        assert!(tokens[0].is_sentence_start);
+        assert!(!tokens[1].is_sentence_start);
+        assert!(!tokens[2].is_sentence_start);
+        assert!(!tokens[3].is_sentence_start); // 3.14. - period after decimal, not sentence terminator
+        assert!(tokens[4].is_sentence_start); // Another starts new sentence
+    }
+
+    #[test]
+    fn test_sentence_boundary_combined_rules() {
+        // Test both abbreviation and decimal rules together
+        let text = "Dr. Johnson measured 2.54 cm. Next sentence.";
+        let tokens = tokenize_text(text);
+
+        // Expected: [Dr., Johnson, measured, 2.54, cm., Next, sentence.]
+        assert!(tokens[0].is_sentence_start);
+        assert!(!tokens[1].is_sentence_start); // Johnson after "Dr."
+        assert!(!tokens[2].is_sentence_start);
+        assert!(!tokens[3].is_sentence_start); // 2.54 is decimal
+        assert!(!tokens[4].is_sentence_start); // cm. is abbreviation
+        assert!(tokens[5].is_sentence_start); // Next starts new sentence
     }
 }

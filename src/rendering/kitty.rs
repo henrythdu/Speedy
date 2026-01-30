@@ -20,9 +20,10 @@
 
 use crate::rendering::font::{calculate_string_width, get_font, get_font_metrics, FontMetrics};
 use crate::rendering::renderer::{RendererError, RsvpRenderer};
-use crate::rendering::viewport::{TerminalDimensions, Viewport};
-use ab_glyph::FontRef;
+use crate::rendering::viewport::Viewport;
+use ab_glyph::{FontRef, PxScale};
 use base64::{engine::general_purpose, Engine as _};
+use imageproc::drawing::draw_text_mut;
 use imageproc::image::{ImageBuffer, Rgba};
 use std::io::{self, Write};
 
@@ -60,6 +61,57 @@ impl KittyGraphicsRenderer {
         self.reading_zone_center = (x, y);
     }
 
+    /// Calculate font size based on terminal cell dimensions
+    ///
+    /// Sets the font size to render at approximately 5 lines height
+    /// based on the cell height from the viewport.
+    pub fn calculate_font_size_from_cell_height(&mut self, cell_height_px: f32) {
+        // Font size should be approximately 5 lines height
+        // We use a scale factor of 1.0 for the font, so font_size = cell_height × 5
+        self.font_size = cell_height_px * 5.0;
+
+        // Update font metrics with the new size
+        if let Some(ref font) = self.font {
+            self.font_metrics = Some(get_font_metrics(font, self.font_size));
+        }
+    }
+
+    /// Get the reading zone height in pixels from viewport dimensions
+    ///
+    /// Reading zone is the top 85% of the terminal (per PRD design).
+    /// Returns None if viewport dimensions are not available.
+    pub fn get_reading_zone_height(&self) -> Option<u32> {
+        self.viewport
+            .get_dimensions()
+            .map(|dims| (dims.pixel_size.1 as f32 * 0.85) as u32)
+    }
+
+    /// Calculate vertical offset for centering text in reading zone
+    ///
+    /// Per PRD Section 4.3: The reading line is centered at 42% of Reader Zone height.
+    /// Returns the Y pixel coordinate where text should be drawn.
+    pub fn calculate_vertical_center(&self) -> Option<u32> {
+        self.get_reading_zone_height().map(|zone_height| {
+            // Vertical center = 42% of reading zone height (per PRD)
+            (zone_height as f32 * 0.42) as u32
+        })
+    }
+
+    /// Get cell height in pixels from viewport
+    pub fn get_cell_height(&self) -> Option<f32> {
+        self.viewport.get_dimensions().map(|dims| dims.cell_size.1)
+    }
+
+    /// Get reference to viewport (for external access to query dimensions)
+    pub fn viewport(&mut self) -> &mut Viewport {
+        &mut self.viewport
+    }
+
+    /// Get current font size
+    pub fn font_size(&self) -> f32 {
+        self.font_size
+    }
+
     /// Calculate start X position for sub-pixel OVP anchoring
     ///
     /// Returns the pixel X coordinate where the word should start so that
@@ -90,7 +142,11 @@ impl KittyGraphicsRenderer {
         center_x - (prefix_width + anchor_half_width)
     }
 
-    /// Rasterize word to RGBA buffer
+    /// Rasterize word to RGBA buffer with text rendered using ab_glyph and imageproc
+    ///
+    /// Creates an image buffer sized to fit the word with padding for visual clarity,
+    /// fills it with the theme background color, and renders the text.
+    /// The buffer is sized to match the reading zone height for proper vertical positioning.
     fn rasterize_word(&self, word: &str) -> Option<ImageBuffer<Rgba<u8>, Vec<u8>>> {
         if self.font.is_none() || self.font_metrics.is_none() {
             return None;
@@ -111,11 +167,34 @@ impl KittyGraphicsRenderer {
             return None;
         }
 
-        // Create RGBA buffer with transparent background (non-intrusive stub)
-        let image = ImageBuffer::from_pixel(width, height, Rgba([0, 0, 0, 0]));
+        // Get reading zone height for canvas size (None means use text height)
+        let canvas_height = self.get_reading_zone_height().unwrap_or(height);
 
-        // TODO: Use ab_glyph to render text into the buffer
-        // For now, return transparent buffer (will be implemented)
+        // Create RGBA buffer with theme background color (#1A1B26 = Rgba(26, 27, 38, 255))
+        let mut image = ImageBuffer::from_pixel(width, canvas_height, Rgba([26, 27, 38, 255]));
+
+        // Use imageproc's draw_text_mut to render text
+        // ab_glyph requires PxScale for scaling
+        let scale = PxScale::from(self.font_size);
+
+        // Text color: anchor color #F7768E = Rgba(247, 118, 142, 255)
+        let text_color = Rgba([247, 118, 142, 255]);
+
+        // Calculate vertical offset to center text in the reading zone
+        // Text should be positioned at 42% of reading zone height (per PRD)
+        let vertical_offset =
+            ((canvas_height as f32 * 0.42) - (height as f32 / 2.0)).max(0.0) as i32;
+
+        // Draw text at calculated vertical offset
+        draw_text_mut(
+            &mut image,
+            text_color,
+            0,
+            vertical_offset,
+            scale,
+            font,
+            word,
+        );
 
         Some(image)
     }
@@ -126,25 +205,28 @@ impl KittyGraphicsRenderer {
         general_purpose::STANDARD.encode(&raw_bytes)
     }
 
-    /// Send Kitty Graphics Protocol transmission
+    /// Send Kitty Graphics Protocol transmission with pixel positioning
     fn transmit_graphics(
         &mut self,
         image_id: u32,
         width: u32,
         height: u32,
         base64_data: &str,
+        pos_x: u32,
+        pos_y: u32,
     ) -> io::Result<()> {
         // Kitty Graphics Protocol: APC sequence
-        // Format: ESC _ G a=T f=32 s=<width> v=<height> i=<image_id> m=1 <data> ESC \
+        // Format: ESC _ G a=T f=32 s=<width> v=<height> i=<image_id> p=<x>,<y> m=1 <data> ESC \
         // f=32 means 32-bit RGBA
+        // p=x,y specifies pixel position (top-left corner of image)
         let apc_start = "\x1b_G";
         let apc_end = "\x1b\\";
 
         // If data fits in single transmission
         if base64_data.len() <= 4096 {
             let command = format!(
-                "{}a=T,f=32,s={},v={},i={}m=0;{}{}",
-                apc_start, width, height, image_id, base64_data, apc_end
+                "{}a=T,f=32,s={},v={},i={},p={},{}m=0;{}{}",
+                apc_start, width, height, image_id, pos_x, pos_y, base64_data, apc_end
             );
             print!("{}", command);
             io::stdout().flush()
@@ -159,8 +241,8 @@ impl KittyGraphicsRenderer {
             for (i, chunk) in chunks.iter().enumerate() {
                 let more = if i == chunks.len() - 1 { 0 } else { 1 };
                 let command = format!(
-                    "{}a=T,f=32,s={},v={},i={}m={};{}{}",
-                    apc_start, width, height, image_id, more, chunk, apc_end
+                    "{}a=T,f=32,s={},v={},i={},p={},{}m={};{}{}",
+                    apc_start, width, height, image_id, pos_x, pos_y, more, chunk, apc_end
                 );
                 print!("{}", command);
                 io::stdout().flush()?;
@@ -229,14 +311,15 @@ impl RsvpRenderer for KittyGraphicsRenderer {
         // Calculate sub-pixel OVP position
         let start_x = self.calculate_start_x(word, anchor_position);
 
-        // Move cursor to calculated position using CSI sequence
-        // Convert pixel X to approximate cell column for cursor positioning
-        let cell_x = (start_x / 10.0).max(0.0) as u16;
-        let cell_y = (self.reading_zone_center.1 as f32 / 20.0).max(0.0) as u16;
-        print!("\x1b[{};{}H", cell_y + 1, cell_x + 1);
-        io::stdout()
-            .flush()
-            .map_err(|e| RendererError::RenderFailed(e.to_string()))?;
+        // Calculate vertical position (reading zone center)
+        let vertical_center = self.calculate_vertical_center().unwrap_or(0);
+
+        // Debug output
+        eprintln!(
+            "DEBUG render_word: word='{}', anchor={}, start_x={}, vertical_center={}",
+            word, anchor_position, start_x, vertical_center
+        );
+        eprintln!("DEBUG: reading_zone_center={:?}", self.reading_zone_center);
 
         // Rasterize word to image buffer
         let image = match self.rasterize_word(word) {
@@ -254,9 +337,17 @@ impl RsvpRenderer for KittyGraphicsRenderer {
         // Get image dimensions
         let (width, height) = (image.width(), image.height());
 
-        // Transmit via Kitty Graphics Protocol
-        self.transmit_graphics(self.current_image_id, width, height, &base64_data)
-            .map_err(|e| RendererError::RenderFailed(e.to_string()))?;
+        // Transmit via Kitty Graphics Protocol with pixel positioning
+        // Position is the top-left corner where the image should be placed
+        self.transmit_graphics(
+            self.current_image_id,
+            width,
+            height,
+            &base64_data,
+            start_x as u32,
+            vertical_center,
+        )
+        .map_err(|e| RendererError::RenderFailed(e.to_string()))?;
 
         // Increment image ID for next word
         self.current_image_id += 1;
@@ -296,6 +387,7 @@ impl RsvpRenderer for KittyGraphicsRenderer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::rendering::viewport::TerminalDimensions;
 
     #[test]
     fn test_kitty_renderer_creation() {
@@ -493,10 +585,12 @@ mod tests {
         let width = 100u32;
         let height = 50u32;
         let data = "dGVzdA=="; // base64 for "test"
+        let pos_x = 100u32;
+        let pos_y = 200u32;
 
         let command = format!(
-            "\x1b_Ga=T,f=32,s={},v={},i={}m=0;{}\x1b\\",
-            width, height, image_id, data
+            "\x1b_Ga=T,f=32,s={},v={},i={},p={},{}m=0;{}\x1b\\",
+            width, height, image_id, pos_x, pos_y, data
         );
 
         assert!(command.contains("a=T")); // Action: transmit
@@ -504,6 +598,159 @@ mod tests {
         assert!(command.contains("s=100")); // Width
         assert!(command.contains("v=50")); // Height
         assert!(command.contains("i=42")); // Image ID
+        assert!(command.contains("p=100,200")); // Position coordinates
         assert!(command.contains("m=0")); // No more chunks
+    }
+
+    #[test]
+    fn test_rasterize_word_creates_valid_buffer() {
+        let mut renderer = KittyGraphicsRenderer::new();
+        renderer.initialize().unwrap();
+
+        // Set viewport dimensions for reading zone height calculation
+        let dims = TerminalDimensions::new(960, 540, 80, 24);
+        renderer.viewport.set_dimensions(dims);
+
+        // Rasterize a simple word
+        let image = renderer.rasterize_word("hello");
+
+        assert!(image.is_some(), "Should create image buffer");
+        let img = image.unwrap();
+
+        // Image should have positive dimensions
+        assert!(img.width() > 0, "Width should be positive");
+        assert!(img.height() > 0, "Height should be positive");
+
+        // Height should match reading zone height (85% of 540 = 459)
+        let reading_zone_height = (540.0 * 0.85) as u32;
+        assert_eq!(img.height(), reading_zone_height);
+    }
+
+    #[test]
+    fn test_rasterize_word_longer_word_wider_buffer() {
+        let mut renderer = KittyGraphicsRenderer::new();
+        renderer.initialize().unwrap();
+
+        let dims = TerminalDimensions::new(960, 540, 80, 24);
+        renderer.viewport.set_dimensions(dims);
+
+        let short_word = renderer.rasterize_word("hi");
+        let long_word = renderer.rasterize_word("supercalifragilistic");
+
+        assert!(short_word.is_some() && long_word.is_some());
+
+        let short_img = short_word.unwrap();
+        let long_img = long_word.unwrap();
+
+        // Longer word should produce wider image
+        assert!(
+            long_img.width() > short_img.width(),
+            "Longer word should produce wider image"
+        );
+    }
+
+    #[test]
+    fn test_rasterize_word_fails_without_font() {
+        let renderer = KittyGraphicsRenderer::new();
+
+        // Without initialization (no font), rasterization should fail
+        let image = renderer.rasterize_word("test");
+        assert!(image.is_none(), "Should return None without font");
+    }
+
+    #[test]
+    fn test_get_reading_zone_height_with_dimensions() {
+        let mut renderer = KittyGraphicsRenderer::new();
+
+        // Set terminal dimensions (960x540 pixels)
+        let dims = TerminalDimensions::new(960, 540, 80, 24);
+        renderer.viewport.set_dimensions(dims);
+
+        let zone_height = renderer.get_reading_zone_height();
+
+        assert!(
+            zone_height.is_some(),
+            "Should return height when dimensions set"
+        );
+        // Reading zone is 85% of total height
+        assert_eq!(zone_height.unwrap(), (540.0 * 0.85) as u32);
+    }
+
+    #[test]
+    fn test_get_reading_zone_height_without_dimensions() {
+        let renderer = KittyGraphicsRenderer::new();
+
+        let zone_height = renderer.get_reading_zone_height();
+        assert!(
+            zone_height.is_none(),
+            "Should return None without dimensions"
+        );
+    }
+
+    #[test]
+    fn test_calculate_vertical_center() {
+        let mut renderer = KittyGraphicsRenderer::new();
+
+        // Set terminal dimensions
+        let dims = TerminalDimensions::new(960, 540, 80, 24);
+        renderer.viewport.set_dimensions(dims);
+
+        let center = renderer.calculate_vertical_center();
+
+        assert!(center.is_some(), "Should return center when dimensions set");
+        // Vertical center is at 42% of reading zone height
+        let reading_zone = (540.0 * 0.85) as u32;
+        let expected_center = (reading_zone as f32 * 0.42) as u32;
+        assert_eq!(center.unwrap(), expected_center);
+    }
+
+    #[test]
+    fn test_calculate_font_size_from_cell_height() {
+        let mut renderer = KittyGraphicsRenderer::new();
+        renderer.initialize().unwrap();
+
+        // With cell height of 20px, font size should be 100px (20 * 5)
+        renderer.calculate_font_size_from_cell_height(20.0);
+
+        assert_eq!(renderer.font_size, 100.0);
+        assert!(renderer.font_metrics.is_some());
+
+        let metrics = renderer.font_metrics.unwrap();
+        // Height should match font size
+        assert!((metrics.height - 100.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_rasterize_word_uses_correct_theme_colors() {
+        let mut renderer = KittyGraphicsRenderer::new();
+        renderer.initialize().unwrap();
+
+        let dims = TerminalDimensions::new(960, 540, 80, 24);
+        renderer.viewport.set_dimensions(dims);
+
+        let image = renderer.rasterize_word("test");
+        assert!(image.is_some());
+
+        let img = image.unwrap();
+
+        // Check that background color is set (#1A1B26 = RGB(26, 27, 38))
+        // Check a pixel in the top-left corner (background area)
+        let pixel = img.get_pixel(0, 0);
+        assert_eq!(pixel[0], 26); // R
+        assert_eq!(pixel[1], 27); // G
+        assert_eq!(pixel[2], 38); // B
+        assert_eq!(pixel[3], 255); // A (fully opaque)
+    }
+
+    #[test]
+    fn test_calculate_start_x_with_font_metrics() {
+        let mut renderer = KittyGraphicsRenderer::new();
+        renderer.initialize().unwrap();
+        renderer.set_reading_zone_center(480, 200); // Center of 960x400 reading zone
+
+        // With proper initialization, calculate_start_x should work
+        let start_x = renderer.calculate_start_x("hello", 1); // Anchor on 'e'
+        assert!(start_x > 0.0, "Start X should be positive");
+        assert!(start_x < 480.0, "Start X should be less than center");
     }
 }

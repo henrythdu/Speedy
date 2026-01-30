@@ -1,16 +1,14 @@
 //! Terminal capability detection for graphics protocol support
 //!
-//! Detects terminal graphics capabilities and provides graceful fallback
-//! to TUI mode when advanced features are unavailable.
+//! Detects Kitty Graphics Protocol support. Kitty-compatible terminals
+//! are REQUIRED for Speedy to run.
 
 use std::env;
 
-/// Graphics protocol support levels
+/// Graphics protocol support levels - Kitty-only mode
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum GraphicsCapability {
-    /// No graphics support - use pure TUI fallback
-    None,
-    /// Kitty Graphics Protocol supported
+    /// Kitty Graphics Protocol supported (REQUIRED for Speedy)
     Kitty,
 }
 
@@ -42,16 +40,20 @@ impl CapabilityDetector {
     /// TODO: Implement CSI DA1/DA2 device attribute queries as fallback
     /// for more reliable detection. This requires async/timeout handling.
     ///
-    /// Returns GraphicsCapability::None for unsupported terminals
+    /// EXITS with error message if Kitty Graphics Protocol not detected.
+    /// Speedy REQUIRES Kitty-compatible terminal (Kitty or Konsole 22.04+).
     pub fn detect(&self) -> GraphicsCapability {
-        // First check environment variables (fast but less reliable)
+        // Check environment variables for Kitty support
         if let Some(capability) = self.detect_from_env() {
             return capability;
         }
 
-        // TODO: Implement CSI query fallback (requires async/timeout handling)
-        // For now, return None - CSI query implementation is pending
-        GraphicsCapability::None
+        // Kitty Graphics Protocol not detected - exit with error
+        panic!(
+            "Speedy requires Kitty Graphics Protocol. \
+            Please run Speedy in Kitty or Konsole 22.04+. \
+            Set $TERM=xterm-kitty or $TERM_PROGRAM=kitty if needed."
+        );
     }
 
     /// Detect capability from environment variables
@@ -89,18 +91,13 @@ impl CapabilityDetector {
     }
 
     /// Detect capability from explicit CLI override
-    pub fn detect_from_override(
-        &self,
-        force_kitty: bool,
-        force_tui: bool,
-    ) -> Option<GraphicsCapability> {
+    ///
+    /// Only `force_kitty` parameter is supported (TUI fallback removed).
+    pub fn detect_from_override(&self, force_kitty: bool) -> GraphicsCapability {
         if force_kitty {
-            return Some(GraphicsCapability::Kitty);
+            return GraphicsCapability::Kitty;
         }
-        if force_tui {
-            return Some(GraphicsCapability::None);
-        }
-        None
+        self.detect()
     }
 }
 
@@ -110,58 +107,33 @@ impl Default for CapabilityDetector {
     }
 }
 
-/// Get user-facing warning message for TUI fallback mode
-pub fn get_tui_fallback_warning() -> &'static str {
-    "⚠️  Running in TUI fallback mode. For pixel-perfect RSVP with sub-pixel OVP anchoring, use Kitty or Konsole terminal."
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_graphics_capability_variants() {
-        assert!(!GraphicsCapability::None.supports_graphics());
+    fn test_graphics_capability_kitty() {
         assert!(GraphicsCapability::Kitty.supports_graphics());
-
-        assert!(!GraphicsCapability::None.supports_subpixel_ovp());
         assert!(GraphicsCapability::Kitty.supports_subpixel_ovp());
     }
 
     #[test]
-    fn test_detector_creation() {
+    #[should_panic(expected = "Speedy requires Kitty Graphics Protocol")]
+    fn test_detector_panics_on_no_kitty() {
         let detector = CapabilityDetector::new();
-        // Should not panic
+        // Clear all environment variables that would indicate Kitty support
+        std::env::remove_var("TERM");
+        std::env::remove_var("TERM_PROGRAM");
+        std::env::remove_var("KONSOLE_VERSION");
+
         let _capability = detector.detect();
     }
 
     #[test]
     fn test_detect_from_override_force_kitty() {
         let detector = CapabilityDetector::new();
-        let result = detector.detect_from_override(true, false);
-        assert_eq!(result, Some(GraphicsCapability::Kitty));
-    }
-
-    #[test]
-    fn test_detect_from_override_force_tui() {
-        let detector = CapabilityDetector::new();
-        let result = detector.detect_from_override(false, true);
-        assert_eq!(result, Some(GraphicsCapability::None));
-    }
-
-    #[test]
-    fn test_detect_from_override_no_override() {
-        let detector = CapabilityDetector::new();
-        let result = detector.detect_from_override(false, false);
-        assert_eq!(result, None);
-    }
-
-    #[test]
-    fn test_detect_from_override_both_flags() {
-        // force_kitty takes precedence
-        let detector = CapabilityDetector::new();
-        let result = detector.detect_from_override(true, true);
-        assert_eq!(result, Some(GraphicsCapability::Kitty));
+        let result = detector.detect_from_override(true);
+        assert_eq!(result, GraphicsCapability::Kitty);
     }
 
     #[test]
@@ -178,16 +150,12 @@ mod tests {
     }
 
     #[test]
-    fn test_warning_message() {
-        let warning = get_tui_fallback_warning();
-        assert!(warning.contains("TUI fallback"));
-        assert!(warning.contains("Kitty"));
-    }
-
-    #[test]
     fn test_detector_default() {
         let detector: CapabilityDetector = Default::default();
+        // Set up Kitty environment to prevent panic
+        std::env::set_var("TERM", "xterm-kitty");
         let _capability = detector.detect();
-        // Should not panic
+        // Cleanup
+        std::env::remove_var("TERM");
     }
 }

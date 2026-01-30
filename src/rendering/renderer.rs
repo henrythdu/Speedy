@@ -1,7 +1,6 @@
-//! RsvpRenderer trait definition for pluggable rendering backends
+//! RsvpRenderer trait definition for Kitty Graphics Protocol rendering
 //!
-//! This trait abstracts both TUI (CellRenderer) and graphics (Kitty) backends,
-//! enabling future support for Sixel, iTerm2, and other protocols.
+//! This trait provides pixel-perfect word rendering with sub-pixel OVP anchoring.
 
 use std::error::Error;
 use std::fmt;
