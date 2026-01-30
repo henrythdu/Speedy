@@ -47,6 +47,11 @@ pub struct KittyGraphicsRenderer {
     reading_zone_center: (u32, u32),
 }
 
+impl Default for KittyGraphicsRenderer {
+    fn default() -> Self {
+        Self::new()
+    }
+
 impl KittyGraphicsRenderer {
     /// Create a new KittyGraphicsRenderer with default font size
     pub fn new() -> Self {
