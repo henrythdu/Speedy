@@ -1,4 +1,3 @@
-
 use crate::rendering::font::{
     calculate_char_width, calculate_string_width, get_font, get_font_metrics, FontMetrics,
 };
@@ -9,8 +8,6 @@ use base64::{engine::general_purpose, Engine as _};
 use imageproc::drawing::draw_text_mut;
 use imageproc::image::{ImageBuffer, Rgba};
 use std::io::{self, Write};
-
-
 
 /// Kitty Graphics Protocol renderer for pixel-perfect RSVP
 pub struct KittyGraphicsRenderer {
@@ -24,15 +21,12 @@ pub struct KittyGraphicsRenderer {
     font_metrics: Option<FontMetrics>,
     /// Current image ID for protocol (incremented per word)
     current_image_id: u32,
-    /// Target pixel coordinates for rendering (x, y of reading zone center)
-    reading_zone_center: (u32, u32),
 }
 
 impl Default for KittyGraphicsRenderer {
     fn default() -> Self {
         Self::new()
     }
-
 }
 impl KittyGraphicsRenderer {
     /// Create a new KittyGraphicsRenderer with default font size
@@ -43,13 +37,7 @@ impl KittyGraphicsRenderer {
             font_size: 24.0,
             font_metrics: None,
             current_image_id: 1,
-            reading_zone_center: (0, 0),
         }
-    }
-
-    /// Set reading zone center position in pixels
-    pub fn set_reading_zone_center(&mut self, x: u32, y: u32) {
-        self.reading_zone_center = (x, y);
     }
 
     /// Calculate font size based on terminal cell dimensions
@@ -69,12 +57,13 @@ impl KittyGraphicsRenderer {
 
     /// Get the reading zone height in pixels from viewport dimensions
     ///
-    /// Reading zone is the top 85% of the terminal (per PRD design).
+    /// Reading zone is total height minus fixed 5-line command deck.
     /// Returns None if viewport dimensions are not available.
     pub fn get_reading_zone_height(&self) -> Option<u32> {
-        self.viewport
-            .get_dimensions()
-            .map(|dims| (dims.pixel_size.1 as f32 * 0.85) as u32)
+        self.viewport.get_dimensions().map(|dims| {
+            let command_zone_height = dims.cell_size.1 * 5.0; // Fixed 5 lines
+            (dims.pixel_size.1 as f32 - command_zone_height) as u32
+        })
     }
 
     /// Calculate vertical offset for centering text in reading zone
@@ -86,11 +75,6 @@ impl KittyGraphicsRenderer {
             // Vertical center = 42% of reading zone height (per PRD)
             (zone_height as f32 * 0.42) as u32
         })
-    }
-
-    /// Get cell height in pixels from viewport
-    pub fn get_cell_height(&self) -> Option<f32> {
-        self.viewport.get_dimensions().map(|dims| dims.cell_size.1)
     }
 
     /// Get reference to viewport (for external access to query dimensions)
@@ -122,7 +106,12 @@ impl KittyGraphicsRenderer {
         let anchor_half_width = anchor_width / 2.0;
 
         // StartX = Center - (prefix + anchor_half)
-        let center_x = self.reading_zone_center.0 as f32;
+        // Calculate center_x dynamically from viewport dimensions (fixes resize bug)
+        let center_x = self
+            .viewport
+            .get_dimensions()
+            .map(|dims| dims.pixel_size.0 / 2)
+            .unwrap_or(0) as f32;
         center_x - (prefix_width + anchor_half_width)
     }
 
@@ -439,24 +428,20 @@ mod tests {
     }
 
     #[test]
-    fn test_set_reading_zone_center() {
-        let mut renderer = KittyGraphicsRenderer::new();
-        renderer.set_reading_zone_center(960, 540);
-        assert_eq!(renderer.reading_zone_center, (960, 540));
-    }
-
-    #[test]
     fn test_calculate_start_x_single_char() {
         let mut renderer = KittyGraphicsRenderer::new();
         renderer.initialize().unwrap();
-        renderer.set_reading_zone_center(100, 50);
+
+        // Set viewport dimensions for testing (200px wide = center at 100)
+        let dims = TerminalDimensions::new(200, 100, 80, 24);
+        renderer.viewport.set_dimensions(dims);
 
         // For a single character, anchor is at position 0
-        // The character center should align with reading zone center
+        // The character center should align with viewport center (100)
         let start_x = renderer.calculate_start_x("A", 0);
 
-        // With a monospace font, a single char at 24px should be ~14-15px wide
-        // StartX should be roughly: center - (0 + half_char_width)
+        // With a monospace font, a single char should be ~14-15px wide
+        // StartX should be roughly: center - (0 + half_char_width) = ~92-93
         assert!(
             start_x > 85.0 && start_x < 95.0,
             "Single char start_x should be near center minus half width: got {}",
@@ -468,7 +453,10 @@ mod tests {
     fn test_calculate_start_x_two_chars() {
         let mut renderer = KittyGraphicsRenderer::new();
         renderer.initialize().unwrap();
-        renderer.set_reading_zone_center(100, 50);
+
+        // Set viewport dimensions for testing (200px wide = center at 100)
+        let dims = TerminalDimensions::new(200, 100, 80, 24);
+        renderer.viewport.set_dimensions(dims);
 
         // For "AB" with anchor at position 1 (second char)
         // StartX = center - (width_of_A + half_width_of_B)
@@ -486,7 +474,10 @@ mod tests {
     fn test_calculate_start_x_out_of_bounds() {
         let mut renderer = KittyGraphicsRenderer::new();
         renderer.initialize().unwrap();
-        renderer.set_reading_zone_center(100, 50);
+
+        // Set viewport dimensions for testing
+        let dims = TerminalDimensions::new(200, 100, 80, 24);
+        renderer.viewport.set_dimensions(dims);
 
         // Anchor position beyond word length should return 0.0
         let start_x = renderer.calculate_start_x("hi", 5);
@@ -696,8 +687,11 @@ mod tests {
             zone_height.is_some(),
             "Should return height when dimensions set"
         );
-        // Reading zone is 85% of total height
-        assert_eq!(zone_height.unwrap(), (540.0 * 0.85) as u32);
+        // Reading zone = Total height - (5 lines × cell_height)
+        // = 540 - (5 × 22.5) = 540 - 112.5 = 427.5
+        let cell_height = 540.0 / 24.0;
+        let expected_zone = (540.0 - (5.0 * cell_height)) as u32;
+        assert_eq!(zone_height.unwrap(), expected_zone);
     }
 
     #[test]
@@ -715,16 +709,20 @@ mod tests {
     fn test_calculate_vertical_center() {
         let mut renderer = KittyGraphicsRenderer::new();
 
-        // Set terminal dimensions
+        // Set terminal dimensions (960px wide, 540px high, 80 cols, 24 rows)
+        // Cell height = 540/24 = 22.5px
         let dims = TerminalDimensions::new(960, 540, 80, 24);
         renderer.viewport.set_dimensions(dims);
 
         let center = renderer.calculate_vertical_center();
 
         assert!(center.is_some(), "Should return center when dimensions set");
-        // Vertical center is at 42% of reading zone height
-        let reading_zone = (540.0 * 0.85) as u32;
-        let expected_center = (reading_zone as f32 * 0.42) as u32;
+        // Reading zone = Total height - (5 lines × cell_height)
+        // = 540 - (5 × 22.5) = 540 - 112.5 = 427.5px
+        // Vertical center = 42% of reading zone = 427.5 × 0.42 = 179.55 ≈ 179
+        let cell_height = 540.0 / 24.0;
+        let reading_zone = 540.0 - (5.0 * cell_height);
+        let expected_center = (reading_zone * 0.42) as u32;
         assert_eq!(center.unwrap(), expected_center);
     }
 
@@ -767,11 +765,13 @@ mod tests {
     fn test_calculate_start_x_with_font_metrics() {
         let mut renderer = KittyGraphicsRenderer::new();
         renderer.initialize().unwrap();
-        renderer.set_reading_zone_center(480, 200); // Center of 960x400 reading zone
+
+        // Set viewport dimensions for testing (960px wide = center at 480)
+        let dims = TerminalDimensions::new(960, 400, 80, 24);
+        renderer.viewport.set_dimensions(dims);
 
         // With proper initialization, calculate_start_x should work
         let start_x = renderer.calculate_start_x("hello", 1); // Anchor on 'e'
         assert!(start_x > 0.0, "Start X should be positive");
-}
-
+    }
 }

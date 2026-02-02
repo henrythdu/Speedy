@@ -166,11 +166,12 @@ The "Anchor" letter (Optimal Recognition Point) remains **mathematically station
 - **Ghost Right:** Next word, left-aligned, **15% opacity**
 
 **Visual Layout:**
-- Reader Zone occupies **top 85%** of terminal
-- Reading line centered at **42%** of Reader Zone height
+- Reader Zone occupies **all space above command deck** (dynamic height)
+- Reading line centered of Reader Zone height
 - **10% horizontal padding** inside canvas to buffer word cluster
-- Command Section occupies **bottom 15%** (~5 lines)
+- Command Section occupies **fixed 5 lines** at bottom
 - **1-line transparent gutter** separates Reader from Command
+- **Minimum terminal size:** 80×24 characters
 
 ### 4.4 Progress & Spatial Awareness
 

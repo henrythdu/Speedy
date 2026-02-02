@@ -87,14 +87,14 @@ To maintain a seamless, "homogeneous" feel between terminal cells and image canv
 
 ### 4.1 Viewport Partitioning
 
-* **Reader Zone (Top 85%):**
+* **Reader Zone (All space above command deck):**
     * A single RgbaImage canvas (via graphics backend)
     * Vertical Anchor: The reading line is centered at 42% of Reader Zone height
     * Internal Padding: 10% horizontal padding inside the canvas to buffer word cluster
     * Reserved by Ratatui layout, rendered by graphics engine
-
-* **Command Section (Bottom 15%):**
-    * Fixed height (~5 lines)
+    * Dynamic height - expands/contracts with terminal size
+* **Command Section (Bottom - Fixed 5 lines):**
+    * Fixed height (exactly 5 terminal lines)
     * Separated by a 1-line transparent gutter from Reader
     * Uses a 4px vertical accent bar on the far left
     * Standard Ratatui widgets

@@ -1,6 +1,6 @@
 # Speedy Architecture Document
 
-**Last Updated:** 2026-01-30 (Epic 2: Image-Based Word Rendering - Task 1: ReadingCanvas struct for composite rendering)
+**Last Updated:** 2026-02-02 (Documentation fix: Updated reading zone description to clarify fixed 5-line command deck vs percentage-based layout)
 **Purpose:** Document actual codebase structure, methods, structs, and architecture to prevent duplication and confusion.
 
 ## ⚠️ Important Notes
@@ -168,7 +168,7 @@ pub struct KittyGraphicsRenderer {
 - `new() -> Self` - Create new KittyGraphicsRenderer instance
 - `set_reading_zone_center(x, y)` - Set center position for OVP anchoring
 - `calculate_font_size_from_cell_height(cell_height_px)` - Calculate font size for 5-line height
-- `get_reading_zone_height() -> Option<u32>` - Get reading zone height (85% of terminal)
+- `get_reading_zone_height() -> Option<u32>` - Get reading zone height (total height minus fixed 5-line command deck)
 - `calculate_vertical_center() -> Option<u32>` - Calculate Y position at 42% of reading zone
 - `get_cell_height() -> Option<f32>` - Get cell height in pixels from viewport
 - `create_canvas() -> Option<ReadingCanvas>` - Create full-zone canvas for composite rendering (src/rendering/kitty.rs:196)
@@ -212,7 +212,7 @@ pub struct ReadingCanvas {
 
 **Key Behaviors:**
 - Implements CPU compositing pattern from Design Doc v2.0 Section 6.2
-- Creates single RGBA buffer covering entire reading zone (85% of terminal)
+- Creates single RGBA buffer covering entire reading zone (total height minus fixed 5-line command deck)
 - Background color is Midnight theme #1A1B26 (deep slate)
 - Composites all visual elements (background, word, ghost words) into single buffer
 - Eliminates flickering and Z-fighting issues from multiple image transmissions
@@ -541,12 +541,13 @@ The project follows **pure core + thin IO adapter** pattern:
 
 ### 1. TUI-First Command Deck Architecture
 
-- **Command Deck (Bottom 15%):** Integrated command area using rustyline for input
+- **Command Deck (Bottom 5 lines):** Fixed-height command area using rustyline for input
 - Commands typed directly (no prompt like `speedy>`)
 - Commands execute immediately (similar to OpenCode/Neovim command mode)
-- Reading Zone (Top 85%): Displays RSVP content or instructions
+- Reading Zone (Top - dynamic): Displays RSVP content or instructions, expands/contracts with terminal size
 - Mode transitions: Command ↔ Reading ↔ Paused
 - `:q` in Command Mode exits application entirely
+- Terminal resize supported: Word re-centers dynamically, auto-pause/resume during resize
 
 **Purpose:** Modern TUI workflow with integrated command input, no REPL prompt
 

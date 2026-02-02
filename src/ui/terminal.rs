@@ -14,7 +14,7 @@ use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout},
     style::Style,
-    widgets::{Block, Clear},
+    widgets::Block,
     Terminal,
 };
 use std::io::{self, Stdout};
@@ -41,17 +41,10 @@ impl TuiManager {
         )
         .expect("Failed to initialize KittyGraphicsRenderer");
 
-        // Query terminal dimensions and set reading zone center
+        // Query terminal dimensions and calculate font size
         let _ = renderer.viewport().query_dimensions();
         if let Some(dims) = renderer.viewport().get_dimensions() {
-            let center_x = dims.pixel_size.0 / 2;
-            // Reading zone is 85% of terminal (PRD Section 4.3)
-            // Vertical center is 42% of reading zone height
-            let reading_zone_height = (dims.pixel_size.1 as f32 * 0.85) as u32;
-            let center_y = (reading_zone_height as f32 * 0.42) as u32;
-            renderer.set_reading_zone_center(center_x, center_y);
-
-            // Calculate font size for 5-line height (using cell height * 5)
+            // Calculate font size for 5-line height (cell height * 5)
             renderer.calculate_font_size_from_cell_height(dims.cell_size.1);
         }
 
@@ -81,110 +74,125 @@ impl TuiManager {
 
             match event::poll(poll_timeout) {
                 Ok(true) => {
-                    if let Event::Key(key) = event::read()? {
-                        // Handle Ctrl+C to quit
-                        if key.code == KeyCode::Char('c')
-                            && key.modifiers.contains(event::KeyModifiers::CONTROL)
-                        {
-                            app.set_mode(AppMode::Quit);
-                            return Ok(AppMode::Quit);
-                        }
-
-                        match key.code {
-                            KeyCode::Char(c) => {
-                                if app.mode() == AppMode::Command {
-                                    // In command mode, collect input
-                                    self.command_buffer.push(c);
-                                } else {
-                                    // In reading/paused mode, use app key handling
-                                    app.handle_keypress(c);
-                                }
+                    match event::read()? {
+                        Event::Key(key) => {
+                            // Handle Ctrl+C to quit
+                            if key.code == KeyCode::Char('c')
+                                && key.modifiers.contains(event::KeyModifiers::CONTROL)
+                            {
+                                app.set_mode(AppMode::Quit);
+                                return Ok(AppMode::Quit);
                             }
-                            KeyCode::Enter => {
-                                if app.mode() == AppMode::Command && !self.command_buffer.is_empty()
-                                {
-                                    // Execute the command
-                                    let command = self.command_buffer.clone();
-                                    self.command_buffer.clear();
 
-                                    // Parse and execute
-                                    use crate::ui::command::{parse_command, Command};
-                                    match parse_command(&command) {
-                                        Command::LoadFile(path) => {
-                                            // Load the file using input module
-                                            use crate::input::pdf;
-                                            match pdf::load(&path) {
-                                                Ok(doc) => {
-                                                    let text: String = doc
-                                                        .tokens
-                                                        .iter()
-                                                        .map(|t| {
-                                                            let mut s = t.text.clone();
-                                                            for p in &t.punctuation {
-                                                                s.push(*p);
-                                                            }
-                                                            s
-                                                        })
-                                                        .collect::<Vec<_>>()
-                                                        .join(" ");
-                                                    app.start_reading(&text, 300);
-                                                }
-                                                Err(e) => {
-                                                    eprintln!("Failed to load file: {}", e);
-                                                }
-                                            }
-                                        }
-                                        Command::LoadClipboard => {
-                                            // Load from clipboard
-                                            use crate::input::clipboard;
-                                            match clipboard::load() {
-                                                Ok(doc) => {
-                                                    let text: String = doc
-                                                        .tokens
-                                                        .iter()
-                                                        .map(|t| {
-                                                            let mut s = t.text.clone();
-                                                            for p in &t.punctuation {
-                                                                s.push(*p);
-                                                            }
-                                                            s
-                                                        })
-                                                        .collect::<Vec<_>>()
-                                                        .join(" ");
-                                                    app.start_reading(&text, 300);
-                                                }
-                                                Err(e) => {
-                                                    eprintln!("Failed to load clipboard: {}", e);
+                            match key.code {
+                                KeyCode::Char(c) => {
+                                    if app.mode() == AppMode::Command {
+                                        // In command mode, collect input
+                                        self.command_buffer.push(c);
+                                    } else {
+                                        // In reading/paused mode, use app key handling
+                                        app.handle_keypress(c);
+                                    }
+                                }
+                                KeyCode::Enter => {
+                                    if app.mode() == AppMode::Command
+                                        && !self.command_buffer.is_empty()
+                                    {
+                                        // Execute the command
+                                        let command = self.command_buffer.clone();
+                                        self.command_buffer.clear();
+
+                                        // Parse and execute
+                                        use crate::ui::command::{parse_command, Command};
+                                        match parse_command(&command) {
+                                            Command::LoadFile(path) => {
+                                                // Load the file using input module
+                                                use crate::input::pdf;
+                                                match pdf::load(&path) {
+                                                    Ok(doc) => {
+                                                        let text: String = doc
+                                                            .tokens
+                                                            .iter()
+                                                            .map(|t| {
+                                                                let mut s = t.text.clone();
+                                                                for p in &t.punctuation {
+                                                                    s.push(*p);
+                                                                }
+                                                                s
+                                                            })
+                                                            .collect::<Vec<_>>()
+                                                            .join(" ");
+                                                        app.start_reading(&text, 300);
+                                                    }
+                                                    Err(e) => {
+                                                        eprintln!("Failed to load file: {}", e);
+                                                    }
                                                 }
                                             }
-                                        }
-                                        Command::Quit => {
-                                            app.set_mode(AppMode::Quit);
-                                            return Ok(AppMode::Quit);
-                                        }
-                                        Command::Help => {
-                                            // Show help - for now just stay in command mode
-                                        }
-                                        Command::Unknown(_) => {
-                                            // Invalid command - could show error in UI
-                                            eprintln!("Unknown command: {}", command);
+                                            Command::LoadClipboard => {
+                                                // Load from clipboard
+                                                use crate::input::clipboard;
+                                                match clipboard::load() {
+                                                    Ok(doc) => {
+                                                        let text: String = doc
+                                                            .tokens
+                                                            .iter()
+                                                            .map(|t| {
+                                                                let mut s = t.text.clone();
+                                                                for p in &t.punctuation {
+                                                                    s.push(*p);
+                                                                }
+                                                                s
+                                                            })
+                                                            .collect::<Vec<_>>()
+                                                            .join(" ");
+                                                        app.start_reading(&text, 300);
+                                                    }
+                                                    Err(e) => {
+                                                        eprintln!(
+                                                            "Failed to load clipboard: {}",
+                                                            e
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                            Command::Quit => {
+                                                app.set_mode(AppMode::Quit);
+                                                return Ok(AppMode::Quit);
+                                            }
+                                            Command::Help => {
+                                                // Show help - for now just stay in command mode
+                                            }
+                                            Command::Unknown(_) => {
+                                                // Invalid command - could show error in UI
+                                                eprintln!("Unknown command: {}", command);
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            KeyCode::Backspace => {
-                                if app.mode() == AppMode::Command {
-                                    self.command_buffer.pop();
+                                KeyCode::Backspace => {
+                                    if app.mode() == AppMode::Command {
+                                        self.command_buffer.pop();
+                                    }
                                 }
-                            }
-                            KeyCode::Esc => {
-                                if app.mode() == AppMode::Reading || app.mode() == AppMode::Paused {
-                                    app.set_mode(AppMode::Command);
-                                    self.command_buffer.clear();
+                                KeyCode::Esc => {
+                                    if app.mode() == AppMode::Reading
+                                        || app.mode() == AppMode::Paused
+                                    {
+                                        app.set_mode(AppMode::Command);
+                                        self.command_buffer.clear();
+                                    }
                                 }
+                                _ => {}
                             }
-                            _ => {}
                         }
+                        Event::Resize(cols, rows) => {
+                            // Handle terminal resize with minimum size enforcement
+                            if cols >= 80 && rows >= 24 {
+                                let _ = self.handle_resize(cols, rows, app);
+                            }
+                        }
+                        _ => {}
                     }
                 }
                 Ok(false) => {
@@ -212,10 +220,11 @@ impl TuiManager {
         self.terminal.draw(|frame| {
             let area = frame.area();
 
-            // Split screen: Reading zone (top 85%) + Command deck (bottom 15%)
+            // Split screen: Reading zone (dynamic) + Command deck (fixed 5 lines)
+            // This must match the calculation in KittyGraphicsRenderer::calculate_reading_zone_center
             let main_layout = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([Constraint::Percentage(85), Constraint::Percentage(15)])
+                .constraints([Constraint::Fill(1), Constraint::Length(5)])
                 .split(area);
 
             let reading_area = main_layout[0];
@@ -247,6 +256,38 @@ impl TuiManager {
             if let Err(e) = RsvpRenderer::render_word(&mut self.kitty_renderer, word, anchor_pos) {
                 eprintln!("Render error: {}", e);
             }
+        }
+
+        Ok(())
+    }
+
+    /// Handle terminal resize events
+    ///
+    /// Updates viewport dimensions and redraws the current word at the new center position.
+    /// Auto-pauses reading during resize to prevent visual artifacts (per Design Doc Section 8.1).
+    fn handle_resize(&mut self, _cols: u16, _rows: u16, app: &mut App) -> io::Result<()> {
+        // Auto-pause if currently reading to prevent visual artifacts
+        let was_reading = app.mode() == AppMode::Reading;
+        if was_reading {
+            app.toggle_pause();
+        }
+
+        // Update viewport dimensions by re-querying terminal
+        // This updates the viewport dimensions which are now used dynamically
+        // for both X and Y center calculations
+        let _ = self.kitty_renderer.viewport().query_dimensions();
+
+        // Clear previous graphics and redraw at new position
+        if let Err(e) = RsvpRenderer::clear(&mut self.kitty_renderer) {
+            eprintln!("Warning: Failed to clear during resize: {}", e);
+        }
+
+        // Force immediate redraw
+        self.render_frame(app)?;
+
+        // Resume if we were reading
+        if was_reading {
+            app.toggle_pause();
         }
 
         Ok(())
