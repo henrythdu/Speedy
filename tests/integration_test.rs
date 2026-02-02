@@ -1,11 +1,10 @@
 use speedy::app::mode::AppMode;
 use speedy::app::{App, AppEvent};
-use speedy::engine::error::load_file_safe;
 use speedy::reading::ovp::calculate_anchor_position;
 use speedy::reading::state::ReadingState;
 use speedy::reading::timing::{tokenize_text, wpm_to_milliseconds};
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::{Read, Write};
 
 #[test]
 fn end_to_end_reading() {
@@ -15,7 +14,10 @@ fn end_to_end_reading() {
     let mut file = File::create(test_file).unwrap();
     file.write_all(content.as_bytes()).unwrap();
 
-    let loaded_content = load_file_safe(test_file).expect("Should load file successfully");
+    // Load file content directly
+    let mut loaded_file = File::open(test_file).unwrap();
+    let mut loaded_content = String::new();
+    loaded_file.read_to_string(&mut loaded_content).unwrap();
     assert_eq!(loaded_content, content);
 
     let tokens = tokenize_text(&loaded_content);
@@ -48,19 +50,17 @@ fn tui_workflow_repl_to_reading_mode() {
 }
 
 #[test]
-fn tui_workflow_render_state_generation() {
+fn tui_workflow_reading_progress() {
     let content = "one two three four five six seven eight nine ten";
 
     let mut app = App::new();
     app.start_reading(content, 300);
 
-    let render_state = app.get_render_state();
-    assert!(render_state.current_word.is_some());
-    assert_eq!(render_state.progress, (0, 10));
+    // Check initial state
+    assert_eq!(app.get_current_word(), Some("one"));
 
     app.advance_reading();
-    let render_state = app.get_render_state();
-    assert_eq!(render_state.progress, (1, 10));
+    assert_eq!(app.get_current_word(), Some("two"));
 }
 
 #[test]
@@ -101,23 +101,19 @@ fn tui_workflow_reading_advance() {
     let mut app = App::new();
     app.start_reading(content, 300);
 
-    let initial_state = app.get_render_state();
-    assert_eq!(initial_state.current_word, Some("word1".to_string()));
+    // Check initial state
+    assert_eq!(app.get_current_word(), Some("word1"));
 
     let advanced = app.advance_reading();
     assert!(advanced);
-
-    let after_advance = app.get_render_state();
-    assert_eq!(after_advance.current_word, Some("word2".to_string()));
+    assert_eq!(app.get_current_word(), Some("word2"));
 
     app.advance_reading();
     app.advance_reading();
-    let third_advance = app.get_render_state();
-    assert_eq!(third_advance.current_word, Some("word4".to_string()));
+    assert_eq!(app.get_current_word(), Some("word4"));
 
     app.advance_reading();
-    let final_advance = app.get_render_state();
-    assert_eq!(final_advance.current_word, Some("word5".to_string()));
+    assert_eq!(app.get_current_word(), Some("word5"));
 
     let no_more = app.advance_reading();
     assert!(!no_more);

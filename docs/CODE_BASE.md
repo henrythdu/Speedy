@@ -523,6 +523,254 @@ pub fn detect_sentence_boundary(prev_token: Option<&Token>, current_word: &str) 
 
 ---
 
+#### `src/rendering/mod.rs` (12 lines)
+**Purpose:** Module exports for rendering
+**Status:** ✅ KEEP - Essential
+
+**What it does:**
+- Exports capability, font, kitty, renderer, viewport modules
+- Re-exports key types for external use
+
+**PRD Alignment:**
+- ✅ Section 4.2 - Dual-Engine Architecture
+- ✅ Section 6.4 - Pluggable Graphics Backend
+
+---
+
+#### `src/rendering/capability.rs` (162 lines)
+**Purpose:** Terminal capability detection for graphics protocol support
+**Status:** ✅ KEEP - Essential
+
+**What it does:**
+- `GraphicsCapability` enum - Currently only Kitty variant
+- `CapabilityDetector` - Detects Kitty Graphics Protocol via environment variables
+- **EXITS with panic** if Kitty not detected (NO TUI fallback implemented)
+
+**Detection Logic:**
+```rust
+// Checks $TERM for "kitty" or "xterm-kitty"
+// Checks $TERM_PROGRAM for "kitty"
+// Checks $KONSOLE_VERSION for Konsole support
+// PANICS if none found
+```
+
+**PRD Alignment:**
+- ✅ Section 9.1 - Requires Kitty-compatible terminal
+- ⚠️ Section 4.2 says TUI fallback should exist - NOT IMPLEMENTED
+
+**Issue:** No fallback to TUI-only mode if Kitty protocol unavailable
+
+---
+
+#### `src/rendering/font.rs` (140 lines)
+**Purpose:** Font loading and metrics calculation
+**Status:** ✅ KEEP - Essential
+
+**What it does:**
+- `get_font()` - Returns embedded JetBrains Mono font
+- `calculate_char_width()` - Pixel width of single character
+- `calculate_string_width()` - Pixel width of entire string
+- `get_font_metrics()` - Vertical metrics (ascent, descent, height)
+
+**Key Calculation - Character Width:**
+```rust
+pub fn calculate_char_width(font: &FontRef, c: char, font_size: f32) -> f32 {
+    let scale = PxScale::from(font_size);
+    let scaled_font = font.as_scaled(scale);
+    let glyph_id = font.glyph_id(c);
+    scaled_font.h_advance(glyph_id)  // Returns horizontal advance in pixels
+}
+```
+- JetBrains Mono is monospace → all chars same width (~14.3px at 24pt)
+- Used for OVP anchoring calculations
+
+**Key Calculation - String Width:**
+```rust
+pub fn calculate_string_width(font: &FontRef, text: &str, font_size: f32) -> f32 {
+    text.chars().map(|c| calculate_char_width(font, c, font_size)).sum()
+}
+```
+- Sums all character widths
+- Used for `W_prefix` in OVP formula (kitty.rs:116-117)
+
+**PRD Alignment:**
+- ✅ Section 3.1 - Sub-pixel precision requires font metrics
+- ✅ Section 6.3 - Bundled JetBrains Mono via include_bytes!
+
+---
+
+#### `src/rendering/renderer.rs` (160 lines)
+**Purpose:** RsvpRenderer trait definition and RendererError enum
+**Status:** ✅ KEEP - Essential
+
+**What it does:**
+- `RendererError` enum - 5 error variants
+- `RsvpRenderer` trait - Pluggable backend interface
+- Methods: initialize(), render_word(), clear(), supports_subpixel_ovp(), cleanup()
+
+**Design Doc Alignment:**
+- ✅ Section 2.2 - Pluggable Graphics Backend (exact trait signature)
+- ✅ Section 6.4 - RsvpRenderer trait enables future backends (Sixel, iTerm2)
+
+---
+
+#### `src/rendering/kitty.rs` (778 lines)
+**Purpose:** Kitty Graphics Protocol renderer implementation
+**Status:** ✅ KEEP - Essential, BUG FIXED
+
+**What it does:**
+- Implements RsvpRenderer trait for pixel-perfect rendering
+- Rasterizes text with ab_glyph and imageproc
+- Sends Kitty Graphics Protocol escape sequences
+
+**Key Calculations (CRITICAL FOR OVP):**
+
+**1. OVP Anchor X Position (kitty.rs:103-127):**
+```rust
+fn calculate_start_x(&self, word: &str, anchor_position: usize) -> f32 {
+    let prefix_width = calculate_string_width(font, &prefix, self.font_size);
+    let anchor_half_width = anchor_width / 2.0;
+    let center_x = self.reading_zone_center.0 as f32;
+    center_x - (prefix_width + anchor_half_width)
+}
+```
+**Formula:** `StartX = CenterX - (W_prefix + W_anchor/2)`
+
+**Example for "hello" with anchor at position 1 ('e'):**
+- Canvas center X = 960px (1920px terminal)
+- W_prefix (width of "h") = 14.3px
+- W_anchor (width of 'e') = 14.3px
+- W_anchor_half = 7.15px
+- **StartX = 960 - (14.3 + 7.15) = 938.55px**
+- Anchor 'e' center = 938.55 + 14.3 + 7.15 = 960px ✓
+
+**2. Vertical Positioning (kitty.rs:342-352):**
+```rust
+let pos_y = reading_zone_center_y
+    .saturating_sub((text_height / 2.0) as u32)
+    .saturating_sub(text_descent.abs() as u32);
+```
+**Formula:** `pos_y = center_y - text_height/2 - |descent|`
+
+**3. Kitty Protocol Transmission (kitty.rs:216-259):**
+```rust
+let command = format!(
+    "\x1b_Ga=T,f=32,s={},v={},i={},x={},y={},m=0;{}{}",
+    apc_start, width, height, image_id, pos_x, pos_y, base64_data, apc_end
+);
+```
+- Format: `ESC _ G a=T,f=32,s=<w>,v=<h>,i=<id>,x=<x>,y=<y>,m=0;<base64> ESC \`
+- f=32: 32-bit RGBA
+- m=0: Final chunk (m=1 for more chunks if >4096 bytes)
+
+**4. Theme Colors (kitty.rs:178-179):**
+- Text: `Rgba([169, 177, 214, 255])` = #A9B1D6 (Light Blue) per PRD
+- Anchor: `Rgba([247, 118, 142, 255])` = #F7768E (Coral Red) per PRD
+
+**PRD Alignment:**
+- ✅ Section 3.1 - OVP anchor positioning
+- ✅ Section 4.1 - Theme colors
+- ✅ Section 4.3 - Reading zone calculations (85%/42%)
+
+---
+
+#### `src/rendering/viewport.rs` (351 lines)
+**Purpose:** Terminal dimension queries and coordinate conversion
+**Status:** ✅ KEEP - Essential
+
+**What it does:**
+- `TerminalDimensions` - pixel_size, cell_count, cell_size
+- `Viewport` - Manages dimensions
+- `query_dimensions()` - Queries terminal via CSI escape sequences
+- `cell_to_pixel()` - Converts cell index to pixel position
+- `rect_to_pixel()` - Converts cell rectangle to pixel rectangle
+
+**CSI Query Implementation:**
+```rust
+fn query_pixel_size(&self) -> Option<(u32, u32)> {
+    print!("\x1b[14t");  // CSI 14t: Query text area size in pixels
+    // Response: ESC [ 4 ; height ; width t
+}
+```
+
+**Key Calculation - Cell Size:**
+```rust
+let cell_width = pixel_width / num_cols;   // e.g., 1920/80 = 24px
+let cell_height = pixel_height / num_rows; // e.g., 1080/24 = 45px
+```
+
+**PRD Alignment:**
+- ✅ Section 4.2 - Dual-Engine Architecture
+- ✅ Design Doc Section 8.1 - Query ioctl(TIOCGWINSZ)
+
+---
+
+### Rendering Module Issues Found
+
+**1. CRITICAL: Viewport Dimensions NOT Checked Every Iteration**
+- `query_dimensions()` called only ONCE at startup (terminal.rs:45)
+- **NO SIGWINCH signal handling**
+- **NO resize event detection in loop**
+- **Impact:** Resizing terminal while reading causes words to render at wrong positions
+
+**2. FIXED: center_y Calculation Bug**
+- **OLD (wrong):** `center_y = pixel_height × 0.42` (using full terminal height)
+- **NEW (correct):** `center_y = (pixel_height × 0.85) × 0.42` (using reading zone height)
+- **Impact:** Words were appearing ~67px lower than designed
+
+**3. Fixed: Unused Variable Warnings**
+- viewport.rs:111-112: `cell_width`, `cell_height` (prefixed with underscore)
+- kitty.rs:593, 602: `renderer` test variables (prefixed with underscore)
+
+---
+
+### Terminal Coordinate System
+
+```
+Origin (0,0) = TOP-LEFT corner
+X axis: increases RIGHT →
+Y axis: increases DOWN ↓
+
+(0,0) ←─────────────────→ (1920, 0)
+   │    READING ZONE (85%)    │
+   │                          │
+   │    Word positioned at    │
+   │    X=938, Y=386          │
+   │                          │
+(0,918) ←────────────────→ (1920,918)
+   │    COMMAND ZONE (15%)    │
+   └──────────────────────────┘
+```
+
+---
+
+### Rendering Calculations Summary
+
+| Calculation | Formula | Example | PRD Ref |
+|------------|---------|---------|---------|
+| **Cell size** | `pixel/cells` | 1920/80 = 24px | - |
+| **Font size** | `cell_height × 5.0` | 45 × 5 = 225px | - |
+| **Reading zone** | `height × 0.85` | 1080 × 0.85 = 918px | Section 4.3 |
+| **Vertical center** | `zone_height × 0.42` | 918 × 0.42 = 386px | Section 4.3 |
+| **Anchor X** | `center - (prefix + anchor/2)` | 960 - (14.3 + 7.15) = 938.55 | Section 3.1 |
+| **Text Y** | `center - height/2 - descent` | 386 - 117.5 - 47 = 222 | - |
+
+---
+
+### Rendering Module Actions
+
+**Completed:**
+1. ✅ Fixed center_y calculation bug (67px offset corrected)
+2. ✅ Fixed unused variable warnings
+3. ✅ Updated integration tests to match current API
+
+**Future Work:**
+- Add SIGWINCH signal handling for terminal resize
+- Query dimensions on every frame or detect resize events
+- Implement TUI fallback mode (PRD Section 4.2)
+- Add ghost word rendering with 15% opacity
+
+---
 #### `src/app/app.rs` (~480 lines, reduced from 553)
 **Purpose:** Main application logic
 **Status:** ✅ KEEP - Essential, simplified

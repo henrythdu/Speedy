@@ -45,7 +45,10 @@ impl TuiManager {
         let _ = renderer.viewport().query_dimensions();
         if let Some(dims) = renderer.viewport().get_dimensions() {
             let center_x = dims.pixel_size.0 / 2;
-            let center_y = (dims.pixel_size.1 as f32 * 0.42) as u32; // 42% of screen height per PRD
+            // Reading zone is 85% of terminal (PRD Section 4.3)
+            // Vertical center is 42% of reading zone height
+            let reading_zone_height = (dims.pixel_size.1 as f32 * 0.85) as u32;
+            let center_y = (reading_zone_height as f32 * 0.42) as u32;
             renderer.set_reading_zone_center(center_x, center_y);
 
             // Calculate font size for 5-line height (using cell height * 5)

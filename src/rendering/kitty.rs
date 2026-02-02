@@ -590,7 +590,7 @@ mod tests {
 
     #[test]
     fn test_delete_all_graphics_format() {
-        let renderer = KittyGraphicsRenderer::new();
+        let _renderer = KittyGraphicsRenderer::new();
         // Just verify the command string is formatted correctly
         // We can't actually test I/O in unit tests
         let expected = "\x1b_Ga=d,d=A\x1b\\";
@@ -599,7 +599,7 @@ mod tests {
 
     #[test]
     fn test_transmit_graphics_format() {
-        let renderer = KittyGraphicsRenderer::new();
+        let _renderer = KittyGraphicsRenderer::new();
         // Just verify the format string logic
         let image_id = 42u32;
         let width = 100u32;

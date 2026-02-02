@@ -108,8 +108,8 @@ impl Viewport {
 
         // If pixel query succeeded, calculate cell dimensions from actual data
         if let Some((width, height)) = pixel_size {
-            let cell_width = width as f32 / size.0 as f32;
-            let cell_height = height as f32 / size.1 as f32;
+            let _cell_width = width as f32 / size.0 as f32;
+            let _cell_height = height as f32 / size.1 as f32;
 
             let dims = TerminalDimensions::new(width, height, size.0, size.1);
             self.dimensions = Some(dims);
