@@ -212,15 +212,34 @@ impl TuiManager {
                 Ok(false) => {
                     // Only auto-advance in Reading mode, not Paused
                     if app.mode() == AppMode::Reading {
-                        if !app.advance_reading() {
+                        let idx_before = app.reading_state.as_ref().map(|s| s.current_index).unwrap_or(usize::MAX);
+                        
+                        // Advance and skip empty tokens for smooth reading
+                        let mut advanced = app.advance_reading();
+                        let mut skip_count = 0;
+                        
+                        // Keep advancing past empty/newline tokens
+                        while advanced {
+                            if let Some(word) = app.get_current_word() {
+                                if word.trim().is_empty() {
+                                    advanced = app.advance_reading();
+                                    skip_count += 1;
+                                } else {
+                                    break;
+                                }
+                            } else {
+                                break;
+                            }
+                        }
+                        
+                        if !advanced && skip_count == 0 {
                             // Reached end of content, pause auto-advancement
                             app.set_mode(AppMode::Paused);
                         } else {
-                            let idx_before = app.reading_state.as_ref().map(|s| s.current_index).unwrap_or(usize::MAX);
                             let idx_after = app.reading_state.as_ref().map(|s| s.current_index).unwrap_or(usize::MAX);
                             self.advance_counter += 1;
-                            writeln!(self.log_file, "ADVANCE #{}: {} -> {} (last_render_idx={})", 
-                                self.advance_counter, idx_before, idx_after, self.last_render_idx).ok();
+                            writeln!(self.log_file, "ADVANCE #{}: {} -> {} (skipped={})", 
+                                self.advance_counter, idx_before, idx_after, skip_count).ok();
                             self.log_file.flush().ok();
                         }
                     }
@@ -284,20 +303,26 @@ impl TuiManager {
         self.last_render_idx = idx;
         self.advance_counter = 0;
         if let Some(word) = app.get_current_word() {
-            let anchor_pos = crate::reading::calculate_anchor_position(word);
-            let id_before = self.kitty_renderer.current_image_id;
-            
-            // Use render_word which only transmits word image (not full canvas)
-            // The word has transparent background so Ratatui background shows through
-            let result = RsvpRenderer::render_word(&mut self.kitty_renderer, word, anchor_pos);
-            let id_after = self.kitty_renderer.current_image_id;
-            
-            writeln!(self.log_file, "RENDER: idx={} word='{}' id={}->{} result={:?}", 
-                idx, word, id_before, id_after, result.is_ok()).ok();
-            self.log_file.flush().ok();
-            
-            if let Err(e) = result {
-                eprintln!("Render error: {}", e);
+            // Skip rendering whitespace-only tokens (newlines) - auto-skip happens in event loop
+            if word.trim().is_empty() {
+                writeln!(self.log_file, "RENDER: idx={} word='<NEWLINE>' skipped", idx).ok();
+                self.log_file.flush().ok();
+            } else {
+                let anchor_pos = crate::reading::calculate_anchor_position(&word);
+                let id_before = self.kitty_renderer.current_image_id;
+                
+                // Use render_word which only transmits word image (not full canvas)
+                // The word has transparent background so Ratatui background shows through
+                let result = RsvpRenderer::render_word(&mut self.kitty_renderer, &word, anchor_pos);
+                let id_after = self.kitty_renderer.current_image_id;
+                
+                writeln!(self.log_file, "RENDER: idx={} word='{}' id={}->{} result={:?}", 
+                    idx, word, id_before, id_after, result.is_ok()).ok();
+                self.log_file.flush().ok();
+                
+                if let Err(e) = result {
+                    eprintln!("Render error: {}", e);
+                }
             }
         } else {
             writeln!(self.log_file, "RENDER: idx={} word=None", idx).ok();

@@ -131,12 +131,18 @@ impl App {
 
     /// Get current word for rendering
     ///
-    /// Returns the word at current reading position, or None if no reading state.
-    pub fn get_current_word(&self) -> Option<&str> {
+    /// Returns the word at current reading position with punctuation attached, or None if no reading state.
+    pub fn get_current_word(&self) -> Option<String> {
         self.reading_state
             .as_ref()
             .and_then(|s| s.tokens.get(s.current_index))
-            .map(|t| t.text.as_str())
+            .map(|t| {
+                let mut word = t.text.clone();
+                for p in &t.punctuation {
+                    word.push(*p);
+                }
+                word
+            })
     }
 
     pub fn mode(&self) -> AppMode {
@@ -298,7 +304,7 @@ mod tests {
         };
         app.apply_loaded_document(doc);
 
-        assert_eq!(app.get_current_word(), Some("hello"));
+        assert_eq!(app.get_current_word(), Some("hello".to_string()));
     }
 
     #[test]
