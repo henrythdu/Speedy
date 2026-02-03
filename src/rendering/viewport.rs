@@ -205,6 +205,22 @@ impl Viewport {
             .map(|d| d.rect_to_pixel(x, y, width, height))
     }
 
+    /// Convert pixel coordinates to cell coordinates (for cursor positioning)
+    ///
+    /// # Arguments
+    /// * `x` - Pixel x coordinate
+    /// * `y` - Pixel y coordinate
+    ///
+    /// # Returns
+    /// (col, row) cell coordinates if dimensions available, None otherwise
+    pub fn pixel_to_cell(&self, x: u32, y: u32) -> Option<(u16, u16)> {
+        self.dimensions.map(|d| {
+            let col = (x as f32 / d.cell_size.0).floor() as u16;
+            let row = (y as f32 / d.cell_size.1).floor() as u16;
+            (col, row)
+        })
+    }
+
     /// Clear stored dimensions
     pub fn clear(&mut self) {
         self.dimensions = None;
