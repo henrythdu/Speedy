@@ -80,6 +80,11 @@ pub fn detect_sentence_boundary(prev_token: Option<&Token>, current_word: &str) 
         return false;
     }
 
+    // Check for citations like [5] after period
+    if has_terminator && current_word.starts_with('[') {
+        return false;
+    }
+
     // Reconstruct full word with punctuation for abbreviation/decimal checking
     let mut full_prev_word = prev.text.clone();
     for &p in &prev.punctuation {
@@ -126,7 +131,7 @@ pub fn tokenize_text(text: &str) -> Vec<Token> {
 
         // Create newline token after each line (except if line was empty/whitespace only)
         let prev_token = tokens.last().cloned();
-        let is_start = detect_sentence_boundary(prev_token.as_ref(), "");
+        let is_start = true;  // PRD Section 3.3: Newlines indicate sentence boundaries
         tokens.push(Token {
             text: String::new(),
             punctuation: vec!['\n'],
@@ -283,6 +288,106 @@ mod tests {
         assert_eq!(tokens.len(), 1);
         assert_eq!(tokens[0].text, "hello");
         assert_eq!(tokens[0].punctuation, vec![]);
+    }
+
+
+    #[test]
+    fn test_clipboard_text_rendering_sequence() {
+        // Simulate the user's clipboard text
+        let text = "Pastas are divided into two broad categories: dried (Italian: pasta secca) and fresh (Italian: pasta fresca). Most dried pasta is produced commercially via an extrusion process, although it can be produced at home. Fresh pasta is traditionally produced by hand, sometimes with the aid of simple machines.[5] Fresh pastas available in grocery stores are produced commercially by large-scale machines.\n\nBoth dried and fresh pastas come in a number of shapes and varieties, with 310 specific forms known by over 1,300 documented names.[6] In Italy, the names of specific pasta shapes or types often vary by locale. For example, the pasta form cavatelli is known by 28 different names depending upon the town and region. Common forms of pasta include long and short shapes, tubes, flat shapes or sheets, miniature shapes for soup, those meant to be filled or stuffed, and specialty or decorative shapes";
+        
+        let tokens = tokenize_text(text);
+        
+        // Print first 30 tokens to see the sequence
+        println!("\nFirst 30 tokens:");
+        for (i, token) in tokens.iter().take(30).enumerate() {
+            let text_display = if token.text.is_empty() { "<EMPTY>".to_string() } else { token.text.clone() };
+            println!("  {}: '{}' [punct={:?}, sent_start={}]", 
+                i, text_display, token.punctuation, token.is_sentence_start);
+        }
+        
+        // Count empty tokens
+        let empty_count = tokens.iter().filter(|t| t.text.is_empty()).count();
+        println!("\nTotal tokens: {}", tokens.len());
+        println!("Empty (newline) tokens: {}", empty_count);
+        
+        // Show what words would be rendered (non-empty tokens)
+        println!("\nWords that would be rendered (first 20):");
+        let rendered_words: Vec<&str> = tokens.iter()
+            .filter(|t| !t.text.is_empty())
+            .map(|t| t.text.as_str())
+            .take(20)
+            .collect();
+        println!("  {}", rendered_words.join(" "));
+    }
+
+
+    #[test]
+    fn test_trace_rendering_simulation() {
+        // Simulate exactly what happens in the event loop
+        let text = "Pastas are divided into two broad categories: dried (Italian: pasta secca) and fresh (Italian: pasta fresca). Most dried pasta is produced commercially via an extrusion process, although it can be produced at home. Fresh pasta is traditionally produced by hand, sometimes with the aid of simple machines.[5] Fresh pastas available in grocery stores are produced commercially by large-scale machines.\n\nBoth dried and fresh pastas come in a number of shapes and varieties, with 310 specific forms known by over 1,300 documented names.[6] In Italy, the names of specific pasta shapes or types often vary by locale. For example, the pasta form cavatelli is known by 28 different names depending upon the town and region. Common forms of pasta include long and short shapes, tubes, flat shapes or sheets, miniature shapes for soup, those meant to be filled or stuffed, and specialty or decorative shapes";
+        
+        let tokens = tokenize_text(text);
+        
+        // Find indices of words that appear in the "rendered" output
+        let rendered_words = vec!["Pastas", "dried", "pasta", "Both", "example", "forms", "of", "include", "long", "and", "short", "shapes", "tubes", "flat", "shape", "or", "sheet", "miniature", "shapes", "for", "soup", "those", "meant", "to", "be", "filled", "or", "stuffed", "and", "speciality", "or", "decorative", "shapes"];
+        
+        println!("\n=== Searching for rendered words in token sequence ===");
+        for search_word in &rendered_words {
+            let positions: Vec<usize> = tokens.iter()
+                .enumerate()
+                .filter(|(_, t)| t.text == *search_word)
+                .map(|(i, _)| i)
+                .collect();
+            
+            if !positions.is_empty() {
+                println!("  '{}' found at indices: {:?}", search_word, positions);
+            }
+        }
+        
+        // Simulate 10 rendering iterations
+        println!("\n=== Simulating first 10 render cycles ===");
+        let mut current_index = 0;
+        for cycle in 0..10 {
+            if current_index >= tokens.len() {
+                break;
+            }
+            
+            let token = &tokens[current_index];
+            let display = if token.text.is_empty() { 
+                "<NEWLINE>".to_string() 
+            } else { 
+                token.text.clone() 
+            };
+            
+            println!("  Cycle {}: index={}, word='{}', empty={}", 
+                cycle, current_index, display, token.text.is_empty());
+            
+            current_index += 1;
+        }
+    }
+
+
+    #[test]
+    fn test_word_characteristics() {
+        let text = "Pastas are divided into two broad categories: dried (Italian: pasta secca) and fresh (Italian: pasta fresca).";
+        let tokens = tokenize_text(text);
+        
+        println!("\n=== Analyzing word characteristics ===");
+        for (i, token) in tokens.iter().enumerate() {
+            if token.text.is_empty() {
+                continue;
+            }
+            
+            let has_punctuation_in_text = token.text.chars().any(|c| !c.is_alphanumeric());
+            let starts_with_paren = token.text.starts_with('(');
+            let ends_with_paren = token.text.ends_with(')');
+            let ends_with_colon = token.text.ends_with(':');
+            
+            println!("  {:2}: '{:15}' len={:2} punct_in_text={} starts_paren={} ends_paren={} ends_colon={}",
+                i, token.text, token.text.len(), 
+                has_punctuation_in_text, starts_with_paren, ends_with_paren, ends_with_colon);
+        }
     }
 
     // Speedy-ui3: Tokenization Update tests
@@ -469,5 +574,18 @@ mod tests {
         assert!(!tokens[3].is_sentence_start); // 2.54 is decimal
         assert!(!tokens[4].is_sentence_start); // cm. is abbreviation
         assert!(tokens[5].is_sentence_start); // Next starts new sentence
+    }
+}
+
+#[test]
+fn debug_tokenize_pasta_text() {
+    let text = "Pastas are divided into two broad categories: dried (Italian: pasta secca) and fresh (Italian: pasta fresca).";
+    let tokens = tokenize_text(text);
+    eprintln!("=== Tokenization Debug ===");
+    eprintln!("Text: {}", text);
+    eprintln!("Token count: {}", tokens.len());
+    for (i, token) in tokens.iter().enumerate() {
+        eprintln!("Token {}: text='{}' punct={:?} is_sentence_start={}", 
+            i, token.text, token.punctuation, token.is_sentence_start);
     }
 }

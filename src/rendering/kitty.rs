@@ -20,7 +20,7 @@ pub struct KittyGraphicsRenderer {
     /// Font metrics for positioning calculations
     font_metrics: Option<FontMetrics>,
     /// Current image ID for protocol (incremented per word)
-    current_image_id: u32,
+    pub current_image_id: u32,
 }
 
 impl Default for KittyGraphicsRenderer {
@@ -220,13 +220,14 @@ impl KittyGraphicsRenderer {
         // x and y specify pixel position (top-left corner of image)
         // z=1 ensures image renders above terminal text layer
         // C=1 prevents cursor movement after graphics placement
+        // q=1 suppresses acknowledgment responses (_Gi=<id>;OK) from Kitty
         let apc_start = "\x1b_G";
         let apc_end = "\x1b\\";
 
         // If data fits in single transmission
         if base64_data.len() <= 4096 {
             let command = format!(
-                "{}a=T,f=32,s={},v={},i={},x={},y={},z=1,C=1,m=0;{}{}",
+                "{}a=T,f=32,s={},v={},i={},x={},y={},z=1,C=1,m=0,q=1;{}{}",
                 apc_start, width, height, image_id, pos_x, pos_y, base64_data, apc_end
             );
             print!("{}", command);
@@ -242,7 +243,7 @@ impl KittyGraphicsRenderer {
             for (i, chunk) in chunks.iter().enumerate() {
                 let more = if i == chunks.len() - 1 { 0 } else { 1 };
                 let command = format!(
-                    "{}a=T,f=32,s={},v={},i={},x={},y={},z=1,C=1,m={};{}{}",
+                    "{}a=T,f=32,s={},v={},i={},x={},y={},z=1,C=1,m={},q=1;{}{}",
                     apc_start, width, height, image_id, pos_x, pos_y, more, chunk, apc_end
                 );
                 print!("{}", command);
@@ -745,5 +746,66 @@ mod tests {
         // With proper initialization, calculate_start_x should work
         let start_x = renderer.calculate_start_x("hello", 1); // Anchor on 'e'
         assert!(start_x > 0.0, "Start X should be positive");
+    }
+
+
+    #[test]
+    fn test_render_words_with_special_characters() {
+        let mut renderer = KittyGraphicsRenderer::new();
+        renderer.initialize().unwrap();
+
+        let dims = TerminalDimensions::new(960, 540, 80, 24);
+        renderer.viewport.set_dimensions(dims);
+
+        // Test words that appear in the user's text
+        let test_words = vec![
+            ("Pastas", true, "normal word"),
+            ("categories:", true, "word with colon"),
+            ("(Italian:", true, "word with paren and colon"),
+            ("secca)", true, "word with paren"),
+            ("fresca).", true, "word with paren and period"),
+        ];
+
+        for (word, should_succeed, description) in test_words {
+            let result = renderer.render_word(word, 0);
+            println!("  '{}' ({}): {:?}", word, description, result);
+            assert!(result.is_ok() == should_succeed, 
+                "Failed to render '{}': {:?}", word, result);
+        }
+    }
+
+
+    #[test]
+    fn test_id_sequence_with_empty_tokens() {
+        let mut renderer = KittyGraphicsRenderer::new();
+        renderer.initialize().unwrap();
+
+        let dims = TerminalDimensions::new(960, 540, 80, 24);
+        renderer.viewport.set_dimensions(dims);
+
+        // Simulate the token sequence
+        let tokens = vec![
+            ("Pastas", false),
+            ("", true),  // empty
+            ("are", false),
+            ("", true),  // empty
+            ("divided", false),
+        ];
+
+        println!("\n=== Simulating render sequence ===");
+        for (i, (word, is_empty)) in tokens.iter().enumerate() {
+            let id_before = renderer.current_image_id;
+            
+            // Clear previous
+            let _ = renderer.clear();
+            
+            // Render current
+            let result = renderer.render_word(word, 0);
+            
+            let id_after = renderer.current_image_id;
+            
+            println!("  Token {}: '{}' [empty={}] -> ID: {} -> {} [rendered={}]", 
+                i, word, is_empty, id_before, id_after, result.is_ok() && !word.is_empty());
+        }
     }
 }

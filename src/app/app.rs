@@ -113,16 +113,11 @@ impl App {
         }
     }
 
-    fn apply_loaded_document(&mut self, doc: LoadedDocument) {
+    pub fn apply_loaded_document(&mut self, doc: LoadedDocument) {
         self.reading_state = Some(ReadingState::new_with_default_config(
             doc.tokens, 300, // Default WPM per PRD Section 3.2
         ));
         self.mode = AppMode::Reading;
-        eprintln!(
-            "Loaded: {} ({} words)",
-            doc.source,
-            self.reading_state.as_ref().map_or(0, |s| s.tokens.len())
-        );
     }
 
     pub fn resume_reading(&mut self) -> Result<(), String> {
@@ -539,5 +534,23 @@ mod tests {
         // No reading state initialized
         let advanced = app.advance_reading();
         assert!(!advanced);
+    }
+
+    #[test]
+    fn test_advance_reading_stays_false_at_end() {
+        let mut app = App::new();
+        app.start_reading("hello", 300); // Single word
+        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
+        assert_eq!(app.mode, AppMode::Reading);
+
+        // First call returns false at end
+        let advanced = app.advance_reading();
+        assert!(!advanced); 
+        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
+        
+        // Second call also returns false (stays at end)
+        let advanced = app.advance_reading();
+        assert!(!advanced); 
+        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
     }
 }

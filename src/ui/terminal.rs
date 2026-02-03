@@ -17,13 +17,17 @@ use ratatui::{
     widgets::Block,
     Terminal,
 };
-use std::io::{self, Stdout};
+use std::fs::OpenOptions;
+use std::io::{self, Stdout, Write};
 use std::time::{Duration, Instant};
 
 pub struct TuiManager {
     terminal: Terminal<CrosstermBackend<Stdout>>,
     command_buffer: String,
     kitty_renderer: KittyGraphicsRenderer,
+    log_file: std::fs::File,
+    last_render_idx: usize,
+    advance_counter: u32,
 }
 
 impl TuiManager {
@@ -48,10 +52,20 @@ impl TuiManager {
             renderer.calculate_font_size_from_cell_height(dims.cell_size.1);
         }
 
+        let log_file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open("/tmp/speedy_debug.log")
+            .expect("Failed to create log file");
+
         Ok(TuiManager {
             terminal,
             command_buffer: String::new(),
             kitty_renderer: renderer,
+            log_file,
+            last_render_idx: usize::MAX,
+            advance_counter: 0,
         })
     }
 
@@ -198,7 +212,17 @@ impl TuiManager {
                 Ok(false) => {
                     // Only auto-advance in Reading mode, not Paused
                     if app.mode() == AppMode::Reading {
-                        app.advance_reading();
+                        if !app.advance_reading() {
+                            // Reached end of content, pause auto-advancement
+                            app.set_mode(AppMode::Paused);
+                        } else {
+                            let idx_before = app.reading_state.as_ref().map(|s| s.current_index).unwrap_or(usize::MAX);
+                            let idx_after = app.reading_state.as_ref().map(|s| s.current_index).unwrap_or(usize::MAX);
+                            self.advance_counter += 1;
+                            writeln!(self.log_file, "ADVANCE #{}: {} -> {} (last_render_idx={})", 
+                                self.advance_counter, idx_before, idx_after, self.last_render_idx).ok();
+                            self.log_file.flush().ok();
+                        }
                     }
                 }
                 Err(e) => {
@@ -241,6 +265,8 @@ impl TuiManager {
 
         // Step 2: Clear previous word from Kitty Graphics Protocol
         // This must happen BEFORE rendering the new word to prevent stacking
+        let clear_id = self.kitty_renderer.current_image_id.saturating_sub(1);
+        writeln!(self.log_file, "CLEAR: image_id={}", clear_id).ok();
         if let Err(e) = RsvpRenderer::clear(&mut self.kitty_renderer) {
             eprintln!("Warning: Failed to clear previous word: {}", e);
         }
@@ -248,14 +274,34 @@ impl TuiManager {
         // Step 3: Render word via Kitty Graphics Protocol ON TOP of Ratatui background
         // Only word is transmitted (transparent background), not a full canvas
         // This creates a smooth RSVP experience where only the word changes at WPM rate
+        let idx = app.reading_state.as_ref().map(|s| s.current_index).unwrap_or(usize::MAX);
+        
+        // Log if we skipped any indices
+        if self.last_render_idx != usize::MAX && idx > self.last_render_idx + 1 {
+            writeln!(self.log_file, "SKIP DETECTED: last_render_idx={} current_idx={} advances_since_render={}", 
+                self.last_render_idx, idx, self.advance_counter).ok();
+        }
+        self.last_render_idx = idx;
+        self.advance_counter = 0;
         if let Some(word) = app.get_current_word() {
             let anchor_pos = crate::reading::calculate_anchor_position(word);
-
+            let id_before = self.kitty_renderer.current_image_id;
+            
             // Use render_word which only transmits word image (not full canvas)
             // The word has transparent background so Ratatui background shows through
-            if let Err(e) = RsvpRenderer::render_word(&mut self.kitty_renderer, word, anchor_pos) {
+            let result = RsvpRenderer::render_word(&mut self.kitty_renderer, word, anchor_pos);
+            let id_after = self.kitty_renderer.current_image_id;
+            
+            writeln!(self.log_file, "RENDER: idx={} word='{}' id={}->{} result={:?}", 
+                idx, word, id_before, id_after, result.is_ok()).ok();
+            self.log_file.flush().ok();
+            
+            if let Err(e) = result {
                 eprintln!("Render error: {}", e);
             }
+        } else {
+            writeln!(self.log_file, "RENDER: idx={} word=None", idx).ok();
+            self.log_file.flush().ok();
         }
 
         Ok(())
