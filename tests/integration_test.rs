@@ -6,9 +6,27 @@ use speedy::reading::timing::{tokenize_text, wpm_to_milliseconds};
 use std::fs::{self, File};
 use std::io::{Read, Write};
 
+// RAII guard to ensure test file cleanup even on panic
+struct TestFileGuard<'a> {
+    path: &'a str,
+}
+
+impl<'a> TestFileGuard<'a> {
+    fn new(path: &'a str) -> Self {
+        Self { path }
+    }
+}
+
+impl<'a> Drop for TestFileGuard<'a> {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(self.path);
+    }
+}
+
 #[test]
 fn end_to_end_reading() {
     let test_file = "test_e2e.txt";
+    let _guard = TestFileGuard::new(test_file); // Ensures cleanup on drop
     let content = "Hello world! This is a test of the RSVP reader.";
 
     let mut file = File::create(test_file).unwrap();
@@ -34,8 +52,7 @@ fn end_to_end_reading() {
 
     state.adjust_wpm(50);
     assert_eq!(state.wpm, 350);
-
-    fs::remove_file(test_file).unwrap();
+    // File cleanup handled by guard
 }
 
 #[test]
@@ -57,10 +74,10 @@ fn tui_workflow_reading_progress() {
     app.start_reading(content, 300);
 
     // Check initial state
-    assert_eq!(app.get_current_word(), Some("one"));
+    assert_eq!(app.get_current_word(), Some("one".to_string()));
 
     app.advance_reading();
-    assert_eq!(app.get_current_word(), Some("two"));
+    assert_eq!(app.get_current_word(), Some("two".to_string()));
 }
 
 #[test]
@@ -102,18 +119,18 @@ fn tui_workflow_reading_advance() {
     app.start_reading(content, 300);
 
     // Check initial state
-    assert_eq!(app.get_current_word(), Some("word1"));
+    assert_eq!(app.get_current_word(), Some("word1".to_string()));
 
     let advanced = app.advance_reading();
     assert!(advanced);
-    assert_eq!(app.get_current_word(), Some("word2"));
+    assert_eq!(app.get_current_word(), Some("word2".to_string()));
 
     app.advance_reading();
     app.advance_reading();
-    assert_eq!(app.get_current_word(), Some("word4"));
+    assert_eq!(app.get_current_word(), Some("word4".to_string()));
 
     app.advance_reading();
-    assert_eq!(app.get_current_word(), Some("word5"));
+    assert_eq!(app.get_current_word(), Some("word5".to_string()));
 
     let no_more = app.advance_reading();
     assert!(!no_more);

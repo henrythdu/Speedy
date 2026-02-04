@@ -132,7 +132,7 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::widgets::{Block, Borders, Clear};
 use ratatui::Frame;
 
-pub fn render_command_deck(frame: &mut Frame, area: Rect, mode: AppMode, command_buffer: &str) {
+pub fn render_command_deck(frame: &mut Frame, area: Rect, mode: AppMode, command_buffer: &str, error_message: Option<&str>) {
     // Clear the command area first
     frame.render_widget(Clear, area);
 
@@ -156,10 +156,19 @@ pub fn render_command_deck(frame: &mut Frame, area: Rect, mode: AppMode, command
         AppMode::Quit => " QUIT ",
     };
 
-    let input_text = if command_buffer.is_empty() {
+    let input_text = if let Some(error) = error_message {
+        // Show error in red
+        format!("{} ERROR: {}", mode_indicator, error)
+    } else if command_buffer.is_empty() {
         format!("{} Type @file.pdf, @@, or :q", mode_indicator)
     } else {
         format!("{} {}", mode_indicator, command_buffer)
+    };
+
+    let text_color = if error_message.is_some() {
+        colors::anchor() // Use anchor color (red) for errors
+    } else {
+        colors::text()
     };
 
     let input_widget = Paragraph::new(input_text)
@@ -168,7 +177,7 @@ pub fn render_command_deck(frame: &mut Frame, area: Rect, mode: AppMode, command
                 .borders(Borders::TOP)
                 .border_style(Style::default().fg(colors::dimmed())),
         )
-        .style(Style::default().fg(colors::text()).bg(colors::surface()));
+        .style(Style::default().fg(text_color).bg(colors::surface()));
 
     frame.render_widget(input_widget, layout[1]);
 }

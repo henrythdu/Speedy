@@ -7,6 +7,7 @@ use std::path::Path;
 pub struct App {
     pub mode: AppMode,
     pub reading_state: Option<ReadingState>,
+    pub error_message: Option<String>,
 }
 
 impl App {
@@ -14,7 +15,23 @@ impl App {
         Self {
             mode: AppMode::default(),
             reading_state: None,
+            error_message: None,
         }
+    }
+
+    /// Set an error message to be displayed in the UI
+    pub fn set_error(&mut self, message: String) {
+        self.error_message = Some(message);
+    }
+
+    /// Clear the current error message
+    pub fn clear_error(&mut self) {
+        self.error_message = None;
+    }
+
+    /// Get the current error message if any
+    pub fn get_error(&self) -> Option<&str> {
+        self.error_message.as_deref()
     }
 
     pub fn start_reading(&mut self, text: &str, wpm: u32) {

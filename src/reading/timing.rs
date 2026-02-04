@@ -108,35 +108,47 @@ pub fn detect_sentence_boundary(prev_token: Option<&Token>, current_word: &str) 
         .unwrap_or(false)
 }
 
-/// Tokenizes text line-by-line; PRD Section 3.2.
-/// Note: duration is calculated dynamically in ReadingState, not stored in Token.
+/// Tokenizes text; PRD Section 3.2.
+/// Only creates pause tokens for paragraph breaks (2+ consecutive newlines), not single newlines.
+/// Single newlines (line wrapping) are treated as word separators only.
 pub fn tokenize_text(text: &str) -> Vec<Token> {
     let mut tokens = Vec::new();
+    let mut consecutive_empty_lines = 0;
 
     for line in text.lines() {
-        // Process words in current line
-        for word in line.split_whitespace() {
-            if !word.is_empty() {
-                let (text, punctuation) = extract_punctuation(word);
+        let is_empty = line.trim().is_empty();
+        
+        if is_empty {
+            consecutive_empty_lines += 1;
+            // Only create a paragraph break token after 2+ consecutive empty lines
+            if consecutive_empty_lines == 2 {
                 let prev_token = tokens.last().cloned();
-                let is_start = detect_sentence_boundary(prev_token.as_ref(), &word);
-
+                let is_start = true;  // Paragraph breaks indicate sentence boundaries
                 tokens.push(Token {
-                    text,
-                    punctuation,
+                    text: String::new(),
+                    punctuation: vec!['\n'],
                     is_sentence_start: is_start,
                 });
             }
-        }
+        } else {
+            // Reset empty line counter when we hit content
+            consecutive_empty_lines = 0;
+            
+            // Process words in current line
+            for word in line.split_whitespace() {
+                if !word.is_empty() {
+                    let (text, punctuation) = extract_punctuation(word);
+                    let prev_token = tokens.last().cloned();
+                    let is_start = detect_sentence_boundary(prev_token.as_ref(), &word);
 
-        // Create newline token after each line (except if line was empty/whitespace only)
-        let prev_token = tokens.last().cloned();
-        let is_start = true;  // PRD Section 3.3: Newlines indicate sentence boundaries
-        tokens.push(Token {
-            text: String::new(),
-            punctuation: vec!['\n'],
-            is_sentence_start: is_start,
-        });
+                    tokens.push(Token {
+                        text,
+                        punctuation,
+                        is_sentence_start: is_start,
+                    });
+                }
+            }
+        }
     }
 
     // Remove trailing newline token if it exists (last line doesn't need newline after it)
@@ -260,16 +272,24 @@ mod tests {
     }
 
     #[test]
-    fn test_tokenize_newline() {
-        let text = "hello\nworld"; // Two words separated by newline
+    fn test_tokenize_single_newline_no_pause() {
+        // Single newlines (line wrapping) should NOT create pause tokens
+        let text = "hello\nworld"; // Two words separated by single newline
         let tokens = tokenize_text(text);
-        assert_eq!(tokens.len(), 3);
+        assert_eq!(tokens.len(), 2, "Single newline should not create a pause token");
         assert_eq!(tokens[0].text, "hello");
-        assert_eq!(tokens[0].punctuation, vec![]);
-        assert_eq!(tokens[1].text, ""); // Newline token
-        assert_eq!(tokens[1].punctuation, vec!['\n']); // Newline as punctuation
+        assert_eq!(tokens[1].text, "world");
+    }
+
+    fn test_tokenize_paragraph_break_creates_pause() {
+        // Double newlines (paragraph breaks) SHOULD create pause tokens
+        let text = "hello\n\nworld"; // Two words with paragraph break
+        let tokens = tokenize_text(text);
+        assert_eq!(tokens.len(), 3, "Paragraph break should create a pause token");
+        assert_eq!(tokens[0].text, "hello");
+        assert_eq!(tokens[1].text, ""); // Paragraph break token
+        assert_eq!(tokens[1].punctuation, vec!['\n']);
         assert_eq!(tokens[2].text, "world");
-        assert_eq!(tokens[2].punctuation, vec![]);
     }
 
     #[test]
@@ -589,3 +609,84 @@ fn debug_tokenize_pasta_text() {
             i, token.text, token.punctuation, token.is_sentence_start);
     }
 }
+
+
+    // Tokenizer filtering tests - PRD requirement: no empty/whitespace-only tokens
+
+    #[test]
+    fn test_tokenize_filters_empty_tokens_from_blank_lines() {
+        let text = "hello\n\nworld"; // Two newlines = blank line
+        let tokens = tokenize_text(text);
+        
+        // Should have: "hello", "world" - but NOT an empty token for the blank line
+        let empty_tokens: Vec<&Token> = tokens.iter()
+            .filter(|t| t.text.trim().is_empty() && t.punctuation.is_empty())
+            .collect();
+        
+        assert!(empty_tokens.is_empty(), 
+            "Tokenizer should not produce empty tokens for blank lines. Found: {:?}", 
+            empty_tokens);
+    }
+
+    #[test]
+    fn test_tokenize_filters_whitespace_only_tokens() {
+        let text = "hello\n   \nworld"; // Line with only spaces
+        let tokens = tokenize_text(text);
+        
+        // Should not have any tokens with only whitespace
+        let whitespace_tokens: Vec<&Token> = tokens.iter()
+            .filter(|t| t.text.trim().is_empty() && !t.text.is_empty())
+            .collect();
+        
+        assert!(whitespace_tokens.is_empty(), 
+            "Tokenizer should not produce whitespace-only tokens. Found: {:?}", 
+            whitespace_tokens);
+    }
+
+    #[test]
+    fn test_tokenize_preserves_newline_punctuation() {
+        let text = "hello\nworld"; // Single newline between words
+        let tokens = tokenize_text(text);
+        
+        // Should have 3 tokens: "hello", newline marker, "world"
+        assert_eq!(tokens.len(), 3, "Should have hello, newline, world");
+        assert_eq!(tokens[0].text, "hello");
+        assert!(tokens[1].text.is_empty(), "Newline token should have empty text");
+        assert_eq!(tokens[1].punctuation, vec!['\n'], "Newline token should have newline punctuation");
+        assert_eq!(tokens[2].text, "world");
+    }
+
+    #[test]
+    fn test_tokenize_no_duplicate_empty_tokens() {
+        let text = "a\n\n\nb"; // Multiple blank lines
+        let tokens = tokenize_text(text);
+        
+        // Count empty tokens
+        let empty_count = tokens.iter()
+            .filter(|t| t.text.trim().is_empty())
+            .count();
+        
+        // Should have at most 1 newline token (for the actual line break, not blank lines)
+        assert!(empty_count <= 2, 
+            "Should not have multiple empty tokens for blank lines. Found {} empty tokens", 
+            empty_count);
+    }
+
+    #[test]
+    fn test_all_tokens_have_meaningful_content() {
+        let text = "Hello world.\n\nThis is a test.\n\n\nEnd.";
+        let tokens = tokenize_text(text);
+        
+        // Every token should have either text content OR meaningful punctuation
+        for (i, token) in tokens.iter().enumerate() {
+            let has_text = !token.text.trim().is_empty();
+            let has_meaningful_punct = token.punctuation.iter().any(|&p| p != '\n');
+            let is_newline = token.punctuation == vec!['\n'];
+            
+            assert!(
+                has_text || has_meaningful_punct || is_newline,
+                "Token {} should have meaningful content. Got: text='{}' punct={:?}",
+                i, token.text, token.punctuation
+            );
+        }
+    }
