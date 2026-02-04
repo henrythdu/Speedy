@@ -129,6 +129,11 @@ impl Viewport {
 
     /// Try to query terminal pixel size using CSI 14t
     ///
+    /// # SAFETY
+    /// This function reads directly from stdin which can conflict with crossterm's
+    /// event loop. It MUST only be called during initialization (before TuiManager
+    /// starts its event loop) or when the event loop is paused.
+    ///
     /// # Returns
     /// Some((width, height)) if query succeeds, None otherwise
     fn query_pixel_size(&self) -> Option<(u32, u32)> {
@@ -142,6 +147,8 @@ impl Viewport {
         let timeout = Duration::from_millis(100);
         if event::poll(timeout).ok()? {
             // Try to read from stdin for the CSI response
+            // SAFETY: This is safe because we're called during initialization
+            // before the main event loop starts (see TuiManager::new)
             let mut stdin = io::stdin();
             let mut buffer = [0u8; 64];
 
@@ -240,8 +247,6 @@ pub enum ViewportError {
     IoError(String),
     /// Terminal response parsing failed
     ParseError(String),
-    /// Feature not yet implemented
-    NotImplemented(String),
     /// No dimensions available
     NoDimensions,
 }
@@ -251,7 +256,6 @@ impl std::fmt::Display for ViewportError {
         match self {
             Self::IoError(msg) => write!(f, "Viewport IO error: {}", msg),
             Self::ParseError(msg) => write!(f, "Viewport parse error: {}", msg),
-            Self::NotImplemented(msg) => write!(f, "Viewport feature not implemented: {}", msg),
             Self::NoDimensions => write!(f, "No terminal dimensions available"),
         }
     }

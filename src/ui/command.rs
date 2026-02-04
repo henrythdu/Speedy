@@ -13,6 +13,7 @@
 //! command deck instead of a separate REPL loop.
 
 use crate::app::AppEvent;
+use crate::input::LoadedDocument;
 
 /// Commands that can be parsed from command deck input
 #[derive(Debug, Clone, PartialEq)]
@@ -71,6 +72,23 @@ pub fn command_to_app_event(command: Command) -> AppEvent {
         Command::LoadClipboard => AppEvent::LoadClipboard,
         Command::Unknown(input) => AppEvent::InvalidCommand(input),
     }
+}
+
+/// Convert document tokens to a single text string
+///
+/// Reconstructs text from tokens by joining word text with punctuation.
+pub fn tokens_to_text(doc: &LoadedDocument) -> String {
+    doc.tokens
+        .iter()
+        .map(|t| {
+            let mut s = t.text.clone();
+            for p in &t.punctuation {
+                s.push(*p);
+            }
+            s
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 #[cfg(test)]

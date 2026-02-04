@@ -101,70 +101,12 @@ impl TuiManager {
                                         self.command_buffer.clear();
 
                                         // Parse and execute
-                                        use crate::ui::command::{parse_command, Command};
-                                        match parse_command(&command) {
-                                            Command::LoadFile(path) => {
-                                                // Load the file using input module
-                                                use crate::input::pdf;
-                                                match pdf::load(&path) {
-                                                    Ok(doc) => {
-                                                        let text: String = doc
-                                                            .tokens
-                                                            .iter()
-                                                            .map(|t| {
-                                                                let mut s = t.text.clone();
-                                                                for p in &t.punctuation {
-                                                                    s.push(*p);
-                                                                }
-                                                                s
-                                                            })
-                                                            .collect::<Vec<_>>()
-                                                            .join(" ");
-                                                        app.start_reading(&text, 300);
-                                                    }
-                                                    Err(e) => {
-                                                        app.set_error(format!("Failed to load file: {}", e));
-                                                    }
-                                                }
-                                            }
-                                            Command::LoadClipboard => {
-                                                // Load from clipboard
-                                                use crate::input::clipboard;
-                                                match clipboard::load() {
-                                                    Ok(doc) => {
-                                                        let text: String = doc
-                                                            .tokens
-                                                            .iter()
-                                                            .map(|t| {
-                                                                let mut s = t.text.clone();
-                                                                for p in &t.punctuation {
-                                                                    s.push(*p);
-                                                                }
-                                                                s
-                                                            })
-                                                            .collect::<Vec<_>>()
-                                                            .join(" ");
-                                                        app.start_reading(&text, 300);
-                                                    }
-                                                    Err(e) => {
-                                                        app.set_error(format!(
-                                                            "Failed to load clipboard: {}",
-                                                            e
-                                                        ));
-                                                    }
-                                                }
-                                            }
-                                            Command::Quit => {
-                                                app.set_mode(AppMode::Quit);
-                                                return Ok(AppMode::Quit);
-                                            }
-                                            Command::Help => {
-                                                // Show help - for now just stay in command mode
-                                            }
-                                            Command::Unknown(_) => {
-                                                // Invalid command - show error in UI
-                                                app.set_error(format!("Unknown command: {}", command));
-                                            }
+                                        use crate::ui::command_executor::{
+                                            execute_command, CommandResult,
+                                        };
+                                        match execute_command(app, &command)? {
+                                            CommandResult::Continue => {}
+                                            CommandResult::Exit(mode) => return Ok(mode),
                                         }
                                     }
                                 }
@@ -231,7 +173,13 @@ impl TuiManager {
             let reading_bg = Block::default().style(Style::default().bg(theme.background));
             frame.render_widget(reading_bg, reading_area);
 
-            render_command_deck(frame, command_area, app.mode(), &self.command_buffer, app.get_error());
+            render_command_deck(
+                frame,
+                command_area,
+                app.mode(),
+                &self.command_buffer,
+                app.get_error(),
+            );
         })?;
 
         // Render word via Kitty Graphics Protocol
@@ -244,7 +192,9 @@ impl TuiManager {
                     app.set_error(format!("Failed to clear previous word: {}", e));
                 }
                 let anchor_pos = crate::reading::calculate_anchor_position(&word);
-                if let Err(e) = RsvpRenderer::render_word(&mut self.kitty_renderer, &word, anchor_pos) {
+                if let Err(e) =
+                    RsvpRenderer::render_word(&mut self.kitty_renderer, &word, anchor_pos)
+                {
                     app.set_error(format!("Render error: {}", e));
                 }
             }

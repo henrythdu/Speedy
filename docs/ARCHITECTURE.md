@@ -1,6 +1,6 @@
 # Speedy Architecture Document
 
-**Last Updated:** 2026-02-02 (Documentation fix: Updated reading zone description to clarify fixed 5-line command deck vs percentage-based layout)
+**Last Updated:** 2026-02-04 (Major refactoring: Decomposed kitty.rs into modules, extracted CommandExecutor, removed dead code)
 **Purpose:** Document actual codebase structure, methods, structs, and architecture to prevent duplication and confusion.
 
 ## ⚠️ Important Notes
@@ -39,14 +39,19 @@ src/
 │   ├── viewport.rs     # Viewport coordinates and terminal dimensions
 │   ├── font.rs         # Font loading and metrics
 │   ├── capability.rs   # Terminal capability detection
+│   ├── kitty/          # Kitty Graphics Protocol modules
+│   │   ├── mod.rs      # KittyGraphicsRenderer implementation
+│   │   ├── protocol.rs # KGP transmission and encoding
+│   │   ├── rasterizer.rs # Word-to-image rendering
+│   │   └── positioning.rs # OVP anchoring calculations
 │   └── mod.rs          # Rendering module exports
 ├── ui/                 # TUI rendering layer
 │   ├── reader/         # Reader feature module
 │   │   ├── component.rs # ReaderComponent wrapping CellRenderer
-│   │   └── view.rs     # Render functions (OVP word, progress, context)
-│   ├── command.rs      # Command parsing for REPL
+│   │   └── view.rs     # Render functions (OVP word, progress)
+│   ├── command.rs      # Command parsing and token utilities
+│   ├── command_executor.rs # Command execution logic
 │   ├── terminal.rs     # TuiManager with event loop and frame rendering
-│   ├── terminal_guard.rs # TerminalGuard for raw mode/alternate screen RAII
 │   ├── theme.rs        # Theme configuration (Midnight colors)
 │   └── mod.rs          # UI module exports
 ├── input/              # File input processing
@@ -151,7 +156,7 @@ pub struct CellRenderer {
 - NO dependency on `font.rs` (terminal controls fonts in TUI mode)
 - Implements all `RsvpRenderer` trait methods
 
-### `KittyGraphicsRenderer` (`src/rendering/kitty.rs:31`)
+### `KittyGraphicsRenderer` (`src/rendering/kitty/mod.rs:18`)
 Pixel-perfect RSVP renderer using Kitty Graphics Protocol with sub-pixel OVP anchoring.
 ```rust
 pub struct KittyGraphicsRenderer {
@@ -160,59 +165,55 @@ pub struct KittyGraphicsRenderer {
     font_size: f32,
     font_metrics: Option<FontMetrics>,
     current_image_id: u32,
-    reading_zone_center: (u32, u32),
 }
 ```
 
 **Public API:**
 - `new() -> Self` - Create new KittyGraphicsRenderer instance
-- `set_reading_zone_center(x, y)` - Set center position for OVP anchoring
 - `calculate_font_size_from_cell_height(cell_height_px)` - Calculate font size for 5-line height
 - `get_reading_zone_height() -> Option<u32>` - Get reading zone height (total height minus fixed 5-line command deck)
 - `calculate_vertical_center() -> Option<u32>` - Calculate Y position at 42% of reading zone
-- `get_cell_height() -> Option<f32>` - Get cell height in pixels from viewport
-- `create_canvas() -> Option<ReadingCanvas>` - Create full-zone canvas for composite rendering (src/rendering/kitty.rs:196)
-- `render_frame(word, anchor_position) -> Result<(), RendererError>` - **Main orchestrator** - Create canvas, composite word, transmit single image (src/rendering/kitty.rs:306)
+- `viewport() -> &mut Viewport` - Get mutable viewport access
 
-**Private Methods:**
-- `calculate_start_x(word, anchor) -> f32` - Calculate sub-pixel OVP X position
-- `rasterize_word(word, anchor_position) -> Option<ImageBuffer>` - Render word to RGBA buffer using ab_glyph
-- `composite_word(canvas, word, anchor_position) -> bool` - **BUG FIX** Composite word onto canvas at 42% of canvas height (src/rendering/kitty.rs:208)
-- `calculate_start_x_for_canvas(word, anchor, center_x) -> f32` - Calculate OVP X position within canvas
-- `transmit_graphics(id, w, h, data, x, y) -> io::Result<()>` - Send image via KGP
-- `delete_image(id) -> io::Result<()>` - Delete specific KGP image
-- `delete_all_graphics() -> io::Result<()>` - Clear all KGP images on exit
+**Implements RsvpRenderer trait:**
+- `initialize()` - Load font, get metrics, query viewport
+- `render_word(word, anchor_position)` - Rasterize and transmit word via KGP
+- `clear()` - Delete previous image
+- `cleanup()` - Delete all graphics on exit
+- `supports_subpixel_ovp()` - Returns true
 
 **Key Behaviors:**
 - Uses embedded JetBrains Mono font via ab_glyph for text rasterization
-- Creates RGBA buffer with theme background (#1A1B26) and anchor color (#F7768E)
+- Creates RGBA buffer with transparent background (theme handles background)
 - Vertical centering at 42% of reading zone height (per PRD Section 4.3)
-- Sub-pixel OVP anchoring via `calculate_start_x()` using font metrics
+- Sub-pixel OVP anchoring via positioning module
 - Implements RsvpRenderer trait for pluggable backend architecture
+- **Modular Design:** Decomposed into protocol, rasterizer, and positioning modules
 
-### `ReadingCanvas` (`src/rendering/kitty.rs:38`)
-Full-zone canvas for composite rendering of reading area.
-```rust
-pub struct ReadingCanvas {
-    buffer: ImageBuffer<Rgba<u8>, Vec<u8>>,  // RGBA pixel buffer
-    dimensions: (u32, u32),                   // Canvas dimensions (width, height)
-    background_color: Rgba<u8>,              // Background color (#1A1B26)
-}
-```
+### `protocol` module (`src/rendering/kitty/protocol.rs`)
+Kitty Graphics Protocol transmission and encoding functions.
 
-**Public API:**
-- `new(width, height) -> Self` - Create canvas with specified dimensions, filled with background color
-- `width() -> u32` - Get canvas width in pixels
-- `height() -> u32` - Get canvas height in pixels
-- `dimensions() -> (u32, u32)` - Get canvas dimensions as tuple
-- `buffer() -> &ImageBuffer` - Get immutable reference to RGBA buffer
-- `buffer_mut() -> &mut ImageBuffer` - Get mutable reference to RGBA buffer
-- `clear()` - Fill entire canvas with background color
-- `calculate_reading_line_y() -> u32` - Calculate Y position at 42% of canvas height
+**Public Functions:**
+- `encode_image_base64(image) -> String` - Encode RGBA image to base64
+- `transmit_graphics(id, width, height, data, x, y) -> io::Result<()>` - Send image via KGP
+- `delete_image(id) -> io::Result<()>` - Delete specific KGP image
+- `delete_all_graphics() -> io::Result<()>` - Clear all KGP images
 
-**Key Behaviors:**
-- Implements CPU compositing pattern from Design Doc v2.0 Section 6.2
-- Creates single RGBA buffer covering entire reading zone (total height minus fixed 5-line command deck)
+### `rasterizer` module (`src/rendering/kitty/rasterizer.rs`)
+Word-to-image rasterization using ab_glyph and imageproc.
+
+**Public Functions:**
+- `rasterize_word(word, anchor_position, font, font_size, metrics) -> Option<ImageBuffer>` - Render word to RGBA buffer
+- `TEXT_COLOR` - Theme text color constant (#A9B1D6)
+- `ANCHOR_COLOR` - Theme anchor color constant (#F7768E)
+
+### `positioning` module (`src/rendering/kitty/positioning.rs`)
+OVP (Optimal Viewing Position) anchoring calculations.
+
+**Public Functions:**
+- `calculate_start_x(word, anchor_position, font, font_size, viewport) -> f32` - Calculate sub-pixel OVP X position
+- `get_reading_zone_height(viewport) -> Option<u32>` - Calculate reading zone height
+- `calculate_vertical_center(viewport) -> Option<u32>` - Calculate Y position at 42% of zone
 - Background color is Midnight theme #1A1B26 (deep slate)
 - Composites all visual elements (background, word, ghost words) into single buffer
 - Eliminates flickering and Z-fighting issues from multiple image transmissions
@@ -390,16 +391,24 @@ pub struct TuiManager {
 - Gutter on far right (3% of screen width)
 - OVP anchor position: calculates left padding to keep anchor at visual center (src/ui/reader/view.rs:10)
 
-### TerminalGuard (`src/ui/terminal_guard.rs:10`)
-RAII guard for terminal raw mode and alternate screen.
-```rust
-pub struct TerminalGuard;
-```
+### CommandExecutor (`src/ui/command_executor.rs`)
+Command execution logic extracted from terminal event loop.
 
-**Purpose:** Ensures proper terminal cleanup on panic or normal exit. Enables raw mode and enters alternate screen on construction, restores on drop.
+**Public Enum:**
+- `CommandResult::Continue` - Continue running, no mode change
+- `CommandResult::Exit(AppMode)` - Exit event loop with specified mode
 
-**Key Methods:**
-- `pub fn new() -> Result<Self, io::Error>` - Creates guard, enables raw mode, enters alternate screen (src/ui/terminal_guard.rs:14)
+**Public Function:**
+- `execute_command(app, command_str) -> io::Result<CommandResult>` - Parse and execute command
+
+**Supported Commands:**
+- `LoadFile(path)` - Load PDF/EPUB file
+- `LoadClipboard` - Load from clipboard
+- `Quit` - Exit application
+- `Help` - Show help (placeholder)
+- `Unknown` - Show error for invalid commands
+
+**Purpose:** Separates command business logic from event loop orchestration, improving testability and SRP compliance.
 
 ### ReadingState Methods (`src/reading/state.rs`)
 

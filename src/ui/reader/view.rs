@@ -1,4 +1,3 @@
-use crate::engine::Token;
 use crate::ui::theme::colors;
 use ratatui::{
     layout::Alignment,
@@ -56,68 +55,6 @@ pub fn render_progress_bar(progress: (usize, usize)) -> Line<'static> {
     Line::from(spans).alignment(Alignment::Center)
 }
 
-pub fn render_context_left(tokens: &[Token], current: usize, window: usize) -> Paragraph<'static> {
-    let start = if current > window {
-        current - window
-    } else {
-        0
-    };
-    let context_words: Vec<String> = tokens[start..current]
-        .iter()
-        .map(|t| {
-            let mut text = t.text.clone();
-            for &p in &t.punctuation {
-                text.push(p);
-            }
-            text
-        })
-        .collect();
-
-    let text = context_words.join(" ");
-
-    Paragraph::new(text).alignment(Alignment::Right).style(
-        Style::default()
-            .fg(colors::dimmed())
-            .bg(colors::background()),
-    )
-}
-
-pub fn render_context_right(tokens: &[Token], current: usize, window: usize) -> Paragraph<'static> {
-    if tokens.is_empty() || current >= tokens.len() {
-        return Paragraph::new("").alignment(Alignment::Left).style(
-            Style::default()
-                .fg(colors::dimmed())
-                .bg(colors::background()),
-        );
-    }
-
-    let end = std::cmp::min(current + window + 1, tokens.len());
-    let context_words: Vec<String> = tokens[current + 1..end]
-        .iter()
-        .map(|t| {
-            let mut text = t.text.clone();
-            for &p in &t.punctuation {
-                text.push(p);
-            }
-            text
-        })
-        .collect();
-
-    let text = context_words.join(" ");
-
-    Paragraph::new(text).alignment(Alignment::Left).style(
-        Style::default()
-            .fg(colors::dimmed())
-            .bg(colors::background()),
-    )
-}
-
-pub fn render_gutter_placeholder() -> Paragraph<'static> {
-    Paragraph::new("│")
-        .alignment(Alignment::Right)
-        .style(Style::default().fg(colors::text()).bg(colors::background()))
-}
-
 pub fn render_placeholder() -> Paragraph<'static> {
     let text = "Type @filename to load a file\nOr @@ to load from clipboard\n:q to quit";
     Paragraph::new(text).alignment(Alignment::Center).style(
@@ -132,7 +69,13 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::widgets::{Block, Borders, Clear};
 use ratatui::Frame;
 
-pub fn render_command_deck(frame: &mut Frame, area: Rect, mode: AppMode, command_buffer: &str, error_message: Option<&str>) {
+pub fn render_command_deck(
+    frame: &mut Frame,
+    area: Rect,
+    mode: AppMode,
+    command_buffer: &str,
+    error_message: Option<&str>,
+) {
     // Clear the command area first
     frame.render_widget(Clear, area);
 
@@ -214,25 +157,5 @@ mod tests {
         let progress = (50, 100);
         let bar = render_progress_bar(progress);
         let _ = bar;
-    }
-
-    #[test]
-    fn test_render_context_left_empty_tokens() {
-        let tokens: Vec<Token> = vec![];
-        let paragraph = render_context_left(&tokens, 0, 3);
-        let _ = paragraph;
-    }
-
-    #[test]
-    fn test_render_context_right_empty_tokens() {
-        let tokens: Vec<Token> = vec![];
-        let paragraph = render_context_right(&tokens, 0, 3);
-        let _ = paragraph;
-    }
-
-    #[test]
-    fn test_render_gutter_placeholder_creates_paragraph() {
-        let paragraph = render_gutter_placeholder();
-        let _ = paragraph;
     }
 }
