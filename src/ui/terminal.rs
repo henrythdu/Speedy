@@ -1,5 +1,4 @@
 use crate::app::{mode::AppMode, App};
-use crate::engine::wpm_to_milliseconds;
 use crate::rendering::kitty::KittyGraphicsRenderer;
 use crate::rendering::renderer::RsvpRenderer;
 use crate::ui::reader::view::render_command_deck;
@@ -68,8 +67,7 @@ impl TuiManager {
             // Command mode shows the command deck for input
             // Reading and Paused modes show the RSVP display
 
-            let wpm = app.get_wpm();
-            let timeout_ms = wpm_to_milliseconds(wpm);
+            let timeout_ms = app.get_current_token_duration();
             let poll_timeout = Duration::from_millis(timeout_ms);
 
             match event::poll(poll_timeout) {
