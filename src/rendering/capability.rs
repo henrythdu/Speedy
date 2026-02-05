@@ -148,6 +148,4 @@ mod tests {
         std::env::remove_var("KONSOLE_VERSION");
         std::env::remove_var("TERM");
     }
-
-    
 }

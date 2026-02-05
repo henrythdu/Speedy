@@ -170,7 +170,6 @@ impl App {
         self.mode = mode;
     }
 
-
     /// Get the duration for the current token in milliseconds
     ///
     /// Returns the calculated duration for the current token, including
@@ -571,33 +570,32 @@ mod tests {
         assert!(!advanced);
     }
 
-
     #[test]
     fn test_get_current_token_duration_with_punctuation() {
         let mut app = App::new();
         app.start_reading("Hello, world.", 300);
-        
+
         // First token "Hello" with comma should have 1.5x multiplier
         // 300 WPM = 200ms * max(1.5, 1.0) = 300ms
         assert_eq!(app.get_current_token_duration(), 300);
-        
+
         app.advance_reading();
-        
+
         // Second token "world" with period should have 3.0x multiplier
         // 300 WPM = 200ms * max(3.0, 1.0) = 600ms
         assert_eq!(app.get_current_token_duration(), 600);
     }
-    
+
     #[test]
     fn test_get_current_token_duration_long_word() {
         let mut app = App::new();
         app.start_reading("extraordinarily", 300);
-        
+
         // Long word (>10 chars) should have 1.15x length penalty
         // 300 WPM = 200ms * max(1.0, 1.15) = 230ms
         assert_eq!(app.get_current_token_duration(), 230);
     }
-    
+
     #[test]
     fn test_get_current_token_duration_no_reading_state() {
         let app = App::new();
@@ -614,12 +612,12 @@ mod tests {
 
         // First call returns false at end
         let advanced = app.advance_reading();
-        assert!(!advanced); 
+        assert!(!advanced);
         assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
-        
+
         // Second call also returns false (stays at end)
         let advanced = app.advance_reading();
-        assert!(!advanced); 
+        assert!(!advanced);
         assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
     }
 }

@@ -117,13 +117,13 @@ pub fn tokenize_text(text: &str) -> Vec<Token> {
 
     for line in text.lines() {
         let is_empty = line.trim().is_empty();
-        
+
         if is_empty {
             consecutive_empty_lines += 1;
             // Only create a paragraph break token after 2+ consecutive empty lines
             if consecutive_empty_lines == 2 {
                 let prev_token = tokens.last().cloned();
-                let is_start = true;  // Paragraph breaks indicate sentence boundaries
+                let is_start = true; // Paragraph breaks indicate sentence boundaries
                 tokens.push(Token {
                     text: String::new(),
                     punctuation: vec!['\n'],
@@ -133,7 +133,7 @@ pub fn tokenize_text(text: &str) -> Vec<Token> {
         } else {
             // Reset empty line counter when we hit content
             consecutive_empty_lines = 0;
-            
+
             // Process words in current line
             for word in line.split_whitespace() {
                 if !word.is_empty() {
@@ -276,7 +276,11 @@ mod tests {
         // Single newlines (line wrapping) should NOT create pause tokens
         let text = "hello\nworld"; // Two words separated by single newline
         let tokens = tokenize_text(text);
-        assert_eq!(tokens.len(), 2, "Single newline should not create a pause token");
+        assert_eq!(
+            tokens.len(),
+            2,
+            "Single newline should not create a pause token"
+        );
         assert_eq!(tokens[0].text, "hello");
         assert_eq!(tokens[1].text, "world");
     }
@@ -285,7 +289,11 @@ mod tests {
         // Double newlines (paragraph breaks) SHOULD create pause tokens
         let text = "hello\n\nworld"; // Two words with paragraph break
         let tokens = tokenize_text(text);
-        assert_eq!(tokens.len(), 3, "Paragraph break should create a pause token");
+        assert_eq!(
+            tokens.len(),
+            3,
+            "Paragraph break should create a pause token"
+        );
         assert_eq!(tokens[0].text, "hello");
         assert_eq!(tokens[1].text, ""); // Paragraph break token
         assert_eq!(tokens[1].punctuation, vec!['\n']);
@@ -310,30 +318,36 @@ mod tests {
         assert_eq!(tokens[0].punctuation, vec![]);
     }
 
-
     #[test]
     fn test_clipboard_text_rendering_sequence() {
         // Simulate the user's clipboard text
         let text = "Pastas are divided into two broad categories: dried (Italian: pasta secca) and fresh (Italian: pasta fresca). Most dried pasta is produced commercially via an extrusion process, although it can be produced at home. Fresh pasta is traditionally produced by hand, sometimes with the aid of simple machines.[5] Fresh pastas available in grocery stores are produced commercially by large-scale machines.\n\nBoth dried and fresh pastas come in a number of shapes and varieties, with 310 specific forms known by over 1,300 documented names.[6] In Italy, the names of specific pasta shapes or types often vary by locale. For example, the pasta form cavatelli is known by 28 different names depending upon the town and region. Common forms of pasta include long and short shapes, tubes, flat shapes or sheets, miniature shapes for soup, those meant to be filled or stuffed, and specialty or decorative shapes";
-        
+
         let tokens = tokenize_text(text);
-        
+
         // Print first 30 tokens to see the sequence
         println!("\nFirst 30 tokens:");
         for (i, token) in tokens.iter().take(30).enumerate() {
-            let text_display = if token.text.is_empty() { "<EMPTY>".to_string() } else { token.text.clone() };
-            println!("  {}: '{}' [punct={:?}, sent_start={}]", 
-                i, text_display, token.punctuation, token.is_sentence_start);
+            let text_display = if token.text.is_empty() {
+                "<EMPTY>".to_string()
+            } else {
+                token.text.clone()
+            };
+            println!(
+                "  {}: '{}' [punct={:?}, sent_start={}]",
+                i, text_display, token.punctuation, token.is_sentence_start
+            );
         }
-        
+
         // Count empty tokens
         let empty_count = tokens.iter().filter(|t| t.text.is_empty()).count();
         println!("\nTotal tokens: {}", tokens.len());
         println!("Empty (newline) tokens: {}", empty_count);
-        
+
         // Show what words would be rendered (non-empty tokens)
         println!("\nWords that would be rendered (first 20):");
-        let rendered_words: Vec<&str> = tokens.iter()
+        let rendered_words: Vec<&str> = tokens
+            .iter()
             .filter(|t| !t.text.is_empty())
             .map(|t| t.text.as_str())
             .take(20)
@@ -341,30 +355,64 @@ mod tests {
         println!("  {}", rendered_words.join(" "));
     }
 
-
     #[test]
     fn test_trace_rendering_simulation() {
         // Simulate exactly what happens in the event loop
         let text = "Pastas are divided into two broad categories: dried (Italian: pasta secca) and fresh (Italian: pasta fresca). Most dried pasta is produced commercially via an extrusion process, although it can be produced at home. Fresh pasta is traditionally produced by hand, sometimes with the aid of simple machines.[5] Fresh pastas available in grocery stores are produced commercially by large-scale machines.\n\nBoth dried and fresh pastas come in a number of shapes and varieties, with 310 specific forms known by over 1,300 documented names.[6] In Italy, the names of specific pasta shapes or types often vary by locale. For example, the pasta form cavatelli is known by 28 different names depending upon the town and region. Common forms of pasta include long and short shapes, tubes, flat shapes or sheets, miniature shapes for soup, those meant to be filled or stuffed, and specialty or decorative shapes";
-        
+
         let tokens = tokenize_text(text);
-        
+
         // Find indices of words that appear in the "rendered" output
-        let rendered_words = vec!["Pastas", "dried", "pasta", "Both", "example", "forms", "of", "include", "long", "and", "short", "shapes", "tubes", "flat", "shape", "or", "sheet", "miniature", "shapes", "for", "soup", "those", "meant", "to", "be", "filled", "or", "stuffed", "and", "speciality", "or", "decorative", "shapes"];
-        
+        let rendered_words = vec![
+            "Pastas",
+            "dried",
+            "pasta",
+            "Both",
+            "example",
+            "forms",
+            "of",
+            "include",
+            "long",
+            "and",
+            "short",
+            "shapes",
+            "tubes",
+            "flat",
+            "shape",
+            "or",
+            "sheet",
+            "miniature",
+            "shapes",
+            "for",
+            "soup",
+            "those",
+            "meant",
+            "to",
+            "be",
+            "filled",
+            "or",
+            "stuffed",
+            "and",
+            "speciality",
+            "or",
+            "decorative",
+            "shapes",
+        ];
+
         println!("\n=== Searching for rendered words in token sequence ===");
         for search_word in &rendered_words {
-            let positions: Vec<usize> = tokens.iter()
+            let positions: Vec<usize> = tokens
+                .iter()
                 .enumerate()
                 .filter(|(_, t)| t.text == *search_word)
                 .map(|(i, _)| i)
                 .collect();
-            
+
             if !positions.is_empty() {
                 println!("  '{}' found at indices: {:?}", search_word, positions);
             }
         }
-        
+
         // Simulate 10 rendering iterations
         println!("\n=== Simulating first 10 render cycles ===");
         let mut current_index = 0;
@@ -372,40 +420,44 @@ mod tests {
             if current_index >= tokens.len() {
                 break;
             }
-            
+
             let token = &tokens[current_index];
-            let display = if token.text.is_empty() { 
-                "<NEWLINE>".to_string() 
-            } else { 
-                token.text.clone() 
+            let display = if token.text.is_empty() {
+                "<NEWLINE>".to_string()
+            } else {
+                token.text.clone()
             };
-            
-            println!("  Cycle {}: index={}, word='{}', empty={}", 
-                cycle, current_index, display, token.text.is_empty());
-            
+
+            println!(
+                "  Cycle {}: index={}, word='{}', empty={}",
+                cycle,
+                current_index,
+                display,
+                token.text.is_empty()
+            );
+
             current_index += 1;
         }
     }
-
 
     #[test]
     fn test_word_characteristics() {
         let text = "Pastas are divided into two broad categories: dried (Italian: pasta secca) and fresh (Italian: pasta fresca).";
         let tokens = tokenize_text(text);
-        
+
         println!("\n=== Analyzing word characteristics ===");
         for (i, token) in tokens.iter().enumerate() {
             if token.text.is_empty() {
                 continue;
             }
-            
+
             let has_punctuation_in_text = token.text.chars().any(|c| !c.is_alphanumeric());
             let starts_with_paren = token.text.starts_with('(');
             let ends_with_paren = token.text.ends_with(')');
             let ends_with_colon = token.text.ends_with(':');
-            
+
             println!("  {:2}: '{:15}' len={:2} punct_in_text={} starts_paren={} ends_paren={} ends_colon={}",
-                i, token.text, token.text.len(), 
+                i, token.text, token.text.len(),
                 has_punctuation_in_text, starts_with_paren, ends_with_paren, ends_with_colon);
         }
     }
@@ -605,75 +657,84 @@ fn debug_tokenize_pasta_text() {
     eprintln!("Text: {}", text);
     eprintln!("Token count: {}", tokens.len());
     for (i, token) in tokens.iter().enumerate() {
-        eprintln!("Token {}: text='{}' punct={:?} is_sentence_start={}", 
-            i, token.text, token.punctuation, token.is_sentence_start);
+        eprintln!(
+            "Token {}: text='{}' punct={:?} is_sentence_start={}",
+            i, token.text, token.punctuation, token.is_sentence_start
+        );
     }
 }
 
+// Tokenizer filtering tests - PRD requirement: no empty/whitespace-only tokens
 
-    // Tokenizer filtering tests - PRD requirement: no empty/whitespace-only tokens
+#[test]
+fn test_tokenize_filters_empty_tokens_from_blank_lines() {
+    let text = "hello\n\nworld"; // Two newlines = blank line
+    let tokens = tokenize_text(text);
 
-    #[test]
-    fn test_tokenize_filters_empty_tokens_from_blank_lines() {
-        let text = "hello\n\nworld"; // Two newlines = blank line
-        let tokens = tokenize_text(text);
-        
-        // Should have: "hello", "world" - but NOT an empty token for the blank line
-        let empty_tokens: Vec<&Token> = tokens.iter()
-            .filter(|t| t.text.trim().is_empty() && t.punctuation.is_empty())
-            .collect();
-        
-        assert!(empty_tokens.is_empty(), 
-            "Tokenizer should not produce empty tokens for blank lines. Found: {:?}", 
-            empty_tokens);
+    // Should have: "hello", "world" - but NOT an empty token for the blank line
+    let empty_tokens: Vec<&Token> = tokens
+        .iter()
+        .filter(|t| t.text.trim().is_empty() && t.punctuation.is_empty())
+        .collect();
+
+    assert!(
+        empty_tokens.is_empty(),
+        "Tokenizer should not produce empty tokens for blank lines. Found: {:?}",
+        empty_tokens
+    );
+}
+
+#[test]
+fn test_tokenize_filters_whitespace_only_tokens() {
+    let text = "hello\n   \nworld"; // Line with only spaces
+    let tokens = tokenize_text(text);
+
+    // Should not have any tokens with only whitespace
+    let whitespace_tokens: Vec<&Token> = tokens
+        .iter()
+        .filter(|t| t.text.trim().is_empty() && !t.text.is_empty())
+        .collect();
+
+    assert!(
+        whitespace_tokens.is_empty(),
+        "Tokenizer should not produce whitespace-only tokens. Found: {:?}",
+        whitespace_tokens
+    );
+}
+
+#[test]
+fn test_tokenize_no_duplicate_empty_tokens() {
+    let text = "a\n\n\nb"; // Multiple blank lines
+    let tokens = tokenize_text(text);
+
+    // Count empty tokens
+    let empty_count = tokens.iter().filter(|t| t.text.trim().is_empty()).count();
+
+    // Should have at most 1 newline token (for the actual line break, not blank lines)
+    assert!(
+        empty_count <= 2,
+        "Should not have multiple empty tokens for blank lines. Found {} empty tokens",
+        empty_count
+    );
+}
+
+#[test]
+fn test_all_tokens_have_meaningful_content() {
+    let text = "Hello world.\n\nThis is a test.\n\n\nEnd.";
+    let tokens = tokenize_text(text);
+
+    // Every token should have either text content OR meaningful punctuation
+    for (i, token) in tokens.iter().enumerate() {
+        let has_text = !token.text.trim().is_empty();
+        let has_meaningful_punct = token.punctuation.iter().any(|&p| p != '\n');
+        let is_newline = token.punctuation == vec!['\n'];
+
+        assert!(
+            has_text || has_meaningful_punct || is_newline,
+            "Token {} should have meaningful content. Got: text='{}' punct={:?}",
+            i,
+            token.text,
+            token.punctuation
+        );
     }
-
-    #[test]
-    fn test_tokenize_filters_whitespace_only_tokens() {
-        let text = "hello\n   \nworld"; // Line with only spaces
-        let tokens = tokenize_text(text);
-        
-        // Should not have any tokens with only whitespace
-        let whitespace_tokens: Vec<&Token> = tokens.iter()
-            .filter(|t| t.text.trim().is_empty() && !t.text.is_empty())
-            .collect();
-        
-        assert!(whitespace_tokens.is_empty(), 
-            "Tokenizer should not produce whitespace-only tokens. Found: {:?}", 
-            whitespace_tokens);
-    }
-
-    #[test]
-    fn test_tokenize_no_duplicate_empty_tokens() {
-        let text = "a\n\n\nb"; // Multiple blank lines
-        let tokens = tokenize_text(text);
-        
-        // Count empty tokens
-        let empty_count = tokens.iter()
-            .filter(|t| t.text.trim().is_empty())
-            .count();
-        
-        // Should have at most 1 newline token (for the actual line break, not blank lines)
-        assert!(empty_count <= 2, 
-            "Should not have multiple empty tokens for blank lines. Found {} empty tokens", 
-            empty_count);
-    }
-
-    #[test]
-    fn test_all_tokens_have_meaningful_content() {
-        let text = "Hello world.\n\nThis is a test.\n\n\nEnd.";
-        let tokens = tokenize_text(text);
-        
-        // Every token should have either text content OR meaningful punctuation
-        for (i, token) in tokens.iter().enumerate() {
-            let has_text = !token.text.trim().is_empty();
-            let has_meaningful_punct = token.punctuation.iter().any(|&p| p != '\n');
-            let is_newline = token.punctuation == vec!['\n'];
-            
-            assert!(
-                has_text || has_meaningful_punct || is_newline,
-                "Token {} should have meaningful content. Got: text='{}' punct={:?}",
-                i, token.text, token.punctuation
-            );
-        }
-    }
+}

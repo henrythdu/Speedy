@@ -7,12 +7,12 @@ pub mod positioning;
 pub mod protocol;
 pub mod rasterizer;
 
+use crate::rendering::cache::{WordCache, DEFAULT_CACHE_CAPACITY};
 use crate::rendering::font::{get_font, get_font_metrics, FontMetrics};
 use crate::rendering::kitty::positioning::{calculate_start_x, calculate_vertical_center};
 use crate::rendering::kitty::protocol::{
     delete_all_graphics, delete_image, encode_image_base64, transmit_graphics,
 };
-use crate::rendering::kitty::rasterizer::rasterize_word;
 use crate::rendering::renderer::{RendererError, RsvpRenderer};
 use crate::rendering::viewport::Viewport;
 use ab_glyph::FontRef;
@@ -30,6 +30,8 @@ pub struct KittyGraphicsRenderer {
     font_metrics: Option<FontMetrics>,
     /// Current image ID for protocol (incremented per word)
     pub current_image_id: u32,
+    /// Word-level LRU cache for rendered buffers
+    word_cache: WordCache,
 }
 
 impl Default for KittyGraphicsRenderer {
@@ -47,6 +49,7 @@ impl KittyGraphicsRenderer {
             font_size: 24.0,
             font_metrics: None,
             current_image_id: 1,
+            word_cache: WordCache::new(DEFAULT_CACHE_CAPACITY),
         }
     }
 
@@ -63,6 +66,9 @@ impl KittyGraphicsRenderer {
         if let Some(ref font) = self.font {
             self.font_metrics = Some(get_font_metrics(font, self.font_size));
         }
+
+        // Sync font size with word cache (clears cache if size changed)
+        self.word_cache.set_font_size(self.font_size);
     }
 
     /// Get reference to viewport (for external access to query dimensions)
@@ -84,6 +90,9 @@ impl RsvpRenderer for KittyGraphicsRenderer {
         // Get font metrics
         let font = self.font.as_ref().unwrap();
         self.font_metrics = Some(get_font_metrics(font, self.font_size));
+
+        // Initialize word cache with current font size
+        self.word_cache.set_font_size(self.font_size);
 
         // Query viewport dimensions
         match self.viewport.query_dimensions() {
@@ -140,11 +149,14 @@ impl RsvpRenderer for KittyGraphicsRenderer {
             }
         }
 
-        let image = rasterize_word(word, anchor_position, font, self.font_size, metrics)
-            .ok_or_else(|| RendererError::RenderFailed("Failed to rasterize word".to_string()))?;
+        // Use word cache for rasterization (performance optimization)
+        let cached_word = self
+            .word_cache
+            .get_or_render(word, anchor_position, font, metrics)
+            .map_err(|e| RendererError::RenderFailed(format!("Cache error: {}", e)))?;
 
-        let base64_data = encode_image_base64(&image);
-        let (width, height) = (image.width(), image.height());
+        let base64_data = encode_image_base64(&cached_word.buffer);
+        let (width, height) = (cached_word.width, cached_word.height);
 
         transmit_graphics(self.current_image_id, width, height, &base64_data, 0, 0)
             .map_err(|e| RendererError::RenderFailed(e.to_string()))?;
@@ -173,6 +185,9 @@ impl RsvpRenderer for KittyGraphicsRenderer {
     }
 
     fn cleanup(&mut self) -> Result<(), RendererError> {
+        // Clear word cache to free memory
+        self.word_cache.clear();
+
         if let Err(e) = delete_all_graphics() {
             return Err(RendererError::CleanupFailed(format!(
                 "Failed to cleanup graphics: {}",
