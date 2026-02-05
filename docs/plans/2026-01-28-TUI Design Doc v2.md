@@ -14,7 +14,7 @@
 
 **Key Changes from v1.0:**
 - Added pluggable graphics backend architecture (Kitty Protocol initially, extensible to Sixel/iTerm2)
-- Added mandatory capability detection with TUI fallback mode
+- Added mandatory capability detection (Kitty Graphics Protocol required)
 - Added Word-Level LRU caching system for 1000+ WPM performance
 - Added Viewport Overlay pattern to separate Ratatui and graphics rendering
 - Performance optimization strategies explicitly documented
@@ -55,7 +55,6 @@ pub trait RsvpRenderer {
 
 // Concrete implementations
 pub struct KittyGraphicsRenderer { /* Direct Kitty Protocol */ }
-pub struct CellRenderer { /* Pure TUI fallback */ }
 
 // Future implementations
 // pub struct SixelRenderer { /* Sixel Protocol */ }
@@ -65,7 +64,6 @@ pub struct CellRenderer { /* Pure TUI fallback */ }
 **Rationale:**
 - Avoids technical debt of hardcoding Kitty-only paths
 - Enables clean migration to other protocols without refactoring core logic
-- Allows TUI fallback for unsupported terminals
 
 ---
 
@@ -117,23 +115,28 @@ The "Anchor" letter (Optimal Recognition Point) remains mathematically stationar
     * **Focus Center:** Current word, Anchor centered on ORP, 100% opacity
     * **Ghost Right:** Next word, left-aligned, 15% opacity
 
-### 4.3 Capability Detection & Fallback
+---
 
-**Startup Flow:**
-1. Detect terminal graphics capability via `$TERM` env variable and/or CSI queries
-2. If Kitty Graphics Protocol supported → Initialize `KittyGraphicsRenderer`
-3. If not supported → Initialize `CellRenderer` (pure TUI fallback)
-4. Display warning message in fallback mode: "Advanced typography disabled - terminal lacks graphics protocol"
+## 5. Terminal Requirements (MANDATORY)
 
-**Fallback Mode Limitations:**
-- OVP snaps to nearest character cell
-- Ghost words use standard dim attribute (not true opacity)
-- Progress bars use standard characters
-- Still fully functional as RSVP reader
+**Required Terminals:**
+- Kitty Terminal (any version)
+- Konsole (version 22.04+ with Kitty Graphics Protocol support)
+
+**Required Protocol:** Kitty Graphics Protocol support
+
+**Verification:**
+```bash
+# Check if terminal supports Kitty Graphics Protocol
+echo -e "\e[?u\e[c"
+# Response should include graphics capability flags
+```
+
+**Behavior:** If terminal does not support Kitty Graphics Protocol, application will exit immediately with a clear error message. This application is designed exclusively for modern terminals with graphics protocol support.
 
 ---
 
-## 5. Progress & Spatial Awareness
+## 6. Progress & Spatial Awareness
 
 ### 5.1 The Macro-Gutter (Document Depth)
 
@@ -258,7 +261,6 @@ pub fn render_frame(
 | **Command** | Command Bright / Reader Dimmed (30%) | `q` from Reading Mode or App Start | Ratatui (full) |
 | **Reading** | Reader Full / Command Dimmed (10%) | `Enter` (with content) | KittyGraphicsRenderer |
 | **Paused** | Reader Full / Gutter Highlighted | `Space` during Reading | KittyGraphicsRenderer |
-| **Fallback** | Standard TUI (no pixel features) | Unsupported terminal detected | CellRenderer |
 
 ### 7.2 Key Bindings
 
@@ -342,7 +344,7 @@ base64 = "0.22"                 # Kitty protocol encoding
 ## 10. Implementation Roadmap
 
 ### Phase 1: Foundation (1-2 weeks)
-- [ ] Capability detection system (Kitty vs TUI fallback)
+- [ ] Capability detection system (Kitty Graphics Protocol required)
 - [ ] Pluggable `RsvpRenderer` trait definition
 - [ ] Bundled font loading with `include_bytes!`
 - [ ] Kitty Graphics Protocol implementation (direct escape sequences)
@@ -367,7 +369,7 @@ base64 = "0.22"                 # Kitty protocol encoding
 - [ ] Anti-aliased font rendering
 - [ ] Cursor hiding in Reading Mode
 - [ ] Smooth sentence transitions (ghost word bridges)
-- [ ] Error handling for unsupported terminals
+- [ ] Error handling for unsupported terminals (clear error message and exit)
 - [ ] User documentation (terminal requirements, config options)
 
 ### Phase 5: Future Expansion (Post-MVP)
@@ -385,7 +387,7 @@ base64 = "0.22"                 # Kitty protocol encoding
 
 | Trade-off | Impact | Mitigation |
 |-----------|--------|------------|
-| **Not universal initially** | Only full features on Konsole/Kitty terminals | Clear documentation, capability detection + TUI fallback |
+| **Not universal initially** | Only full features on Konsole/Kitty terminals | Clear documentation, capability detection with clear error |
 | **Binary size** | ~300KB for bundled JetBrains Mono | Consider `font_path` override config option |
 | **Font licensing** | JetBrains Mono requires compliance | Include LICENSE file, note in README |
 | **i18n limited** | English-only fonts for MVP | Document limitation, plan for future expansion |
@@ -420,12 +422,11 @@ base64 = "0.22"                 # Kitty protocol encoding
 
 **Must-Have:**
 - [ ] Sub-pixel OVP anchoring on Konsole with Kitty Protocol
-- [ ] Capability detection with TUI fallback (no blank screen failures)
+- [ ] Capability detection with clear error on unsupported terminals
 - [ ] Word-Level LRU cache (1000 entries minimum)
 - [ ] Single-buffer compositing (no flickering)
 - [ ] Stable 1000+ WPM performance (measured on Konsole)
 - [ ] SIGWINCH resize handling (no artifacts)
-- [ ] All existing features functional in fallback TUI mode
 
 **Stretch Goals:**
 - [ ] <5ms per-frame render time

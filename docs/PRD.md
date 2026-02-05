@@ -154,7 +154,6 @@ Designed to meet **WCAG AA accessibility** while minimizing eye strain.
 | **Command** | Command Bright / Reader Dimmed (30%) | Ratatui | Standard TUI |
 | **Reading** | Reader Full / Command Dimmed (10%) | KittyGraphicsRenderer | Sub-pixel OVP, true opacity |
 | **Paused** | Reader Full / Gutter Highlighted | KittyGraphicsRenderer | Full features, paused state |
-| **Fallback** | Standard TUI | CellRenderer | Character-grid OVP, dim attribute |
 
 ### 4.3 The "Anchor" System (Pixel-Perfect)
 
@@ -185,13 +184,6 @@ The "Anchor" letter (Optimal Recognition Point) remains **mathematically station
 - **Length:** 25% to 75% of center container width
 - **Fill Logic:** Left-to-Right representing progress through current sentence
 - **Style:** Completed = `Theme.fg`, Unread = `Theme.ghost`
-
-**Fallback Mode (TUI-only):**
-When running on terminals without Kitty Graphics Protocol support:
-- OVP snaps to **nearest character cell** (no sub-pixel positioning)
-- Ghost words use standard **dim attribute** (not true opacity)
-- Progress bars use standard **Unicode block characters**
-- Fully functional as RSVP reader with reduced visual fidelity
 
 ---
 
@@ -225,7 +217,6 @@ speedy/
 │   ├── graphics/       # NEW: Rendering backends
 │   │   ├── mod.rs      # RsvpRenderer trait definition
 │   │   ├── kitty.rs    # KittyGraphicsRenderer (Kitty Protocol)
-│   │   ├── cell.rs     # CellRenderer (TUI fallback)
 │   │   ├── cache.rs    # Word-Level LRU cache
 │   │   └── compositor.rs # CPU compositing (single buffer)
 │   ├── ui/             # theme.rs, render.rs (Ratatui TUI layer)
@@ -252,7 +243,7 @@ speedy/
 
 **Accessibility Compliance:**
 - All functional text meets WCAG AA contrast ratio (≥4.5:1)
-- TUI fallback ensures basic functionality on all terminals
+- Kitty Graphics Protocol required for full functionality
 
 **Font Management:**
 - Bundled JetBrains Mono OTF (~300KB) via `include_bytes!`
@@ -272,8 +263,7 @@ pub trait RsvpRenderer {
 ```
 
 **Implementations:**
-- `KittyGraphicsRenderer`: Full pixel-perfect rendering with sub-pixel OVP
-- `CellRenderer`: TUI fallback with character-grid OVP snapping
+- `KittyGraphicsRenderer`: Full pixel-perfect rendering with sub-pixel OVP (Kitty Graphics Protocol required)
 
 **Future Backends:**
 - `SixelRenderer`: Sixel graphics protocol support
@@ -341,18 +331,13 @@ pub trait RsvpRenderer {
 
 ## 9. TERMINAL REQUIREMENTS
 
-### 9.1 Full Feature Support (Recommended)
+### 9.1 Terminal Requirements (MANDATORY)
 
-**Required Terminal:** Konsole (KDE Terminal Emulator) version 22.04+ OR Kitty Terminal
+**Required Terminals:**
+- Kitty Terminal (any version)
+- Konsole (version 22.04+ with Kitty Graphics Protocol support)
 
 **Required Protocol:** Kitty Graphics Protocol support
-
-**Features Available:**
-- Sub-pixel OVP anchoring (pixel-perfect positioning)
-- Variable opacity ghost words (true 15% opacity)
-- Macro-gutter and micro-bar progress indicators
-- Bundled JetBrains Mono font rendering
-- 1000+ WPM performance with LRU caching
 
 **Verification:**
 ```bash
@@ -361,19 +346,9 @@ echo -e "\e[?u\e[c"
 # Response should include graphics capability flags
 ```
 
-### 9.2 Fallback Mode (Universal Compatibility)
+**Behavior:** If terminal does not support Kitty Graphics Protocol, application will exit immediately with a clear error message. This application is designed exclusively for modern terminals with graphics protocol support.
 
-**Supported Terminals:** Any terminal with basic ANSI escape sequence support
-
-**Limitations:**
-- OVP snaps to nearest character cell (no sub-pixel precision)
-- Ghost words use dim attribute (not true opacity)
-- Progress bars use Unicode block characters
-- Fully functional RSVP reader with reduced visual fidelity
-
-**Performance:** May not achieve 1000+ WPM on slower terminals
-
-### 9.3 Font Configuration
+### 9.2 Font Configuration
 
 **Default:** JetBrains Mono Regular (bundled, ~300KB)
 
@@ -417,11 +392,6 @@ font_size = 24  # pixels
 - **Internationalization:** English text only (ab_glyph limitations, no RTL/ligatures)
 - **Binary Size:** ~300KB increase from bundled JetBrains Mono font
 - **Font Options:** Bundled font only; custom font path config is future work
-
-### Fallback Mode Limitations
-- No sub-pixel OVP precision (character-grid only)
-- Ghost words use dim attribute instead of true opacity
-- Progress bars use Unicode blocks instead of smooth graphics
 
 ---
 

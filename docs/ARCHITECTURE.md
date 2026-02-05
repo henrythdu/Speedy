@@ -227,12 +227,12 @@ pub struct TerminalDimensions {
 Terminal graphics support level enum.
 ```rust
 pub enum GraphicsCapability {
-    None,   // Pure TUI fallback
+    None,   // Terminal does not support Kitty Graphics Protocol (will exit with error)
     Kitty,  // Kitty Graphics Protocol supported
 }
 ```
 
-**Purpose:** Tracks detected terminal capability for choosing appropriate renderer backend.
+**Purpose:** Tracks detected terminal capability. Application requires Kitty Graphics Protocol support; exits with clear error if not available.
 
 ### `FontMetrics` (`src/rendering/font.rs`)
 Font metric data for OVP calculations.
@@ -265,11 +265,10 @@ pub struct CapabilityDetector;
 impl CapabilityDetector {
     pub fn new() -> Self;
     pub fn detect(&self) -> GraphicsCapability;
-    pub fn detect_from_override(&self, force_kitty: bool, force_tui: bool) -> Option<GraphicsCapability>;
 }
 ```
 
-**Purpose:** Detects terminal graphics capabilities via environment variables ($TERM) with fallback to TUI mode. Supports CLI override flags (`--force-kitty`, `--force-tui`) for manual control. The application layer (main.rs) displays a warning message when running in TUI fallback mode.
+**Purpose:** Detects terminal graphics capabilities via environment variables ($TERM). Application requires Kitty Graphics Protocol support; exits with clear error if not available.
 
 ### `AppMode` (`src/app/mode.rs:1`)
 Application operating modes.
@@ -487,7 +486,7 @@ The project follows **pure core + thin IO adapter** pattern:
 | **4.2 Dual-Engine** | ✅ RsvpRenderer trait with KittyGraphicsRenderer |
 | **7.1 REPL Mode** | ✅ Complete |
 | **7.2 Reading Mode** | ✅ Complete (TUI with OVP anchoring) |
-| **9.2 Fallback Mode** | ⚠️ Kitty Graphics Protocol required - TUI fallback not implemented (app requires Kitty-compatible terminal) |
+| **9.2 Terminal Requirements** | ✅ Clear requirement: Kitty Graphics Protocol mandatory (Kitty or Konsole 22.04+) |
 
 ---
 
