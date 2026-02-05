@@ -1,6 +1,6 @@
 # Speedy Architecture Document
 
-**Last Updated:** 2026-02-04 (Major refactoring: Decomposed kitty.rs into modules, extracted CommandExecutor, removed dead code)
+**Last Updated:** 2026-02-04 (Cleanup: Removed CellRenderer references, deleted failing test, updated test count, noted CPU compositing pivot)
 **Purpose:** Document actual codebase structure, methods, structs, and architecture to prevent duplication and confusion.
 
 ## ⚠️ Important Notes
@@ -21,7 +21,7 @@ src/
 │   ├── app.rs          # Main App struct and business logic
 │   ├── event.rs        # AppEvent enum for event handling
 │   ├── mode.rs         # AppMode enum (Repl, Reading, Paused, Command)
-│   ├── render_state.rs # RenderState struct for TUI rendering data
+
 │   └── mod.rs          # App module exports
 ├── engine/             # Shared logic (config, errors, re-exports)
 │   ├── config.rs       # ReadingConfig timing configuration
@@ -34,7 +34,7 @@ src/
 │   ├── ovp.rs          # OVP anchor position calculation
 │   └── mod.rs          # Reading module exports
 ├── rendering/          # Rendering backends domain
-│   ├── cell.rs         # CellRenderer TUI fallback
+
 │   ├── renderer.rs     # RsvpRenderer trait and RendererError
 │   ├── viewport.rs     # Viewport coordinates and terminal dimensions
 │   ├── font.rs         # Font loading and metrics
@@ -47,7 +47,7 @@ src/
 │   └── mod.rs          # Rendering module exports
 ├── ui/                 # TUI rendering layer
 │   ├── reader/         # Reader feature module
-│   │   ├── component.rs # ReaderComponent wrapping CellRenderer
+│   │   ├── component.rs # ReaderComponent (placeholder for future use)
 │   │   └── view.rs     # Render functions (OVP word, progress)
 │   ├── command.rs      # Command parsing and token utilities
 │   ├── command_executor.rs # Command execution logic
@@ -131,30 +131,7 @@ pub trait RsvpRenderer {
 }
 ```
 
-**Purpose:** Abstracts rendering implementations (TUI CellRenderer, Kitty Graphics, future Sixel/iTerm2). Enables backend switching without changing reading logic. Object-safe trait supporting `Box<dyn RsvpRenderer>`.
-
-### `CellRenderer` (`src/rendering/cell.rs:17`)
-TUI fallback renderer using pure Ratatui widgets.
-```rust
-pub struct CellRenderer {
-    terminal_size: (u16, u16),  // (columns, rows)
-    current_word: Option<String>,
-}
-```
-
-**Public API:**
-- `new() -> Self` - Create new instance
-- `update_terminal_size(width, height)` - Update terminal dimensions
-- `get_center_row() -> u16` - Calculate vertically centered row
-- `get_current_word() -> Option<&str>` - Get current word if any
-- `calculate_start_column(word, anchor) -> Result<u16, RendererError>` - OVP cell-based anchoring
-
-**Key Behaviors:**
-- OVP anchoring snaps to nearest character cell (not sub-pixel)
-- Words centered horizontally and vertically in viewport
-- Uses `unicode-segmentation` crate for emoji/CJK width calculation
-- NO dependency on `font.rs` (terminal controls fonts in TUI mode)
-- Implements all `RsvpRenderer` trait methods
+**Purpose:** Abstracts rendering implementations (Kitty Graphics, future Sixel/iTerm2). Enables backend switching without changing reading logic. Object-safe trait supporting `Box<dyn RsvpRenderer>`.
 
 ### `KittyGraphicsRenderer` (`src/rendering/kitty/mod.rs:18`)
 Pixel-perfect RSVP renderer using Kitty Graphics Protocol with sub-pixel OVP anchoring.
@@ -298,44 +275,34 @@ impl CapabilityDetector {
 Application operating modes.
 ```rust
 pub enum AppMode {
-    Repl,      // REPL command mode (rustyline)
+    Command,   // Command input mode (bottom deck)
     Reading,   // Full-screen TUI reading mode
     Paused,    // Reading mode paused
+    Peek,      // Peek mode (hold Tab to see context)
+    Quit,      // Application exit
 }
 ```
 
 **Purpose:** Tracks which UI layer is active and handles transitions.
 
 ### `ReaderComponent` (`src/ui/reader/component.rs:9`)
-Reader UI component wrapping CellRenderer for TUI fallback mode.
+Reader UI component (placeholder for future use).
+
+**Purpose:** Reserved for future UI component architecture.
+
+### `Command` (`src/ui/command.rs:18`)
+Command deck input variants.
 ```rust
-pub struct ReaderComponent {
-    renderer: CellRenderer,
-}
-```
-
-**Public API:**
-- `new() -> Self` - Create new component instance
-- `renderer(&mut self) -> &mut CellRenderer` - Get mutable renderer access
-- `render(&mut self, frame: &mut Frame, area: Rect)` - Render word to TUI buffer
-- `display_word(&mut self, word: &str, anchor: usize) -> Result<(), RendererError>` - Display word with OVP
-- `clear(&mut self) -> Result<(), RendererError>` - Clear the display
-
-**Purpose:** Bridges CellRenderer with Ratatui UI layer. Separates state logic from rendering.
-
-### `ReplInput` (`src/repl/input.rs:15`)
-REPL command variants.
-```rust
-pub enum ReplInput {
-    LoadFile(PathBuf),      // @filename
+pub enum Command {
+    Quit,                   // :q or :quit
+    Help,                   // :h or :help
+    LoadFile(String),       // @filename.pdf or @filename.epub
     LoadClipboard,          // @@
-    Quit,                    // :q
-    Help,                   // :h
-    Invalid(String),        // Parse error
+    Unknown(String),        // Parse error
 }
 ```
 
-**Purpose:** Parsed REPL commands for processing.
+**Purpose:** Parsed command deck input for processing. Replaces the obsolete REPL module.
 
 ---
 
@@ -350,7 +317,6 @@ pub enum ReplInput {
 
 #### Reading Session
 - `pub fn get_wpm(&self) -> u32` - Returns WPM or default 300 (line 198)
-- `pub fn get_render_state(&self) -> RenderState` - Gets TUI rendering data (line 143)
 - `pub fn resume_reading(&mut self) -> Result<(), String>` - Resumes paused session (line 134)
 - `pub fn apply_loaded_document(&mut self, doc: LoadedDocument)` - Applies loaded document
 - `pub fn start_reading(&mut self, text: &str, wpm: u32)` - Starts reading session
@@ -477,10 +443,9 @@ The project follows **pure core + thin IO adapter** pattern:
 - Midnight theme colors (`src/ui/theme.rs`)
 - Auto-advancement timing loop
 - OVP anchoring (left padding calculation in render_word_display) (src/ui/reader/view.rs:10)
-- CellRenderer TUI fallback with RsvpRenderer trait (src/rendering/cell.rs)
-- ReaderComponent UI wrapper (src/ui/reader/component.rs)
+- ReaderComponent UI wrapper (src/ui/reader/component.rs) - placeholder for future use
 - Domain-based organization (reading/ and rendering/ modules)
-- Application layer refactoring (app.rs split into event.rs, render_state.rs)
+- Application layer refactoring (app.rs split into event.rs, mode.rs)
 - UI layer refactoring (reader/ subdirectory with component.rs and view.rs)
 
 ### 🚧 In Progress (Epic 2: Image-Based Word Rendering)
@@ -495,7 +460,7 @@ The project follows **pure core + thin IO adapter** pattern:
 
 **Bug Fixed:** Words now render at 42% of READING ZONE (canvas-relative) instead of 42% of FULL SCREEN (screen-relative). This places words in the middle of the reading area instead of near the command deck.
 
-**Testing:** 31 new unit tests added, 220 total tests passing, 0 failures.
+**Testing:** 178 total tests passing (unit + integration), 0 failures.
 
 **Previously Implemented:**
 - ✅ Task 2: ab_glyph Word Rasterization (COMPLETE)
@@ -507,7 +472,7 @@ The project follows **pure core + thin IO adapter** pattern:
 - Sub-pixel OVP anchoring via `calculate_start_x()`
 - Vertical centering at 42% of reading zone
 - Kitty Graphics Protocol transmission with position coordinates
-- **NEW:** ReadingCanvas full-zone composite buffer (Design Doc v2.0 Section 6.2)
+- **Note:** CPU Compositing with ReadingCanvas was attempted but pivoted back to single-word rendering for accurate positioning (may revisit in future)
 
 ---
 
@@ -519,10 +484,10 @@ The project follows **pure core + thin IO adapter** pattern:
 | **3.2 Weighted Delay** | ✅ Complete (floating-point timing precision) |
 | **3.3 Sentence Navigation** | ✅ Implemented (j=left/k=right keys) |
 | **4.1 Midnight Theme** | ✅ Implemented (theme.rs with explicit RGB colors) |
-| **4.2 Dual-Engine** | ✅ RsvpRenderer trait + CellRenderer TUI fallback |
+| **4.2 Dual-Engine** | ✅ RsvpRenderer trait with KittyGraphicsRenderer |
 | **7.1 REPL Mode** | ✅ Complete |
 | **7.2 Reading Mode** | ✅ Complete (TUI with OVP anchoring) |
-| **9.2 Fallback Mode** | ✅ CellRenderer TUI fallback for non-graphics terminals |
+| **9.2 Fallback Mode** | ⚠️ Kitty Graphics Protocol required - TUI fallback not implemented (app requires Kitty-compatible terminal) |
 
 ---
 

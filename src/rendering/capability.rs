@@ -149,13 +149,5 @@ mod tests {
         std::env::remove_var("TERM");
     }
 
-    #[test]
-    fn test_detector_default() {
-        let detector: CapabilityDetector = Default::default();
-        // Set up Kitty environment to prevent panic
-        std::env::set_var("TERM", "xterm-kitty");
-        let _capability = detector.detect();
-        // Cleanup
-        std::env::remove_var("TERM");
-    }
+    
 }

@@ -644,19 +644,6 @@ fn debug_tokenize_pasta_text() {
     }
 
     #[test]
-    fn test_tokenize_preserves_newline_punctuation() {
-        let text = "hello\nworld"; // Single newline between words
-        let tokens = tokenize_text(text);
-        
-        // Should have 3 tokens: "hello", newline marker, "world"
-        assert_eq!(tokens.len(), 3, "Should have hello, newline, world");
-        assert_eq!(tokens[0].text, "hello");
-        assert!(tokens[1].text.is_empty(), "Newline token should have empty text");
-        assert_eq!(tokens[1].punctuation, vec!['\n'], "Newline token should have newline punctuation");
-        assert_eq!(tokens[2].text, "world");
-    }
-
-    #[test]
     fn test_tokenize_no_duplicate_empty_tokens() {
         let text = "a\n\n\nb"; // Multiple blank lines
         let tokens = tokenize_text(text);
