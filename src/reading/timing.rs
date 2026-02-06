@@ -122,7 +122,7 @@ pub fn tokenize_text(text: &str) -> Vec<Token> {
             consecutive_empty_lines += 1;
             // Only create a paragraph break token after 2+ consecutive empty lines
             if consecutive_empty_lines == 2 {
-                let prev_token = tokens.last().cloned();
+                let _prev_token = tokens.last().cloned();
                 let is_start = true; // Paragraph breaks indicate sentence boundaries
                 tokens.push(Token {
                     text: String::new(),
@@ -139,7 +139,7 @@ pub fn tokenize_text(text: &str) -> Vec<Token> {
                 if !word.is_empty() {
                     let (text, punctuation) = extract_punctuation(word);
                     let prev_token = tokens.last().cloned();
-                    let is_start = detect_sentence_boundary(prev_token.as_ref(), &word);
+                    let is_start = detect_sentence_boundary(prev_token.as_ref(), word);
 
                     tokens.push(Token {
                         text,
@@ -154,7 +154,7 @@ pub fn tokenize_text(text: &str) -> Vec<Token> {
     // Remove trailing newline token if it exists (last line doesn't need newline after it)
     if tokens
         .last()
-        .map_or(false, |t| t.punctuation == vec!['\n'] && t.text.is_empty())
+        .is_some_and(|t| t.punctuation == vec!['\n'] && t.text.is_empty())
     {
         tokens.pop();
     }
@@ -312,21 +312,6 @@ mod tests {
         );
         assert_eq!(tokens[0].text, "hello");
         assert_eq!(tokens[1].text, "world");
-    }
-
-    fn test_tokenize_paragraph_break_creates_pause() {
-        // Double newlines (paragraph breaks) SHOULD create pause tokens
-        let text = "hello\n\nworld"; // Two words with paragraph break
-        let tokens = tokenize_text(text);
-        assert_eq!(
-            tokens.len(),
-            3,
-            "Paragraph break should create a pause token"
-        );
-        assert_eq!(tokens[0].text, "hello");
-        assert_eq!(tokens[1].text, ""); // Paragraph break token
-        assert_eq!(tokens[1].punctuation, vec!['\n']);
-        assert_eq!(tokens[2].text, "world");
     }
 
     #[test]

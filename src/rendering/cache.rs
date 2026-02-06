@@ -320,13 +320,6 @@ mod tests {
     use super::*;
     use crate::rendering::font::{get_font, get_font_metrics};
 
-    fn setup_test_cache() -> (WordCache, FontRef<'static>, FontMetrics) {
-        let font = get_font().expect("Font should be available");
-        let metrics = get_font_metrics(&font, 24.0);
-        let cache = WordCache::new(100);
-        (cache, font, metrics)
-    }
-
     #[test]
     fn test_cache_key_hashing() {
         let key1 = CacheKey {

@@ -1,73 +1,11 @@
+use crate::app::mode::AppMode;
 use crate::ui::theme::colors;
 use ratatui::{
-    layout::Alignment,
+    layout::{Constraint, Direction, Layout, Rect},
     style::Style,
-    text::{Line, Span},
-    widgets::Paragraph,
+    widgets::{Block, Borders, Clear, Paragraph},
+    Frame,
 };
-
-pub fn render_word_display(word: &str, anchor_pos: usize) -> Paragraph<'static> {
-    let chars: Vec<char> = word.chars().collect();
-    let _word_len = chars.len();
-
-    let left_padding = 3_i32.saturating_sub(anchor_pos as i32) as usize;
-
-    let mut spans = Vec::new();
-    for _ in 0..left_padding {
-        spans.push(Span::styled(" ", Style::default().fg(colors::text())));
-    }
-
-    for (i, ch) in chars.iter().enumerate() {
-        let style = if i == anchor_pos {
-            Style::default()
-                .fg(colors::anchor())
-                .add_modifier(ratatui::style::Modifier::BOLD)
-        } else {
-            Style::default().fg(colors::text())
-        };
-        spans.push(Span::styled(ch.to_string(), style));
-    }
-
-    Paragraph::new(Line::from(spans))
-        .alignment(Alignment::Left)
-        .style(Style::default().bg(colors::background()))
-}
-
-pub fn render_progress_bar(progress: (usize, usize)) -> Line<'static> {
-    let (current, total) = progress;
-    let width = if total == 0 {
-        0.0
-    } else {
-        (current as f64 / total as f64) * 100.0
-    };
-
-    let filled_len = (width / 100.0 * 20.0) as usize;
-    let empty_len = 20 - filled_len;
-
-    let mut spans = Vec::new();
-    for _ in 0..filled_len {
-        spans.push(Span::styled("─", Style::default().fg(colors::text())));
-    }
-    for _ in 0..empty_len {
-        spans.push(Span::styled("─", Style::default().fg(colors::dimmed())));
-    }
-
-    Line::from(spans).alignment(Alignment::Center)
-}
-
-pub fn render_placeholder() -> Paragraph<'static> {
-    let text = "Type @filename to load a file\nOr @@ to load from clipboard\n:q to quit";
-    Paragraph::new(text).alignment(Alignment::Center).style(
-        Style::default()
-            .fg(colors::dimmed())
-            .bg(colors::background()),
-    )
-}
-
-use crate::app::mode::AppMode;
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::widgets::{Block, Borders, Clear};
-use ratatui::Frame;
 
 pub fn render_command_deck(
     frame: &mut Frame,
@@ -125,37 +63,3 @@ pub fn render_command_deck(
     frame.render_widget(input_widget, layout[1]);
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_render_word_display_creates_paragraph() {
-        let word = "hello";
-        let anchor_pos = 1;
-        let paragraph = render_word_display(word, anchor_pos);
-        let _ = paragraph;
-    }
-
-    #[test]
-    fn test_render_word_display_anchor_is_red() {
-        let word = "test";
-        let anchor_pos = 1;
-        let paragraph = render_word_display(word, anchor_pos);
-        let _ = paragraph;
-    }
-
-    #[test]
-    fn test_render_progress_bar_zero_total() {
-        let progress = (0, 0);
-        let bar = render_progress_bar(progress);
-        let _ = bar;
-    }
-
-    #[test]
-    fn test_render_progress_bar_halfway() {
-        let progress = (50, 100);
-        let bar = render_progress_bar(progress);
-        let _ = bar;
-    }
-}

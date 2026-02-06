@@ -3,7 +3,7 @@
 //! Tests the integration of WordCache with KittyGraphicsRenderer
 //! to ensure proper caching behavior and performance characteristics.
 
-use speedy::rendering::cache::{WordCache, DEFAULT_CACHE_CAPACITY};
+use speedy::rendering::cache::WordCache;
 use speedy::rendering::font::{get_font, get_font_metrics};
 use speedy::rendering::kitty::KittyGraphicsRenderer;
 use speedy::rendering::renderer::RsvpRenderer;
@@ -233,7 +233,7 @@ fn test_word_cache_font_size_change_clears_cache() {
     let _ = cache.get_or_render("hello", 1, &font, &metrics);
     let _ = cache.get_or_render("world", 1, &font, &metrics);
 
-    assert!(cache.len() > 0, "Cache should have entries");
+    assert!(!cache.is_empty(), "Cache should have entries");
 
     // Change font size
     cache.set_font_size(48.0);

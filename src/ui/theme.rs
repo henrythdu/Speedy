@@ -39,9 +39,6 @@ pub mod colors {
     use super::Theme;
     use ratatui::style::Color;
 
-    pub fn background() -> Color {
-        Theme::current().background
-    }
     pub fn text() -> Color {
         Theme::current().text
     }

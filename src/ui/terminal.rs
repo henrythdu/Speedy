@@ -137,11 +137,10 @@ impl TuiManager {
                 }
                 Ok(false) => {
                     // Only auto-advance in Reading mode, not Paused
-                    if app.mode() == AppMode::Reading {
-                        if !app.advance_reading() {
+                    if app.mode() == AppMode::Reading
+                        && !app.advance_reading() {
                             app.set_mode(AppMode::Paused);
                         }
-                    }
                 }
                 Err(e) => {
                     // Propagate I/O errors instead of ignoring them

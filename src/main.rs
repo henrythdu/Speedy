@@ -8,7 +8,7 @@ mod storage;
 mod ui;
 
 use crate::app::App;
-use crate::rendering::capability::{CapabilityDetector, GraphicsCapability};
+use crate::rendering::capability::CapabilityDetector;
 use crate::rendering::font::{get_font, get_font_metrics};
 use crate::ui::TuiManager;
 use std::env;
@@ -20,7 +20,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Detect terminal capability
     let detector = CapabilityDetector::new();
-    let capability = if force_kitty {
+    let _capability = if force_kitty {
         detector.detect_from_override(true)
     } else {
         detector.detect()
