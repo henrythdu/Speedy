@@ -1,3 +1,4 @@
+use crate::engine::config::DEFAULT_FONT_SIZE;
 use ab_glyph::{Font, FontRef, PxScale, ScaleFont};
 use lazy_static::lazy_static;
 
@@ -65,7 +66,7 @@ impl Default for FontConfig {
     fn default() -> Self {
         Self {
             custom_font_path: None,
-            font_size: 24.0,
+            font_size: DEFAULT_FONT_SIZE,
         }
     }
 }

@@ -3,6 +3,7 @@
 //! Provides caching of pre-rendered RGBA word buffers to eliminate redundant
 //! rasterization and enable consistent 1000+ WPM reading speeds.
 
+use crate::engine::config::{DEFAULT_CACHE_CAPACITY, DEFAULT_FONT_SIZE, DEFAULT_MEMORY_CAP_BYTES};
 use crate::rendering::font::FontMetrics;
 use crate::rendering::kitty::rasterizer::rasterize_word;
 use ab_glyph::FontRef;
@@ -11,12 +12,6 @@ use imageproc::image::Rgba;
 use lru::LruCache;
 use std::hash::{Hash, Hasher};
 use std::num::NonZeroUsize;
-
-/// Default cache capacity (number of entries)
-pub const DEFAULT_CACHE_CAPACITY: usize = 1000;
-
-/// Default memory cap in bytes (75MB)
-pub const DEFAULT_MEMORY_CAP_BYTES: u64 = 75 * 1024 * 1024;
 
 /// Cache key for word rendering lookups
 ///
@@ -124,7 +119,7 @@ impl WordCache {
 
         Self {
             cache: LruCache::new(capacity),
-            font_size: 24.0, // Default font size
+            font_size: DEFAULT_FONT_SIZE,
             hits: 0,
             misses: 0,
             total_cached_bytes: 0,

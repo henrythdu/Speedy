@@ -1,5 +1,6 @@
 use crate::app::event::AppEvent;
 use crate::app::mode::AppMode;
+use crate::engine::config::DEFAULT_WPM;
 use crate::engine::{tokenize_text, ReadingState};
 use crate::input::{clipboard, epub, pdf, LoadError, LoadedDocument};
 use std::path::Path;
@@ -132,7 +133,7 @@ impl App {
 
     pub fn apply_loaded_document(&mut self, doc: LoadedDocument) {
         self.reading_state = Some(ReadingState::new_with_default_config(
-            doc.tokens, 300, // Default WPM per PRD Section 3.2
+            doc.tokens, DEFAULT_WPM,
         ));
         self.mode = AppMode::Reading;
     }
@@ -185,7 +186,7 @@ impl App {
         self.reading_state
             .as_ref()
             .map(|state| state.wpm)
-            .unwrap_or(300) // Default 300 WPM
+            .unwrap_or(DEFAULT_WPM)
     }
 
     fn handle_load_error(&self, error: &LoadError) {

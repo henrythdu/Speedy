@@ -1,5 +1,6 @@
 //! Sentence progress bar - simple 2px bar centered below word
 
+use crate::engine::config::{PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH_PCT};
 use imageproc::image::{ImageBuffer, Rgba};
 
 /// Simple 2px progress bar with bright fill, dim background
@@ -14,8 +15,8 @@ pub struct SentenceProgressBar {
 impl SentenceProgressBar {
     pub fn new(container_width: u32) -> Self {
         Self {
-            width: (container_width as f64 * 0.5) as u32,
-            height: 2,
+            width: (container_width as f64 * PROGRESS_BAR_WIDTH_PCT) as u32,
+            height: PROGRESS_BAR_HEIGHT,
             fill_pct: 0.0,
             fill_color: Rgba([169, 177, 214, 255]), // Theme::text bright
             bg_color: Rgba([169, 177, 214, 50]),    // Theme::text dim (20% opacity)

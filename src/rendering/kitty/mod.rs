@@ -7,7 +7,8 @@ pub mod positioning;
 pub mod protocol;
 pub mod rasterizer;
 
-use crate::rendering::cache::{WordCache, DEFAULT_CACHE_CAPACITY};
+use crate::engine::config::{DEFAULT_CACHE_CAPACITY, DEFAULT_FONT_SIZE, PROGRESS_BAR_MARGIN_PX};
+use crate::rendering::cache::WordCache;
 use crate::rendering::font::{get_font, get_font_metrics, FontMetrics};
 use crate::rendering::kitty::positioning::{calculate_start_x, calculate_vertical_center};
 use crate::rendering::kitty::protocol::{
@@ -47,7 +48,7 @@ impl KittyGraphicsRenderer {
         Self {
             viewport: Viewport::new(),
             font: None,
-            font_size: 24.0,
+            font_size: DEFAULT_FONT_SIZE,
             font_metrics: None,
             current_image_id: 1,
             word_cache: WordCache::new(DEFAULT_CACHE_CAPACITY),
@@ -120,7 +121,7 @@ impl KittyGraphicsRenderer {
         image_id: u32,
     ) -> Result<(), RendererError> {
         // Simple: bar Y = word Y + word height + 10px margin
-        let bar_y = word_y + word_height + 10;
+        let bar_y = word_y + word_height + PROGRESS_BAR_MARGIN_PX;
 
         // Create bar with current viewport width
         let container_width = self

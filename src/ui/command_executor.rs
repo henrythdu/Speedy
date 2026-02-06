@@ -4,6 +4,7 @@
 
 use crate::app::mode::AppMode;
 use crate::app::App;
+use crate::engine::config::DEFAULT_WPM;
 use crate::ui::command::{parse_command, tokens_to_text, Command};
 use std::io;
 
@@ -32,7 +33,7 @@ pub fn execute_command(app: &mut App, command_str: &str) -> io::Result<CommandRe
             match result {
                 Ok(doc) => {
                     let text = tokens_to_text(&doc);
-                    app.start_reading(&text, 300);
+                    app.start_reading(&text, DEFAULT_WPM);
                 }
                 Err(e) => {
                     app.set_error(format!("Failed to load file: {}", e));
@@ -45,7 +46,7 @@ pub fn execute_command(app: &mut App, command_str: &str) -> io::Result<CommandRe
             match clipboard::load() {
                 Ok(doc) => {
                     let text = tokens_to_text(&doc);
-                    app.start_reading(&text, 300);
+                    app.start_reading(&text, DEFAULT_WPM);
                 }
                 Err(e) => {
                     app.set_error(format!("Failed to load clipboard: {}", e));

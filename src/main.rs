@@ -31,7 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize font
     match get_font() {
         Some(font) => {
-            let metrics = get_font_metrics(&font, 24.0);
+            let metrics = get_font_metrics(&font, speedy::engine::config::DEFAULT_FONT_SIZE);
             eprintln!("Font loaded: height={:.1}", metrics.height);
         }
         None => {
