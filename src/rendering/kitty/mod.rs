@@ -13,6 +13,7 @@ use crate::rendering::kitty::positioning::{calculate_start_x, calculate_vertical
 use crate::rendering::kitty::protocol::{
     delete_all_graphics, delete_image, encode_image_base64, transmit_graphics,
 };
+use crate::rendering::progress_bar::SentenceProgressBar;
 use crate::rendering::renderer::{RendererError, RsvpRenderer};
 use crate::rendering::viewport::Viewport;
 use ab_glyph::FontRef;
@@ -74,6 +75,81 @@ impl KittyGraphicsRenderer {
     /// Get reference to viewport (for external access to query dimensions)
     pub fn viewport(&mut self) -> &mut Viewport {
         &mut self.viewport
+    }
+
+    /// Get vertical center Y position (for bar positioning)
+    pub fn get_vertical_center(&self) -> Option<u32> {
+        calculate_vertical_center(&self.viewport)
+    }
+
+    /// Calculate word height for bar positioning
+    pub fn calculate_word_height(
+        &mut self,
+        word: &str,
+        anchor_position: usize,
+    ) -> Result<u32, RendererError> {
+        let font = self
+            .font
+            .as_ref()
+            .ok_or_else(|| RendererError::RenderFailed("Font not initialized".to_string()))?;
+        let metrics = self
+            .font_metrics
+            .as_ref()
+            .ok_or_else(|| RendererError::RenderFailed("Font metrics not available".to_string()))?;
+
+        let cached_word = self
+            .word_cache
+            .get_or_render(word, anchor_position, font, metrics)
+            .map_err(|e| RendererError::RenderFailed(format!("Cache error: {}", e)))?;
+
+        Ok(cached_word.height)
+    }
+
+    /// Render sentence progress bar below word
+    ///
+    /// # Arguments
+    /// * `word_y` - Y position of word (from calculate_vertical_center)
+    /// * `word_height` - Height of rendered word in pixels
+    /// * `progress` - Fill percentage (0.0 to 1.0)
+    /// * `image_id` - Image ID for this bar
+    pub fn render_bar(
+        &mut self,
+        word_y: u32,
+        word_height: u32,
+        progress: f64,
+        image_id: u32,
+    ) -> Result<(), RendererError> {
+        // Simple: bar Y = word Y + word height + 10px margin
+        let bar_y = word_y + word_height + 10;
+
+        // Create bar with current viewport width
+        let container_width = self
+            .viewport
+            .get_dimensions()
+            .map(|d| d.pixel_size.0)
+            .unwrap_or(800);
+        let mut bar = SentenceProgressBar::new(container_width);
+        bar.update_progress(progress);
+
+        // Center bar horizontally in viewport
+        let bar_x = (container_width - bar.width()) / 2;
+
+        // Move cursor to bar position
+        if let Some((col, row)) = self.viewport.pixel_to_cell(bar_x, bar_y) {
+            print!("\x1b[{};{}H", row + 1, col + 1);
+            if let Err(e) = io::stdout().flush() {
+                return Err(RendererError::RenderFailed(format!(
+                    "Cursor flush failed: {}",
+                    e
+                )));
+            }
+        }
+
+        // Render bar at cursor position
+        let bar_buffer = bar.render();
+        let base64_data = encode_image_base64(&bar_buffer);
+        transmit_graphics(image_id, bar.width(), 2, &base64_data, 0, 0)
+            .map_err(|e| RendererError::RenderFailed(format!("Bar render failed: {}", e)))
     }
 }
 
@@ -167,15 +243,16 @@ impl RsvpRenderer for KittyGraphicsRenderer {
     }
 
     fn clear(&mut self) -> Result<(), RendererError> {
-        // Delete the previous image if it exists
-        if self.current_image_id > 1 {
-            let prev_id = self.current_image_id - 1;
-            if let Err(e) = delete_image(prev_id) {
-                return Err(RendererError::ClearFailed(format!(
-                    "Failed to clear image {}: {}",
-                    prev_id, e
-                )));
-            }
+        // A "frame" consists of two images (word + bar).
+        // We must clear both images from the previous frame.
+        if self.current_image_id > 2 {
+            let prev_bar_id = self.current_image_id - 1;
+            let prev_word_id = self.current_image_id - 2;
+
+            // Delete both images from the previous frame
+            // Errors are not propagated to prevent a single failed delete from crashing the app
+            let _ = delete_image(prev_bar_id);
+            let _ = delete_image(prev_word_id);
         }
         Ok(())
     }

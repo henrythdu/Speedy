@@ -192,10 +192,37 @@ impl TuiManager {
                     app.set_error(format!("Failed to clear previous word: {}", e));
                 }
                 let anchor_pos = crate::reading::calculate_anchor_position(&word);
+
+                // Render word
                 if let Err(e) =
                     RsvpRenderer::render_word(&mut self.kitty_renderer, &word, anchor_pos)
                 {
                     app.set_error(format!("Render error: {}", e));
+                }
+
+                // Render progress bar below word
+                if let Some(reading_state) = &app.reading_state {
+                    let progress = crate::reading::calculate_sentence_progress(
+                        reading_state.current_index,
+                        &reading_state.tokens,
+                    );
+                    let word_y = self.kitty_renderer.get_vertical_center().unwrap_or(0);
+                    if let Ok(word_height) =
+                        self.kitty_renderer.calculate_word_height(&word, anchor_pos)
+                    {
+                        let bar_image_id = self.kitty_renderer.current_image_id;
+                        if let Err(e) = self.kitty_renderer.render_bar(
+                            word_y,
+                            word_height,
+                            progress,
+                            bar_image_id,
+                        ) {
+                            app.set_error(format!("Bar render error: {}", e));
+                        } else {
+                            // Increment image ID after successful bar render
+                            self.kitty_renderer.current_image_id += 1;
+                        }
+                    }
                 }
             }
             // If word is newline/whitespace, don't clear or render - keep previous word visible

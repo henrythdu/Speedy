@@ -171,6 +171,29 @@ pub struct WordCache {
 - Eliminates redundant rasterization for repeated words
 - Integrated into `render_word()` method for transparent caching
 
+### `SentenceProgressBar` (`src/rendering/progress_bar.rs:9`)
+2px high horizontal progress bar for sentence-level spatial awareness.
+```rust
+pub struct SentenceProgressBar {
+    width: u32,        // 50% of container
+    height: u32,       // Fixed at 2px
+    fill_pct: f64,     // 0.0 to 1.0
+    fill_color: Rgba<u8>,   // Bright for read
+    bg_color: Rgba<u8>,     // Dim for unread
+}
+```
+
+**Public API:**
+- `new(container_width) -> Self` - Create bar at 50% container width
+- `update_progress(pct)` - Set fill percentage (0.0 to 1.0)
+- `render() -> ImageBuffer` - Render with bright fill + dim background
+- `width() -> u32` - Get bar width
+
+**Design:**
+- 50% opacity for filled (read) portion, 20% opacity for background (unread)
+- Centered horizontally in viewport
+- Positioned below word with 10px margin
+
 ### `KittyGraphicsRenderer` (`src/rendering/kitty/mod.rs:18`)
 Pixel-perfect RSVP renderer using Kitty Graphics Protocol with sub-pixel OVP anchoring.
 ```rust
@@ -188,8 +211,10 @@ pub struct KittyGraphicsRenderer {
 - `new() -> Self` - Create new KittyGraphicsRenderer instance
 - `calculate_font_size_from_cell_height(cell_height_px)` - Calculate font size for 5-line height
 - `get_reading_zone_height() -> Option<u32>` - Get reading zone height (total height minus fixed 5-line command deck)
-- `calculate_vertical_center() -> Option<u32>` - Calculate Y position at 42% of reading zone
+- `get_vertical_center() -> Option<u32>` - Get Y position at 42% of reading zone
+- `calculate_word_height(word, anchor_position) -> Result<u32>` - Calculate rendered word height
 - `viewport() -> &mut Viewport` - Get mutable viewport access
+- `render_bar(word_y, word_height, progress, image_id) -> Result<()>` - Render progress bar below word
 
 **Implements RsvpRenderer trait:**
 - `initialize()` - Load font, get metrics, query viewport, init word cache

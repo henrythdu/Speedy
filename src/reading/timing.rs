@@ -162,6 +162,35 @@ pub fn tokenize_text(text: &str) -> Vec<Token> {
     tokens
 }
 
+/// Calculate sentence progress as percentage (0.0 to 1.0)
+pub fn calculate_sentence_progress(current_index: usize, tokens: &[Token]) -> f64 {
+    if tokens.is_empty() || current_index >= tokens.len() {
+        return 0.0;
+    }
+
+    // Find sentence start (current position or previous sentence start)
+    let sentence_start = if tokens[current_index].is_sentence_start {
+        current_index
+    } else {
+        tokens[..current_index]
+            .iter()
+            .rposition(|t| t.is_sentence_start)
+            .unwrap_or(0)
+    };
+
+    // Find sentence end (next sentence start or end of tokens)
+    let sentence_end = tokens[current_index + 1..]
+        .iter()
+        .position(|t| t.is_sentence_start)
+        .map(|pos| current_index + 1 + pos)
+        .unwrap_or(tokens.len());
+
+    let total_words = sentence_end - sentence_start;
+    let words_read = current_index - sentence_start + 1;
+
+    (words_read as f64 / total_words as f64).clamp(0.0, 1.0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
