@@ -33,13 +33,6 @@ impl ReadingState {
         }
     }
 
-    /// Returns the current WPM setting for timeout calculation.
-    ///
-    /// Used by TuiManager to calculate timing tick interval.
-    pub fn get_wpm(&self) -> u32 {
-        self.wpm
-    }
-
     pub fn adjust_wpm(&mut self, delta: i32) {
         let new_wpm = self.wpm as i32 + delta;
         self.wpm = new_wpm.clamp(
@@ -320,12 +313,5 @@ mod tests {
         let state = ReadingState::new_with_default_config(tokens, 300);
         assert_eq!(state.wpm, 300);
         assert_eq!(state.current_index, 0);
-    }
-
-    #[test]
-    fn test_get_wpm() {
-        let tokens = vec![create_test_token("test", true)];
-        let state = ReadingState::new_with_default_config(tokens, 450);
-        assert_eq!(state.get_wpm(), 450);
     }
 }

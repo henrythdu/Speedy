@@ -13,7 +13,6 @@ pub fn load() -> Result<LoadedDocument, LoadError> {
         .map_err(|e| LoadError::Clipboard(e.to_string()))
         .map(|text| LoadedDocument {
             tokens: tokenize_text(&text),
-            source: "clipboard".to_string(),
         })
 }
 
@@ -35,27 +34,11 @@ mod tests {
         assert!(tokens[0].is_sentence_start);
     }
 
-    /// Test that LoadedDocument has correct source field.
-    #[test]
-    fn test_loaded_document_source() {
-        let doc = LoadedDocument {
-            tokens: vec![Token {
-                text: "test".to_string(),
-                punctuation: vec![],
-                is_sentence_start: true,
-            }],
-            source: "clipboard".to_string(),
-        };
-
-        assert_eq!(doc.source, "clipboard");
-    }
-
     /// Test that LoadedDocument tokens preserve punctuation.
     #[test]
     fn test_loaded_document_tokens_preserve_punctuation() {
         let doc = LoadedDocument {
             tokens: tokenize_text("Hello, world!"),
-            source: "clipboard".to_string(),
         };
 
         // First token should be "Hello" with comma punctuation

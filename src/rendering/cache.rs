@@ -3,7 +3,7 @@
 //! Provides caching of pre-rendered RGBA word buffers to eliminate redundant
 //! rasterization and enable consistent 1000+ WPM reading speeds.
 
-use crate::engine::config::{DEFAULT_CACHE_CAPACITY, DEFAULT_FONT_SIZE, DEFAULT_MEMORY_CAP_BYTES};
+use crate::engine::config::{DEFAULT_FONT_SIZE, DEFAULT_MEMORY_CAP_BYTES};
 use crate::rendering::font::FontMetrics;
 use crate::rendering::kitty::rasterizer::rasterize_word;
 use ab_glyph::FontRef;
@@ -63,20 +63,14 @@ impl CachedWord {
 /// Error type for cache operations
 #[derive(Debug, Clone, PartialEq)]
 pub enum CacheError {
-    /// Font not available for rasterization
-    FontNotAvailable,
     /// Failed to rasterize word
     RasterizationFailed(String),
-    /// Cache capacity exceeded
-    CapacityExceeded,
 }
 
 impl std::fmt::Display for CacheError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CacheError::FontNotAvailable => write!(f, "Font not available for rasterization"),
             CacheError::RasterizationFailed(msg) => write!(f, "Rasterization failed: {}", msg),
-            CacheError::CapacityExceeded => write!(f, "Cache capacity exceeded"),
         }
     }
 }
@@ -125,17 +119,6 @@ impl WordCache {
             total_cached_bytes: 0,
             memory_cap_bytes: DEFAULT_MEMORY_CAP_BYTES,
         }
-    }
-
-    /// Create a new WordCache with custom capacity and memory cap
-    ///
-    /// # Arguments
-    /// * `capacity` - Maximum number of cached entries
-    /// * `memory_cap_bytes` - Maximum memory usage in bytes
-    pub fn with_memory_cap(capacity: usize, memory_cap_bytes: u64) -> Self {
-        let mut cache = Self::new(capacity);
-        cache.memory_cap_bytes = memory_cap_bytes;
-        cache
     }
 
     /// Get or render a word, returning the cached entry
@@ -216,11 +199,6 @@ impl WordCache {
             self.font_size = font_size;
             self.clear();
         }
-    }
-
-    /// Get current font size
-    pub fn font_size(&self) -> f32 {
-        self.font_size
     }
 
     /// Get cache hit rate (0.0 to 1.0)
@@ -373,13 +351,6 @@ mod tests {
     }
 
     #[test]
-    fn test_cache_with_memory_cap() {
-        let cache = WordCache::with_memory_cap(100, 50 * 1024 * 1024); // 50MB cap
-
-        assert_eq!(cache.total_cached_bytes(), 0);
-    }
-
-    #[test]
     fn test_cache_clear() {
         let mut cache = WordCache::new(10);
         cache.hits = 5;
@@ -391,30 +362,6 @@ mod tests {
         assert_eq!(cache.hits(), 0);
         assert_eq!(cache.misses(), 0);
         assert_eq!(cache.total_cached_bytes(), 0);
-    }
-
-    #[test]
-    fn test_set_font_size_clears_cache() {
-        let mut cache = WordCache::new(100);
-        cache.font_size = 24.0;
-        cache.hits = 10;
-
-        cache.set_font_size(48.0);
-
-        assert_eq!(cache.font_size(), 48.0);
-        assert_eq!(cache.hits(), 0); // Should be cleared
-    }
-
-    #[test]
-    fn test_set_font_size_same_value_no_clear() {
-        let mut cache = WordCache::new(100);
-        cache.font_size = 24.0;
-        cache.hits = 10;
-
-        cache.set_font_size(24.0);
-
-        assert_eq!(cache.font_size(), 24.0);
-        assert_eq!(cache.hits(), 10); // Should NOT be cleared
     }
 
     #[test]

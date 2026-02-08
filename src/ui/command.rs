@@ -12,7 +12,6 @@
 //! The parsing logic is identical but designed for integration with the TUI
 //! command deck instead of a separate REPL loop.
 
-use crate::app::AppEvent;
 use crate::input::LoadedDocument;
 
 /// Commands that can be parsed from command deck input
@@ -58,19 +57,6 @@ pub fn parse_command(input: &str) -> Command {
     } else {
         // Unknown command pattern
         Command::Unknown(input.to_string())
-    }
-}
-
-/// Convert a parsed command into an AppEvent
-///
-/// This is the translation layer between command deck input and App core.
-pub fn command_to_app_event(command: Command) -> AppEvent {
-    match command {
-        Command::Quit => AppEvent::Quit,
-        Command::Help => AppEvent::Help,
-        Command::LoadFile(path) => AppEvent::LoadFile(path),
-        Command::LoadClipboard => AppEvent::LoadClipboard,
-        Command::Unknown(input) => AppEvent::InvalidCommand(input),
     }
 }
 
@@ -141,35 +127,5 @@ mod tests {
     #[test]
     fn test_parse_whitespace_only() {
         assert!(matches!(parse_command("   "), Command::Unknown(_)));
-    }
-
-    #[test]
-    fn test_command_to_app_event_quit() {
-        let event = command_to_app_event(Command::Quit);
-        assert_eq!(event, AppEvent::Quit);
-    }
-
-    #[test]
-    fn test_command_to_app_event_help() {
-        let event = command_to_app_event(Command::Help);
-        assert_eq!(event, AppEvent::Help);
-    }
-
-    #[test]
-    fn test_command_to_app_event_load_file() {
-        let event = command_to_app_event(Command::LoadFile("test.txt".to_string()));
-        assert_eq!(event, AppEvent::LoadFile("test.txt".to_string()));
-    }
-
-    #[test]
-    fn test_command_to_app_event_load_clipboard() {
-        let event = command_to_app_event(Command::LoadClipboard);
-        assert_eq!(event, AppEvent::LoadClipboard);
-    }
-
-    #[test]
-    fn test_command_to_app_event_unknown() {
-        let event = command_to_app_event(Command::Unknown("invalid".to_string()));
-        assert!(matches!(event, AppEvent::InvalidCommand(_)));
     }
 }

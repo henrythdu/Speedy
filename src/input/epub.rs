@@ -53,7 +53,6 @@ pub fn load(path: &str) -> Result<LoadedDocument, LoadError> {
 
     Ok(LoadedDocument {
         tokens: tokenize_text(&content),
-        source: format!("epub:{}", path.display()),
     })
 }
 
@@ -94,27 +93,11 @@ mod tests {
         assert!(matches!(result, Err(LoadError::FileNotFound(_))));
     }
 
-    /// Test that LoadedDocument has correct source field for EPUB.
-    #[test]
-    fn test_loaded_document_source_epub() {
-        let doc = LoadedDocument {
-            tokens: vec![Token {
-                text: "test".to_string(),
-                punctuation: vec![],
-                is_sentence_start: true,
-            }],
-            source: "epub:/path/to/book.epub".to_string(),
-        };
-
-        assert!(doc.source.starts_with("epub:"));
-    }
-
     /// Test that LoadedDocument tokens preserve sentence boundaries from EPUB text.
     #[test]
     fn test_loaded_document_sentence_boundaries() {
         let doc = LoadedDocument {
             tokens: tokenize_text("Chapter One. This is the first sentence. And another! Yes?"),
-            source: "epub:test.epub".to_string(),
         };
 
         // Verify sentence boundaries are detected

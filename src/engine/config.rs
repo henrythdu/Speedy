@@ -6,8 +6,6 @@ use std::ops::RangeInclusive;
 pub const DEFAULT_WPM: u32 = 300;
 pub const MIN_WPM: u32 = 50;
 pub const MAX_WPM: u32 = 1000;
-pub const WPM_ADJUSTMENT_STEP: i32 = 50;
-pub const MILLISECONDS_PER_MINUTE: u32 = 60_000;
 
 /// Word Length Penalty Constants
 pub const LONG_WORD_THRESHOLD: usize = 10;
@@ -22,11 +20,8 @@ pub const NEWLINE_MULTIPLIER: f64 = 4.0;
 
 /// Font Constants
 pub const DEFAULT_FONT_SIZE: f32 = 24.0;
-pub const FONT_SIZE_FALLBACK: f32 = 24.0;
-pub const FONT_SIZE_MULTIPLIER: f32 = 5.0;
 
 /// Rendering Constants
-pub const RENDER_FPS: u32 = 60;
 pub const PROGRESS_BAR_MARGIN_PX: u32 = 10;
 pub const PROGRESS_BAR_WIDTH_PCT: f64 = 0.5;
 pub const PROGRESS_BAR_HEIGHT: u32 = 2;
@@ -34,11 +29,6 @@ pub const PROGRESS_BAR_HEIGHT: u32 = 2;
 /// Cache Constants
 pub const DEFAULT_CACHE_CAPACITY: usize = 1000;
 pub const DEFAULT_MEMORY_CAP_BYTES: u64 = 100 * 1024 * 1024; // 100MB
-
-/// Viewport Constants
-pub const READING_ZONE_CENTER_PCT: f32 = 0.42;
-pub const MIN_TERMINAL_COLS: u16 = 80;
-pub const MIN_TERMINAL_ROWS: u16 = 24;
 
 /// Timing configuration per PRD Section 3.2
 #[derive(Debug, Clone, PartialEq)]

@@ -1,0 +1,335 @@
+use crate::app::mode::AppMode;
+use crate::engine::{tokenize_text, ReadingState};
+
+pub struct App {
+    pub mode: AppMode,
+    pub reading_state: Option<ReadingState>,
+    pub error_message: Option<String>,
+}
+
+impl Default for App {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl App {
+    pub fn new() -> Self {
+        Self {
+            mode: AppMode::default(),
+            reading_state: None,
+            error_message: None,
+        }
+    }
+
+    /// Set an error message to be displayed in the UI
+    pub fn set_error(&mut self, message: String) {
+        self.error_message = Some(message);
+    }
+
+    /// Get the current error message if any
+    pub fn get_error(&self) -> Option<&str> {
+        self.error_message.as_deref()
+    }
+
+    pub fn start_reading(&mut self, text: &str, wpm: u32) {
+        let tokens = tokenize_text(text);
+        self.reading_state = Some(ReadingState::new_with_default_config(tokens, wpm));
+        self.mode = AppMode::Reading;
+    }
+
+    /// Advances to the next word in the reading stream.
+    ///
+    /// Used by TuiManager for auto-advancement in Reading mode.
+    /// Returns `true` if advanced, `false` if at end or no reading state.
+    pub fn advance_reading(&mut self) -> bool {
+        match self.reading_state.as_mut() {
+            Some(state) => {
+                let before = state.current_index;
+                state.advance();
+                state.current_index > before
+            }
+            None => false,
+        }
+    }
+
+    pub fn toggle_pause(&mut self) {
+        match self.mode {
+            AppMode::Reading => {
+                self.mode = AppMode::Paused;
+            }
+            AppMode::Paused => {
+                self.mode = AppMode::Reading;
+            }
+            _ => {}
+        }
+    }
+
+    /// Get current word for rendering
+    ///
+    /// Returns the word at current reading position with punctuation attached, or None if no reading state.
+    pub fn get_current_word(&self) -> Option<String> {
+        self.reading_state
+            .as_ref()
+            .and_then(|s| s.tokens.get(s.current_index))
+            .map(|t| {
+                let mut word = t.text.clone();
+                for p in &t.punctuation {
+                    word.push(*p);
+                }
+                word
+            })
+    }
+
+    pub fn mode(&self) -> AppMode {
+        self.mode.clone()
+    }
+
+    pub fn set_mode(&mut self, mode: AppMode) {
+        self.mode = mode;
+    }
+
+    /// Get the duration for the current token in milliseconds
+    ///
+    /// Returns the calculated duration for the current token, including
+    /// punctuation multipliers and word length penalties, or 0 if no reading state.
+    pub fn get_current_token_duration(&self) -> u64 {
+        self.reading_state
+            .as_ref()
+            .map(|state| state.current_token_duration())
+            .unwrap_or(0)
+    }
+
+    /// Handle keyboard input in Reading mode.
+    /// PRD Section 7.2: j/k for sentence navigation, [ / ] for WPM, Space for pause.
+    pub fn handle_keypress(&mut self, key: char) -> bool {
+        // Only handle keys in Reading or Paused mode
+        if !matches!(self.mode, AppMode::Reading | AppMode::Paused) {
+            return false;
+        }
+
+        if self.reading_state.is_none() {
+            return false;
+        }
+
+        let reading_state = self.reading_state.as_mut().unwrap();
+
+        match key {
+            // Navigation: j is LEFT on keyboard → go BACKWARD to previous sentence
+            'j' | 'J' => {
+                reading_state.jump_to_previous_sentence();
+                true
+            }
+            // Navigation: k is RIGHT on keyboard → go FORWARD to next sentence
+            'k' | 'K' => {
+                reading_state.jump_to_next_sentence();
+                true
+            }
+            // WPM: Decrease (PRD Section 7.2)
+            '[' => {
+                reading_state.adjust_wpm(-50);
+                true
+            }
+            // WPM: Increase (PRD Section 7.2)
+            ']' => {
+                reading_state.adjust_wpm(50);
+                true
+            }
+            // Pause/Resume (PRD Section 7.2)
+            ' ' => {
+                self.toggle_pause();
+                true
+            }
+            // Quit to REPL (PRD Section 7.2)
+            'q' | 'Q' => {
+                self.mode = AppMode::Command;
+                true
+            }
+            _ => false,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_current_word_no_reading() {
+        let app = App::new();
+        assert!(app.get_current_word().is_none());
+    }
+
+    #[test]
+    fn test_get_current_word_reading() {
+        let mut app = App::new();
+        app.start_reading("hello world", 300);
+        assert_eq!(app.get_current_word(), Some("hello".to_string()));
+    }
+
+    #[test]
+    fn test_keypress_j_backward_sentence() {
+        let mut app = App::new();
+        app.start_reading("First sentence. Second sentence.", 300);
+
+        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
+
+        let result = app.handle_keypress('k');
+        assert!(result);
+        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 2);
+
+        let result = app.handle_keypress('j');
+        assert!(result);
+        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
+    }
+
+    #[test]
+    fn test_keypress_k_forward_sentence() {
+        let mut app = App::new();
+        app.start_reading("First sentence. Second sentence.", 300);
+
+        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
+
+        let result = app.handle_keypress('k');
+        assert!(result);
+        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 2);
+    }
+
+    #[test]
+    fn test_keypress_bracket_increase_wpm() {
+        let mut app = App::new();
+        app.start_reading("test", 300);
+
+        let initial_wpm = app.reading_state.as_ref().unwrap().wpm;
+
+        let result = app.handle_keypress(']');
+        assert!(result);
+        assert_eq!(app.reading_state.as_ref().unwrap().wpm, initial_wpm + 50);
+    }
+
+    #[test]
+    fn test_keypress_bracket_decrease_wpm() {
+        let mut app = App::new();
+        app.start_reading("test", 300);
+
+        let initial_wpm = app.reading_state.as_ref().unwrap().wpm;
+
+        let result = app.handle_keypress('[');
+        assert!(result);
+        assert_eq!(app.reading_state.as_ref().unwrap().wpm, initial_wpm - 50);
+    }
+
+    #[test]
+    fn test_keypress_space_toggle_pause() {
+        let mut app = App::new();
+        app.start_reading("test", 300);
+
+        assert_eq!(app.mode, AppMode::Reading);
+
+        let result = app.handle_keypress(' ');
+        assert!(result);
+        assert_eq!(app.mode, AppMode::Paused);
+
+        let result = app.handle_keypress(' ');
+        assert!(result);
+        assert_eq!(app.mode, AppMode::Reading);
+    }
+
+    #[test]
+    fn test_keypress_q_quit_to_repl() {
+        let mut app = App::new();
+        app.start_reading("test", 300);
+
+        assert_eq!(app.mode, AppMode::Reading);
+
+        let result = app.handle_keypress('q');
+        assert!(result);
+        assert_eq!(app.mode, AppMode::Command);
+    }
+
+    #[test]
+    fn test_keypress_no_reading_state() {
+        let mut app = App::new();
+
+        let result = app.handle_keypress('j');
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_keypress_repl_mode_ignored() {
+        let mut app = App::new();
+        let result = app.handle_keypress('j');
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_advance_reading_moves_to_next_word() {
+        let mut app = App::new();
+        app.start_reading("hello world test", 300);
+        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
+
+        let advanced = app.advance_reading();
+        assert!(advanced);
+        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 1);
+    }
+
+    #[test]
+    fn test_advance_reading_returns_false_at_end() {
+        let mut app = App::new();
+        app.start_reading("hello", 300);
+        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
+
+        let advanced = app.advance_reading();
+        assert!(!advanced);
+        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
+    }
+
+    #[test]
+    fn test_advance_reading_returns_false_with_no_state() {
+        let mut app = App::new();
+        let advanced = app.advance_reading();
+        assert!(!advanced);
+    }
+
+    #[test]
+    fn test_get_current_token_duration_with_punctuation() {
+        let mut app = App::new();
+        app.start_reading("Hello, world.", 300);
+
+        assert_eq!(app.get_current_token_duration(), 300);
+
+        app.advance_reading();
+
+        assert_eq!(app.get_current_token_duration(), 600);
+    }
+
+    #[test]
+    fn test_get_current_token_duration_long_word() {
+        let mut app = App::new();
+        app.start_reading("extraordinarily", 300);
+
+        assert_eq!(app.get_current_token_duration(), 230);
+    }
+
+    #[test]
+    fn test_get_current_token_duration_no_reading_state() {
+        let app = App::new();
+        assert_eq!(app.get_current_token_duration(), 0);
+    }
+
+    #[test]
+    fn test_advance_reading_stays_false_at_end() {
+        let mut app = App::new();
+        app.start_reading("hello", 300);
+        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
+        assert_eq!(app.mode, AppMode::Reading);
+
+        let advanced = app.advance_reading();
+        assert!(!advanced);
+        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
+
+        let advanced = app.advance_reading();
+        assert!(!advanced);
+        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
+    }
+}

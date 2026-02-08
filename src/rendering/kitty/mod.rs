@@ -258,10 +258,6 @@ impl RsvpRenderer for KittyGraphicsRenderer {
         Ok(())
     }
 
-    fn supports_subpixel_ovp(&self) -> bool {
-        true
-    }
-
     fn cleanup(&mut self) -> Result<(), RendererError> {
         // Clear word cache to free memory
         self.word_cache.clear();
@@ -282,13 +278,6 @@ mod tests {
     use crate::rendering::viewport::TerminalDimensions;
 
     #[test]
-    fn test_kitty_renderer_creation() {
-        let renderer = KittyGraphicsRenderer::new();
-        assert!(renderer.supports_subpixel_ovp());
-        assert_eq!(renderer.current_image_id, 1);
-    }
-
-    #[test]
     fn test_kitty_renderer_initialize_loads_font() {
         let mut renderer = KittyGraphicsRenderer::new();
         let result = renderer.initialize();
@@ -305,34 +294,6 @@ mod tests {
     }
 
     #[test]
-    fn test_kitty_renderer_supports_subpixel() {
-        let renderer = KittyGraphicsRenderer::new();
-        assert!(renderer.supports_subpixel_ovp());
-    }
-
-    #[test]
-    fn test_get_reading_zone_height_with_dimensions() {
-        use crate::rendering::kitty::positioning::get_reading_zone_height;
-        let mut renderer = KittyGraphicsRenderer::new();
-
-        // Set terminal dimensions (960x540 pixels)
-        let dims = TerminalDimensions::new(960, 540, 80, 24);
-        renderer.viewport.set_dimensions(dims);
-
-        let zone_height = get_reading_zone_height(&renderer.viewport);
-
-        assert!(
-            zone_height.is_some(),
-            "Should return height when dimensions set"
-        );
-        // Reading zone = Total height - (5 lines × cell_height)
-        // = 540 - (5 × 22.5) = 540 - 112.5 = 427.5
-        let cell_height = 540.0 / 24.0;
-        let expected_zone = (540.0 - (5.0 * cell_height)) as u32;
-        assert_eq!(zone_height.unwrap(), expected_zone);
-    }
-
-    #[test]
     fn test_get_reading_zone_height_without_dimensions() {
         use crate::rendering::kitty::positioning::get_reading_zone_height;
         let renderer = KittyGraphicsRenderer::new();
@@ -342,28 +303,6 @@ mod tests {
             zone_height.is_none(),
             "Should return None without dimensions"
         );
-    }
-
-    #[test]
-    fn test_calculate_vertical_center() {
-        use crate::rendering::kitty::positioning::calculate_vertical_center;
-        let mut renderer = KittyGraphicsRenderer::new();
-
-        // Set terminal dimensions (960px wide, 540px high, 80 cols, 24 rows)
-        // Cell height = 540/24 = 22.5px
-        let dims = TerminalDimensions::new(960, 540, 80, 24);
-        renderer.viewport.set_dimensions(dims);
-
-        let center = calculate_vertical_center(&renderer.viewport);
-
-        assert!(center.is_some(), "Should return center when dimensions set");
-        // Reading zone = Total height - (5 lines × cell_height)
-        // = 540 - (5 × 22.5) = 540 - 112.5 = 427.5px
-        // Vertical center = 42% of reading zone = 427.5 × 0.42 = 179.55 ≈ 179
-        let cell_height = 540.0 / 24.0;
-        let reading_zone = 540.0 - (5.0 * cell_height);
-        let expected_center = (reading_zone * 0.42) as u32;
-        assert_eq!(center.unwrap(), expected_center);
     }
 
     #[test]

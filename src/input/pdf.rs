@@ -28,7 +28,6 @@ pub fn load(path: &str) -> Result<LoadedDocument, LoadError> {
         .map_err(|e| LoadError::PdfParse(e.to_string()))
         .map(|text| LoadedDocument {
             tokens: tokenize_text(&text),
-            source: format!("pdf:{}", path.display()),
         })
 }
 
@@ -45,27 +44,11 @@ mod tests {
         assert!(matches!(result, Err(LoadError::FileNotFound(_))));
     }
 
-    /// Test that LoadedDocument has correct source field for PDF.
-    #[test]
-    fn test_loaded_document_source_pdf() {
-        let doc = LoadedDocument {
-            tokens: vec![Token {
-                text: "test".to_string(),
-                punctuation: vec![],
-                is_sentence_start: true,
-            }],
-            source: "pdf:/path/to/document.pdf".to_string(),
-        };
-
-        assert!(doc.source.starts_with("pdf:"));
-    }
-
     /// Test that LoadedDocument tokens preserve punctuation from PDF text.
     #[test]
     fn test_loaded_document_tokens_preserve_punctuation() {
         let doc = LoadedDocument {
             tokens: tokenize_text("This is a test. It works!"),
-            source: "pdf:test.pdf".to_string(),
         };
 
         // Verify multiple sentences are tokenized correctly

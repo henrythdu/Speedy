@@ -4,7 +4,6 @@ pub enum AppMode {
     Command,
     Reading,
     Paused,
-    Peek,
     Quit,
 }
 
@@ -17,7 +16,6 @@ mod tests {
         let _mode = AppMode::Reading;
         let _mode = AppMode::Paused;
         let _mode = AppMode::Command;
-        let _mode = AppMode::Peek;
         let _mode = AppMode::Quit;
     }
 }

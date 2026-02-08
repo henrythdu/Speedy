@@ -12,8 +12,6 @@ pub enum RendererError {
     InitializationFailed(String),
     /// Failed to render word
     RenderFailed(String),
-    /// Failed to clear display
-    ClearFailed(String),
     /// Failed to cleanup resources
     CleanupFailed(String),
     /// Invalid arguments provided
@@ -25,7 +23,6 @@ impl fmt::Display for RendererError {
         match self {
             Self::InitializationFailed(msg) => write!(f, "Renderer initialization failed: {}", msg),
             Self::RenderFailed(msg) => write!(f, "Word rendering failed: {}", msg),
-            Self::ClearFailed(msg) => write!(f, "Clear operation failed: {}", msg),
             Self::CleanupFailed(msg) => write!(f, "Renderer cleanup failed: {}", msg),
             Self::InvalidArguments(msg) => write!(f, "Invalid arguments: {}", msg),
         }
@@ -64,11 +61,6 @@ pub trait RsvpRenderer {
     /// Removes any previously rendered content in the reading zone.
     fn clear(&mut self) -> Result<(), RendererError>;
 
-    /// Check if this renderer supports sub-pixel OVP positioning
-    ///
-    /// Returns true for graphics backends (Kitty), false for TUI backends.
-    fn supports_subpixel_ovp(&self) -> bool;
-
     /// Cleanup resources before app exit
     ///
     /// Ensures no lingering graphics or state remains.
@@ -101,10 +93,6 @@ mod tests {
             Ok(())
         }
 
-        fn supports_subpixel_ovp(&self) -> bool {
-            false
-        }
-
         fn cleanup(&mut self) -> Result<(), RendererError> {
             Ok(())
         }
@@ -124,7 +112,6 @@ mod tests {
         assert!(renderer.initialize().is_ok());
         assert!(renderer.render_word("hello", 1).is_ok());
         assert!(renderer.clear().is_ok());
-        assert!(!renderer.supports_subpixel_ovp());
         assert!(renderer.cleanup().is_ok());
     }
 

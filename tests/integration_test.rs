@@ -1,5 +1,5 @@
 use speedy::app::mode::AppMode;
-use speedy::app::{App, AppEvent};
+use speedy::app::App;
 use speedy::reading::ovp::calculate_anchor_position;
 use speedy::reading::state::ReadingState;
 use speedy::reading::timing::{tokenize_text, wpm_to_milliseconds};
@@ -53,17 +53,6 @@ fn end_to_end_reading() {
     state.adjust_wpm(50);
     assert_eq!(state.wpm, 350);
     // File cleanup handled by guard
-}
-
-#[test]
-fn tui_workflow_repl_to_reading_mode() {
-    let mut app = App::new();
-
-    assert_eq!(app.mode, AppMode::Command);
-
-    app.handle_event(AppEvent::LoadFile("nonexistent.txt".to_string()));
-
-    assert_eq!(app.mode, AppMode::Command);
 }
 
 #[test]

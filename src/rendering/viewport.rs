@@ -41,37 +41,7 @@ impl TerminalDimensions {
         }
     }
 
-    /// Convert cell coordinates to pixel coordinates
-    ///
-    /// # Arguments
-    /// * `col` - Column index (0-based)
-    /// * `row` - Row index (0-based)
-    ///
-    /// # Returns
-    /// (x, y) pixel coordinates from top-left corner
-    pub fn cell_to_pixel(&self, col: u16, row: u16) -> (u32, u32) {
-        let x = (col as f32 * self.cell_size.0) as u32;
-        let y = (row as f32 * self.cell_size.1) as u32;
-        (x, y)
     }
-
-    /// Convert a rectangular area in cells to pixel coordinates
-    ///
-    /// # Arguments
-    /// * `x` - Column start (0-based)
-    /// * `y` - Row start (0-based)
-    /// * `width` - Width in columns
-    /// * `height` - Height in rows
-    ///
-    /// # Returns
-    /// (x, y, width, height) in pixels
-    pub fn rect_to_pixel(&self, x: u16, y: u16, width: u16, height: u16) -> (u32, u32, u32, u32) {
-        let (pixel_x, pixel_y) = self.cell_to_pixel(x, y);
-        let pixel_width = (width as f32 * self.cell_size.0) as u32;
-        let pixel_height = (height as f32 * self.cell_size.1) as u32;
-        (pixel_x, pixel_y, pixel_width, pixel_height)
-    }
-}
 
 /// Viewport manager for coordinating Ratatui layout with graphics rendering
 #[derive(Debug, Clone)]
@@ -176,11 +146,6 @@ impl Viewport {
         None
     }
 
-    /// Set dimensions directly (for testing or manual configuration)
-    pub fn set_dimensions(&mut self, dimensions: TerminalDimensions) {
-        self.dimensions = Some(dimensions);
-    }
-
     /// Get current dimensions if available
     pub fn get_dimensions(&self) -> Option<TerminalDimensions> {
         self.dimensions
@@ -195,23 +160,6 @@ impl Viewport {
     ///
     /// # Arguments
     /// * `x` - Column start
-    /// * `y` - Row start
-    /// * `width` - Width in columns
-    /// * `height` - Height in rows
-    ///
-    /// # Returns
-    /// Some((x, y, width, height)) in pixels if dimensions available, None otherwise
-    pub fn convert_rect_to_pixels(
-        &self,
-        x: u16,
-        y: u16,
-        width: u16,
-        height: u16,
-    ) -> Option<(u32, u32, u32, u32)> {
-        self.dimensions
-            .map(|d| d.rect_to_pixel(x, y, width, height))
-    }
-
     /// Convert pixel coordinates to cell coordinates (for cursor positioning)
     ///
     /// # Arguments
@@ -227,11 +175,6 @@ impl Viewport {
             (col, row)
         })
     }
-
-    /// Clear stored dimensions
-    pub fn clear(&mut self) {
-        self.dimensions = None;
-    }
 }
 
 impl Default for Viewport {
@@ -245,18 +188,12 @@ impl Default for Viewport {
 pub enum ViewportError {
     /// IO error when communicating with terminal
     IoError(String),
-    /// Terminal response parsing failed
-    ParseError(String),
-    /// No dimensions available
-    NoDimensions,
 }
 
 impl std::fmt::Display for ViewportError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::IoError(msg) => write!(f, "Viewport IO error: {}", msg),
-            Self::ParseError(msg) => write!(f, "Viewport parse error: {}", msg),
-            Self::NoDimensions => write!(f, "No terminal dimensions available"),
         }
     }
 }
@@ -282,82 +219,12 @@ mod tests {
         assert_eq!(dims.cell_size.1, 45.0); // 1080 / 24
     }
 
-    #[test]
-    fn test_cell_to_pixel_conversion() {
-        let dims = TerminalDimensions::new(1920, 1080, 80, 24);
-
-        // Cell (0, 0) should be at pixel (0, 0)
-        assert_eq!(dims.cell_to_pixel(0, 0), (0, 0));
-
-        // Cell (40, 12) should be at roughly center
-        let (x, y) = dims.cell_to_pixel(40, 12);
-        assert_eq!(x, 960); // 40 * 24
-        assert_eq!(y, 540); // 12 * 45
-    }
-
-    #[test]
-    fn test_rect_to_pixel_conversion() {
-        let dims = TerminalDimensions::new(1920, 1080, 80, 24);
-
-        // Rect at (10, 5) with size (20, 10)
-        let (x, y, w, h) = dims.rect_to_pixel(10, 5, 20, 10);
-        assert_eq!(x, 240); // 10 * 24
-        assert_eq!(y, 225); // 5 * 45
-        assert_eq!(w, 480); // 20 * 24
-        assert_eq!(h, 450); // 10 * 45
-    }
 
     #[test]
     fn test_viewport_creation() {
         let viewport = Viewport::new();
         assert!(!viewport.has_dimensions());
         assert!(viewport.get_dimensions().is_none());
-    }
-
-    #[test]
-    fn test_viewport_set_dimensions() {
-        let mut viewport = Viewport::new();
-        let dims = TerminalDimensions::new(1920, 1080, 80, 24);
-
-        viewport.set_dimensions(dims);
-        assert!(viewport.has_dimensions());
-        assert_eq!(viewport.get_dimensions(), Some(dims));
-    }
-
-    #[test]
-    fn test_viewport_convert_rect() {
-        let mut viewport = Viewport::new();
-        let dims = TerminalDimensions::new(1920, 1080, 80, 24);
-        viewport.set_dimensions(dims);
-
-        // Convert a rect in the middle of screen
-        let result = viewport.convert_rect_to_pixels(20, 10, 40, 4);
-        assert!(result.is_some());
-
-        let (x, y, w, h) = result.unwrap();
-        assert_eq!(x, 480); // 20 * 24
-        assert_eq!(y, 450); // 10 * 45
-        assert_eq!(w, 960); // 40 * 24
-        assert_eq!(h, 180); // 4 * 45
-    }
-
-    #[test]
-    fn test_viewport_convert_without_dimensions() {
-        let viewport = Viewport::new();
-        let result = viewport.convert_rect_to_pixels(10, 10, 20, 5);
-        assert!(result.is_none());
-    }
-
-    #[test]
-    fn test_viewport_clear() {
-        let mut viewport = Viewport::new();
-        let dims = TerminalDimensions::new(1920, 1080, 80, 24);
-
-        viewport.set_dimensions(dims);
-        assert!(viewport.has_dimensions());
-
-        viewport.clear();
-        assert!(!viewport.has_dimensions());
     }
 
     #[test]

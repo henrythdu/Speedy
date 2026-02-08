@@ -1,5 +1,4 @@
 pub mod config;
-pub mod error;
 
 // Re-export reading module items to maintain backwards compatibility
 pub use crate::reading::{

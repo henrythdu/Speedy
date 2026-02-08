@@ -14,14 +14,10 @@ pub enum LoadError {
 
     #[error("File not found: {0}")]
     FileNotFound(PathBuf),
-
-    #[error("Unsupported format: {0}")]
-    UnsupportedFormat(String),
 }
 
 pub struct LoadedDocument {
     pub tokens: Vec<crate::reading::token::Token>,
-    pub source: String,
 }
 
 pub mod clipboard;

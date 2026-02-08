@@ -33,7 +33,6 @@ pub fn render_command_deck(
         AppMode::Command => " COMMAND ",
         AppMode::Reading => " READING ",
         AppMode::Paused => " PAUSED ",
-        AppMode::Peek => " PEEK ",
         AppMode::Quit => " QUIT ",
     };
 

@@ -8,24 +8,10 @@ mod storage;
 mod ui;
 
 use crate::app::App;
-use crate::rendering::capability::CapabilityDetector;
 use crate::rendering::font::{get_font, get_font_metrics};
 use crate::ui::TuiManager;
-use std::env;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Parse CLI arguments for force flags
-    let args: Vec<String> = env::args().collect();
-    let force_kitty = args.contains(&"--force-kitty".to_string());
-
-    // Detect terminal capability
-    let detector = CapabilityDetector::new();
-    let _capability = if force_kitty {
-        detector.detect_from_override(true)
-    } else {
-        detector.detect()
-    };
-
     eprintln!("✓ Kitty Graphics Protocol detected - pixel-perfect mode enabled");
 
     // Initialize font
