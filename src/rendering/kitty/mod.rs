@@ -9,8 +9,9 @@ pub mod rasterizer;
 
 use crate::app::mode::AppMode;
 use crate::engine::config::{
-    DEFAULT_CACHE_CAPACITY, DEFAULT_FONT_SIZE, PROGRESS_BAR_MARGIN_PX, PROGRESS_BRIGHT_ALPHA,
-    PROGRESS_COLOR_B, PROGRESS_COLOR_G, PROGRESS_COLOR_R, PROGRESS_DIM_ALPHA,
+    DEFAULT_CACHE_CAPACITY, DEFAULT_FONT_SIZE, PROGRESS_BAR_HEIGHT, PROGRESS_BAR_MARGIN_PX,
+    PROGRESS_BAR_WIDTH_PCT, PROGRESS_BRIGHT_ALPHA, PROGRESS_COLOR_B, PROGRESS_COLOR_G,
+    PROGRESS_COLOR_R, PROGRESS_DIM_ALPHA,
 };
 use crate::rendering::cache::WordCache;
 use crate::rendering::font::{get_font, get_font_metrics, FontMetrics};
@@ -18,7 +19,7 @@ use crate::rendering::kitty::positioning::{calculate_start_x, calculate_vertical
 use crate::rendering::kitty::protocol::{
     delete_all_graphics, delete_image, encode_image_base64, transmit_graphics,
 };
-use crate::rendering::progress_bar::SentenceProgressBar;
+
 use crate::rendering::renderer::{RendererError, RsvpRenderer};
 use crate::rendering::viewport::Viewport;
 use ab_glyph::FontRef;
@@ -118,28 +119,57 @@ impl KittyGraphicsRenderer {
     /// * `word_y` - Y position of word (from calculate_vertical_center)
     /// * `word_height` - Height of rendered word in pixels
     /// * `progress` - Fill percentage (0.0 to 1.0)
+    /// * `mode` - Current app mode (Reading or Paused)
     /// * `image_id` - Image ID for this bar
     pub fn render_bar(
         &mut self,
         word_y: u32,
         word_height: u32,
         progress: f64,
+        mode: &AppMode,
         image_id: u32,
     ) -> Result<(), RendererError> {
+        use imageproc::image::ImageBuffer;
+
         // Simple: bar Y = word Y + word height + 10px margin
         let bar_y = word_y + word_height + PROGRESS_BAR_MARGIN_PX;
 
-        // Create bar with current viewport width
+        // Get viewport width for bar sizing
         let container_width = self
             .viewport
             .get_dimensions()
             .map(|d| d.pixel_size.0)
             .unwrap_or(800);
-        let mut bar = SentenceProgressBar::new(container_width);
-        bar.update_progress(progress);
+
+        // Calculate bar dimensions (same as SentenceProgressBar)
+        let bar_width = (container_width as f64 * PROGRESS_BAR_WIDTH_PCT) as u32;
+        let bar_height = PROGRESS_BAR_HEIGHT;
+
+        // Determine alpha multiplier based on mode (same as macro gutter)
+        let alpha_mult: f32 = match *mode {
+            AppMode::Paused => 1.0, // 100% opacity
+            _ => 0.3,               // 30% opacity
+        };
+
+        // Calculate mode-aware alpha values
+        let bright_alpha = (PROGRESS_BRIGHT_ALPHA as f32 * alpha_mult) as u8;
+        let dim_alpha = (PROGRESS_DIM_ALPHA as f32 * alpha_mult) as u8;
+
+        let fill_color = Rgba([PROGRESS_COLOR_R, PROGRESS_COLOR_G, PROGRESS_COLOR_B, bright_alpha]);
+        let bg_color = Rgba([PROGRESS_COLOR_R, PROGRESS_COLOR_G, PROGRESS_COLOR_B, dim_alpha]);
+
+        // Create bar buffer manually with mode-aware colors
+        let fill_width = (bar_width as f64 * progress.clamp(0.0, 1.0)) as u32;
+        let mut buffer: ImageBuffer<Rgba<u8>, Vec<u8>> = ImageBuffer::new(bar_width, bar_height);
+
+        for x in 0..bar_width {
+            let color = if x < fill_width { fill_color } else { bg_color };
+            buffer.put_pixel(x, 0, color);
+            buffer.put_pixel(x, 1, color);
+        }
 
         // Center bar horizontally in viewport
-        let bar_x = (container_width - bar.width()) / 2;
+        let bar_x = (container_width - bar_width) / 2;
 
         // Move cursor to bar position
         if let Some((col, row)) = self.viewport.pixel_to_cell(bar_x, bar_y) {
@@ -152,10 +182,9 @@ impl KittyGraphicsRenderer {
             }
         }
 
-        // Render bar at cursor position
-        let bar_buffer = bar.render();
-        let base64_data = encode_image_base64(&bar_buffer);
-        transmit_graphics(image_id, bar.width(), 2, &base64_data, 0, 0)
+        // Transmit bar image
+        let base64_data = encode_image_base64(&buffer);
+        transmit_graphics(image_id, bar_width, bar_height, &base64_data, 0, 0)
             .map_err(|e| RendererError::RenderFailed(format!("Bar render failed: {}", e)))
     }
 

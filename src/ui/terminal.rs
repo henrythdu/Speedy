@@ -243,6 +243,7 @@ impl TuiManager {
                             word_y,
                             word_height,
                             progress,
+                            &app_mode,
                             bar_image_id,
                         ) {
                             app.set_error(format!("Bar render error: {}", e));
