@@ -89,6 +89,13 @@ impl App {
         self.mode = mode;
     }
 
+    /// Get current WPM from reading state
+    ///
+    /// Returns the current words-per-minute setting, or 0 if no reading state.
+    pub fn get_wpm(&self) -> u32 {
+        self.reading_state.as_ref().map(|s| s.wpm).unwrap_or(0)
+    }
+
     /// Get the duration for the current token in milliseconds
     ///
     /// Returns the calculated duration for the current token, including

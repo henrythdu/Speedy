@@ -1,7 +1,7 @@
 use crate::app::{mode::AppMode, App};
 use crate::rendering::kitty::KittyGraphicsRenderer;
 use crate::rendering::renderer::RsvpRenderer;
-use crate::ui::reader::view::render_command_deck;
+use crate::ui::reader::view::{render_command_deck, render_wpm};
 use crate::ui::theme::Theme;
 
 use crossterm::{
@@ -190,6 +190,10 @@ impl TuiManager {
             let theme = Theme::midnight();
             let reading_bg = Block::default().style(Style::default().bg(theme.background));
             frame.render_widget(reading_bg, reading_area);
+
+            // Render WPM display in top-left of reading area
+            let wpm = app.get_wpm();
+            render_wpm(frame, reading_area, wpm, &theme);
 
             render_command_deck(
                 frame,

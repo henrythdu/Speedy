@@ -62,3 +62,28 @@ pub fn render_command_deck(
     frame.render_widget(input_widget, layout[1]);
 }
 
+
+/// Render WPM display in the reading zone
+///
+/// Shows current words-per-minute in the top-left corner of the reading area.
+/// Positioned with small padding (1 cell) from top-left edge.
+pub fn render_wpm(frame: &mut Frame, area: Rect, wpm: u32, theme: &crate::ui::theme::Theme) {
+    if wpm == 0 {
+        return; // Don't render if no active reading session
+    }
+
+    // Calculate position: top-left with 1 cell padding
+    let wpm_area = Rect::new(
+        area.x + 1,
+        area.y + 1,
+        10, // Width: "999 WPM\n" is max 8 chars
+        1,  // Height: single line
+    );
+
+    let wpm_text = format!("{} WPM", wpm);
+    let wpm_widget = Paragraph::new(wpm_text)
+        .style(Style::default().fg(theme.text).bg(theme.background));
+
+    frame.render_widget(wpm_widget, wpm_area);
+}
+
