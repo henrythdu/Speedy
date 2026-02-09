@@ -58,6 +58,9 @@ impl TuiManager {
         let mut last_tick = Instant::now();
         let render_tick = Duration::from_millis(1000 / 60);
 
+        // Force initial render before entering loop
+        self.render_frame(app)?;
+
         loop {
             let current_mode = app.mode();
             if current_mode == AppMode::Quit {
