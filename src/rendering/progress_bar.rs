@@ -1,6 +1,9 @@
 //! Sentence progress bar - simple 2px bar centered below word
 
-use crate::engine::config::{PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH_PCT};
+use crate::engine::config::{
+    PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH_PCT, PROGRESS_BRIGHT_ALPHA, PROGRESS_COLOR_B,
+    PROGRESS_COLOR_G, PROGRESS_COLOR_R, PROGRESS_DIM_ALPHA,
+};
 use imageproc::image::{ImageBuffer, Rgba};
 
 /// Simple 2px progress bar with bright fill, dim background
@@ -18,8 +21,8 @@ impl SentenceProgressBar {
             width: (container_width as f64 * PROGRESS_BAR_WIDTH_PCT) as u32,
             height: PROGRESS_BAR_HEIGHT,
             fill_pct: 0.0,
-            fill_color: Rgba([169, 177, 214, 255]), // Theme::text bright
-            bg_color: Rgba([169, 177, 214, 50]),    // Theme::text dim (20% opacity)
+            fill_color: Rgba([PROGRESS_COLOR_R, PROGRESS_COLOR_G, PROGRESS_COLOR_B, PROGRESS_BRIGHT_ALPHA]),
+            bg_color: Rgba([PROGRESS_COLOR_R, PROGRESS_COLOR_G, PROGRESS_COLOR_B, PROGRESS_DIM_ALPHA]),
         }
     }
 

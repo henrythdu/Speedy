@@ -30,6 +30,14 @@ pub const PROGRESS_BAR_HEIGHT: u32 = 2;
 pub const DEFAULT_CACHE_CAPACITY: usize = 1000;
 pub const DEFAULT_MEMORY_CAP_BYTES: u64 = 100 * 1024 * 1024; // 100MB
 
+/// Theme Colors (matching PRD color scheme)
+/// Progress bar and gutter colors - bright for read, dim for unread
+pub const PROGRESS_COLOR_R: u8 = 169;
+pub const PROGRESS_COLOR_G: u8 = 177;
+pub const PROGRESS_COLOR_B: u8 = 214;
+pub const PROGRESS_BRIGHT_ALPHA: u8 = 255;  // Full opacity for read portion
+pub const PROGRESS_DIM_ALPHA: u8 = 50;      // 20% opacity for unread portion
+
 /// Timing configuration per PRD Section 3.2
 #[derive(Debug, Clone, PartialEq)]
 pub struct TimingConfig {

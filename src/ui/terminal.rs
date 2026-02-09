@@ -11,7 +11,7 @@ use crossterm::{
 };
 use ratatui::{
     backend::CrosstermBackend,
-    layout::{Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout, Rect},
     style::Style,
     widgets::Block,
     Terminal,
@@ -155,7 +155,26 @@ impl TuiManager {
         }
     }
 
+    /// Calculate the reader area (terminal minus command section)
+    fn calculate_reader_area(&mut self) -> Rect {
+        if let Some(dims) = self.kitty_renderer.viewport().get_dimensions() {
+            let command_height = (dims.cell_size.1 * 5.0) as u32;
+            Rect::new(
+                0,
+                0,
+                dims.pixel_size.0 as u16,
+                (dims.pixel_size.1 - command_height) as u16,
+            )
+        } else {
+            // Fallback dimensions
+            Rect::new(0, 0, 800, 600)
+        }
+    }
+
     pub fn render_frame(&mut self, app: &mut App) -> io::Result<()> {
+        // Calculate reader area once at the beginning (for all rendering steps)
+        let reader_area = self.calculate_reader_area();
+
         // Render background via Ratatui
         self.terminal.draw(|frame| {
             let area = frame.area();
@@ -199,16 +218,22 @@ impl TuiManager {
                     app.set_error(format!("Render error: {}", e));
                 }
 
-                // Render progress bar below word
+                // Render progress bar and macro gutter
                 if let Some(reading_state) = &app.reading_state {
+                    // Extract values we need to avoid borrow issues
+                    let current_index = reading_state.current_index;
+                    let total_tokens = reading_state.tokens.len();
+                    let app_mode = app.mode();
+                    
                     let progress = crate::reading::calculate_sentence_progress(
-                        reading_state.current_index,
+                        current_index,
                         &reading_state.tokens,
                     );
                     let word_y = self.kitty_renderer.get_vertical_center().unwrap_or(0);
                     if let Ok(word_height) =
                         self.kitty_renderer.calculate_word_height(&word, anchor_pos)
                     {
+                        // Render micro bar (sentence progress)
                         let bar_image_id = self.kitty_renderer.current_image_id;
                         if let Err(e) = self.kitty_renderer.render_bar(
                             word_y,
@@ -219,6 +244,20 @@ impl TuiManager {
                             app.set_error(format!("Bar render error: {}", e));
                         } else {
                             // Increment image ID after successful bar render
+                            self.kitty_renderer.current_image_id += 1;
+                        }
+
+                        // Render macro gutter (document progress)
+                        let gutter_id = self.kitty_renderer.current_image_id;
+                        if let Err(e) = self.kitty_renderer.render_macro_gutter(
+                            current_index,
+                            total_tokens,
+                            reader_area,
+                            app_mode,
+                            gutter_id,
+                        ) {
+                            app.set_error(format!("Gutter render error: {}", e));
+                        } else {
                             self.kitty_renderer.current_image_id += 1;
                         }
                     }

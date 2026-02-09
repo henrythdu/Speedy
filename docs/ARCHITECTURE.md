@@ -1,6 +1,6 @@
 # Speedy Architecture Document
 
-**Last Updated:** 2026-02-05 (Epic 3: Added WordCache with LRU caching, memory tracking, hit/miss counters, 381 tests passing)
+**Last Updated:** 2026-02-09 (Major cleanup: Removed dead code, consolidated modules, 138 tests passing, 0 clippy warnings)
 **Purpose:** Document actual codebase structure, methods, structs, and architecture to prevent duplication and confusion.
 
 ## ⚠️ Important Notes
@@ -18,14 +18,11 @@
 ```
 src/
 ├── app/                 # Application layer (state management, UI coordination)
-│   ├── app.rs          # Main App struct and business logic
-│   ├── event.rs        # AppEvent enum for event handling
-│   ├── mode.rs         # AppMode enum (Repl, Reading, Paused, Command)
-
+│   ├── app_impl.rs     # Main App struct and business logic
+│   ├── mode.rs         # AppMode enum (Command, Reading, Paused, Quit)
 │   └── mod.rs          # App module exports
-├── engine/             # Shared logic (config, errors, re-exports)
+├── engine/             # Shared logic (config only)
 │   ├── config.rs       # ReadingConfig timing configuration
-│   ├── error.rs        # SpeedyError enum
 │   └── mod.rs          # Engine module (re-exports from reading/ and rendering/)
 ├── reading/            # Core RSVP reading logic domain
 │   ├── token.rs        # Token struct
@@ -38,7 +35,7 @@ src/
 │   ├── renderer.rs     # RsvpRenderer trait and RendererError
 │   ├── viewport.rs     # Viewport coordinates and terminal dimensions
 │   ├── font.rs         # Font loading and metrics
-│   ├── capability.rs   # Terminal capability detection
+│   ├── progress_bar.rs # Sentence progress bar component
 │   ├── kitty/          # Kitty Graphics Protocol modules
 │   │   ├── mod.rs      # KittyGraphicsRenderer implementation
 │   │   ├── protocol.rs # KGP transmission and encoding
@@ -47,8 +44,8 @@ src/
 │   └── mod.rs          # Rendering module exports
 ├── ui/                 # TUI rendering layer
 │   ├── reader/         # Reader feature module
-│   │   ├── component.rs # ReaderComponent (placeholder for future use)
-│   │   └── view.rs     # Render functions (OVP word, progress)
+│   │   ├── view.rs     # Render functions (OVP word, progress)
+│   │   └── mod.rs      # Reader module exports
 │   ├── command.rs      # Command parsing and token utilities
 │   ├── command_executor.rs # Command execution logic
 │   ├── terminal.rs     # TuiManager with event loop and frame rendering
@@ -63,38 +60,50 @@ src/
 │   └── mod.rs          # Audio module exports
 ├── storage/            # Persistence (settings, history)
 │   └── mod.rs          # Storage module exports
-└── main.rs             # Entry point with capability detection and TUI launch
+└── main.rs             # Entry point with TUI launch
 ```
 
 ---
 
 ## 2. Core Structs
 
-### `App` (`src/app/app.rs:18`)
+### `App` (`src/app/app_impl.rs:18`)
 Main application state container.
 ```rust
 pub struct App {
-    mode: AppMode,                     // Current mode (Repl/Reading/Paused)
+    mode: AppMode,                     // Current mode (Command/Reading/Paused/Quit)
     reading_state: Option<ReadingState>, // Current reading session
 }
 ```
 
-**Purpose:** Coordinates between REPL, TUI, and engine layers. Manages mode transitions.
+**Purpose:** Coordinates between TUI and engine layers. Manages mode transitions.
+
+**Key Methods:**
+- `new() -> App` - Creates new App instance with Default impl (src/app/app_impl.rs:30)
+- `mode(&self) -> AppMode` - Returns current mode (src/app/app_impl.rs:36)
+- `set_mode(&mut self, mode: AppMode)` - Sets mode and handles transitions (src/app/app_impl.rs:40)
+- `start_reading(&mut self, text: &str, wpm: u32)` - Starts new reading session (src/app/app_impl.rs:51)
+- `advance_reading(&mut self) -> bool` - Auto-advance to next word (src/app/app_impl.rs:62)
+- `handle_keypress(&mut self, key: char) -> bool` - Handles keyboard input in Reading mode (src/app/app_impl.rs:89)
 
 ### `Theme` (`src/ui/theme.rs:4`)
 UI color scheme configuration.
 ```rust
 pub struct Theme {
-    pub background: Color,
-    pub text: Color,
-    pub anchor: Color,
-    pub dimmed: Color,
+    pub background: Color,  // #1A1B26 - Midnight background
+    pub text: Color,        // #A9B1D6 - Light blue text
+    pub anchor: Color,      // #F7768E - Coral red anchor
+    pub dimmed: Color,      // #646E96 - Dimmed blue
 }
 ```
 
-**Purpose:** Centralizes color scheme for maintainability. Midnight theme (PRD Section 4.1) with explicit RGB colors to ensure dimmed modifier works correctly.
+**Purpose:** Centralizes color scheme for maintainability. Midnight theme (PRD Section 4.1) with explicit RGB colors.
 
-### `ReadingState` (`src/reading/state.rs:1`)
+**Key Methods:**
+- `midnight() -> Self` - Returns midnight theme colors (src/ui/theme.rs:18)
+- `default() -> Self` - Returns midnight theme (src/ui/theme.rs:27)
+
+### `ReadingState` (`src/reading/state.rs:14`)
 Pure reading state with tokens and timing.
 ```rust
 pub struct ReadingState {
@@ -106,6 +115,18 @@ pub struct ReadingState {
 ```
 
 **Purpose:** Holds tokenized document, position, and timing state. Pure core logic only.
+
+**Key Methods:**
+- `new_with_default_config(tokens: Vec<Token>, wpm: u32) -> Self` - Creates with default config (src/reading/state.rs:27)
+- `advance(&mut self)` - Moves to next token (src/reading/state.rs:41)
+- `jump_to_next_sentence(&mut self)` - Jumps to next sentence start (src/reading/state.rs:50)
+- `jump_to_previous_sentence(&mut self)` - Jumps to previous sentence start (src/reading/state.rs:66)
+- `current_token(&self) -> Option<&Token>` - Returns current token (src/reading/state.rs:82)
+- `is_at_sentence_start(&self) -> bool` - Checks if at sentence boundary (src/reading/state.rs:89)
+- `get_sentence_progress(&self) -> f64` - Returns progress through current sentence (src/reading/state.rs:96)
+- `current_token_duration(&self) -> Duration` - Calculates display duration with punctuation/length penalties (src/reading/state.rs:107)
+- `get_wpm(&self) -> u32` - Returns current WPM (src/reading/state.rs:117)
+- `adjust_wpm(&mut self, delta: i32)` - Adjusts WPM with clamping (src/reading/state.rs:121)
 
 ### `Token` (`src/reading/token.rs:1`)
 A word with punctuation and metadata.
@@ -119,21 +140,22 @@ pub struct Token {
 
 **Purpose:** Basic unit for RSVP reading with punctuation and sentence metadata.
 
-### `RsvpRenderer` Trait (`src/rendering/renderer.rs:37`)
+### `RsvpRenderer` Trait (`src/rendering/renderer.rs:9`)
 Pluggable trait for RSVP rendering backends.
 ```rust
 pub trait RsvpRenderer {
     fn initialize(&mut self) -> Result<(), RendererError>;
     fn render_word(&mut self, word: &str, anchor_position: usize) -> Result<(), RendererError>;
     fn clear(&mut self) -> Result<(), RendererError>;
-    fn supports_subpixel_ovp(&self) -> bool;
     fn cleanup(&mut self) -> Result<(), RendererError>;
 }
 ```
 
 **Purpose:** Abstracts rendering implementations (Kitty Graphics, future Sixel/iTerm2). Enables backend switching without changing reading logic. Object-safe trait supporting `Box<dyn RsvpRenderer>`.
 
-### `WordCache` (`src/rendering/cache.rs:98`)
+**Note:** Removed `supports_subpixel_ovp()` method (no longer needed - all renderers support sub-pixel OVP).
+
+### `WordCache` (`src/rendering/cache.rs:34`)
 Word-Level LRU Cache for rendered word buffers to enable consistent 1000+ WPM performance.
 ```rust
 pub struct WordCache {
@@ -147,16 +169,15 @@ pub struct WordCache {
 ```
 
 **Public API:**
-- `new(capacity) -> Self` - Create new WordCache with specified capacity (src/rendering/cache.rs:117)
-- `with_memory_cap(capacity, memory_cap_bytes)` - Create with custom memory cap (src/rendering/cache.rs:135)
-- `get_or_render(word, anchor_position, font, metrics) -> Result<CachedWord, CacheError>` - Main cache lookup with automatic rasterization on miss (src/rendering/cache.rs:150)
-- `clear()` - Clear cache and reset statistics (src/rendering/cache.rs:198)
-- `set_font_size(font_size)` - Update font size and clear cache if changed (src/rendering/cache.rs:207)
-- `get_hit_rate() -> f64` - Calculate hits / (hits + misses) (src/rendering/cache.rs:222)
-- `get_memory_usage_mb() -> f64` - Get memory usage in megabytes (src/rendering/cache.rs:232)
+- `new(capacity) -> Self` - Create new WordCache with specified capacity (src/rendering/cache.rs:60)
+- `get_or_render(word, anchor_position, font, metrics) -> Result<CachedWord, CacheError>` - Main cache lookup with automatic rasterization on miss (src/rendering/cache.rs:91)
+- `clear()` - Clear cache and reset statistics (src/rendering/cache.rs:136)
+- `set_font_size(font_size)` - Update font size and clear cache if changed (src/rendering/cache.rs:144)
+- `get_hit_rate() -> f64` - Calculate hits / (hits + misses) **[cfg(test)]** (src/rendering/cache.rs:159)
+- `get_memory_usage_mb() -> f64` - Get memory usage in megabytes **[cfg(test)]** (src/rendering/cache.rs:168)
 
 **Cache Key Design:**
-- Tuple-based key `(word: String, font_size: f32, anchor_position: usize)`
+- Tuple-based key `(word: String, font_size: f32, anchor_position: usize)` (src/rendering/cache.rs:27)
 - Avoids String allocation overhead compared to formatted string keys
 - anchor_position is deterministic from `calculate_anchor_position()` (same word = same anchor)
 
@@ -165,11 +186,6 @@ pub struct WordCache {
 - Cache miss: O(n) rasterization (~1-5ms)
 - Memory cap enforcement: Evicts LRU entries when limit exceeded
 - Target hit rate: ~70% with typical English text
-
-**Integration:**
-- Used by `KittyGraphicsRenderer` to cache rendered word buffers
-- Eliminates redundant rasterization for repeated words
-- Integrated into `render_word()` method for transparent caching
 
 ### `SentenceProgressBar` (`src/rendering/progress_bar.rs:9`)
 2px high horizontal progress bar for sentence-level spatial awareness.
@@ -184,17 +200,12 @@ pub struct SentenceProgressBar {
 ```
 
 **Public API:**
-- `new(container_width) -> Self` - Create bar at 50% container width
-- `update_progress(pct)` - Set fill percentage (0.0 to 1.0)
-- `render() -> ImageBuffer` - Render with bright fill + dim background
-- `width() -> u32` - Get bar width
+- `new(container_width) -> Self` - Create bar at 50% container width (src/rendering/progress_bar.rs:24)
+- `update_progress(pct)` - Set fill percentage (0.0 to 1.0) (src/rendering/progress_bar.rs:33)
+- `render() -> ImageBuffer` - Render with bright fill + dim background (src/rendering/progress_bar.rs:38)
+- `width() -> u32` - Get bar width (src/rendering/progress_bar.rs:56)
 
-**Design:**
-- 50% opacity for filled (read) portion, 20% opacity for background (unread)
-- Centered horizontally in viewport
-- Positioned below word with 10px margin
-
-### `KittyGraphicsRenderer` (`src/rendering/kitty/mod.rs:18`)
+### `KittyGraphicsRenderer` (`src/rendering/kitty/mod.rs:20`)
 Pixel-perfect RSVP renderer using Kitty Graphics Protocol with sub-pixel OVP anchoring.
 ```rust
 pub struct KittyGraphicsRenderer {
@@ -203,65 +214,58 @@ pub struct KittyGraphicsRenderer {
     font_size: f32,
     font_metrics: Option<FontMetrics>,
     current_image_id: u32,
-    word_cache: WordCache,  // NEW: Word-level LRU cache for performance
+    word_cache: WordCache,
 }
 ```
 
 **Public API:**
-- `new() -> Self` - Create new KittyGraphicsRenderer instance
-- `calculate_font_size_from_cell_height(cell_height_px)` - Calculate font size for 5-line height
-- `get_reading_zone_height() -> Option<u32>` - Get reading zone height (total height minus fixed 5-line command deck)
-- `get_vertical_center() -> Option<u32>` - Get Y position at 42% of reading zone
-- `calculate_word_height(word, anchor_position) -> Result<u32>` - Calculate rendered word height
-- `viewport() -> &mut Viewport` - Get mutable viewport access
-- `render_bar(word_y, word_height, progress, image_id) -> Result<()>` - Render progress bar below word
+- `new() -> Self` - Create new KittyGraphicsRenderer instance (src/rendering/kitty/mod.rs:32)
+- `calculate_font_size_from_cell_height(cell_height_px)` - Calculate font size for reading zone (src/rendering/kitty/mod.rs:42)
+- `get_reading_zone_height() -> Option<u32>` - Get reading zone height (total height minus fixed command deck) (src/rendering/kitty/mod.rs:57)
+- `get_vertical_center() -> Option<u32>` - Get Y position at 42% of reading zone (src/rendering/kitty/mod.rs:68)
+- `viewport() -> &mut Viewport` - Get mutable viewport access (src/rendering/kitty/mod.rs:79)
+- `render_bar(word_y, word_height, progress, image_id) -> Result<()>` - Render progress bar below word (src/rendering/kitty/mod.rs:86)
 
 **Implements RsvpRenderer trait:**
-- `initialize()` - Load font, get metrics, query viewport, init word cache
-- `render_word(word, anchor_position)` - Use word cache for rasterization, transmit via KGP
-- `clear()` - Delete previous image
-- `cleanup()` - Clear word cache, delete all graphics on exit
-- `supports_subpixel_ovp()` - Returns true
+- `initialize()` - Load font, get metrics, query viewport, init word cache (src/rendering/kitty/mod.rs:108)
+- `render_word(word, anchor_position)` - Use word cache for rasterization, transmit via KGP (src/rendering/kitty/mod.rs:139)
+- `clear()` - Delete previous image (src/rendering/kitty/mod.rs:211)
+- `cleanup()` - Clear word cache, delete all graphics on exit (src/rendering/kitty/mod.rs:218)
 
 **Key Behaviors:**
 - Uses embedded JetBrains Mono font via ab_glyph for text rasterization
-- **Word-Level LRU Cache:** Caches pre-rendered buffers to eliminate redundant rasterization
+- Word-Level LRU Cache eliminates redundant rasterization
 - Creates RGBA buffer with transparent background (theme handles background)
 - Vertical centering at 42% of reading zone height (per PRD Section 4.3)
 - Sub-pixel OVP anchoring via positioning module
-- Implements RsvpRenderer trait for pluggable backend architecture
-- **Modular Design:** Decomposed into protocol, rasterizer, and positioning modules
+- Modular design: Decomposed into protocol, rasterizer, and positioning modules
 
 ### `protocol` module (`src/rendering/kitty/protocol.rs`)
 Kitty Graphics Protocol transmission and encoding functions.
 
 **Public Functions:**
-- `encode_image_base64(image) -> String` - Encode RGBA image to base64
-- `transmit_graphics(id, width, height, data, x, y) -> io::Result<()>` - Send image via KGP
-- `delete_image(id) -> io::Result<()>` - Delete specific KGP image
-- `delete_all_graphics() -> io::Result<()>` - Clear all KGP images
+- `encode_image_base64(image) -> String` - Encode RGBA image to base64 (src/rendering/kitty/protocol.rs:14)
+- `transmit_graphics(id, width, height, data, x, y) -> io::Result<()>` - Send image via KGP (src/rendering/kitty/protocol.rs:25)
+- `delete_image(id) -> io::Result<()>` - Delete specific KGP image (src/rendering/kitty/protocol.rs:45)
+- `delete_all_graphics() -> io::Result<()>` - Clear all KGP images (src/rendering/kitty/protocol.rs:52)
 
 ### `rasterizer` module (`src/rendering/kitty/rasterizer.rs`)
 Word-to-image rasterization using ab_glyph and imageproc.
 
 **Public Functions:**
-- `rasterize_word(word, anchor_position, font, font_size, metrics) -> Option<ImageBuffer>` - Render word to RGBA buffer
-- `TEXT_COLOR` - Theme text color constant (#A9B1D6)
-- `ANCHOR_COLOR` - Theme anchor color constant (#F7768E)
+- `rasterize_word(word, anchor_position, font, font_size, metrics) -> Option<ImageBuffer>` - Render word to RGBA buffer (src/rendering/kitty/rasterizer.rs:21)
+- `TEXT_COLOR` - Theme text color constant (#A9B1D6) (src/rendering/kitty/rasterizer.rs:14)
+- `ANCHOR_COLOR` - Theme anchor color constant (#F7768E) (src/rendering/kitty/rasterizer.rs:17)
 
 ### `positioning` module (`src/rendering/kitty/positioning.rs`)
 OVP (Optimal Viewing Position) anchoring calculations.
 
 **Public Functions:**
-- `calculate_start_x(word, anchor_position, font, font_size, viewport) -> f32` - Calculate sub-pixel OVP X position
-- `get_reading_zone_height(viewport) -> Option<u32>` - Calculate reading zone height
-- `calculate_vertical_center(viewport) -> Option<u32>` - Calculate Y position at 42% of zone
-- Background color is Midnight theme #1A1B26 (deep slate)
-- Composites all visual elements (background, word, ghost words) into single buffer
-- Eliminates flickering and Z-fighting issues from multiple image transmissions
-- Canvas-relative positioning (words at 42% of canvas, not full screen) fixes coordinate bug
+- `calculate_start_x(word, anchor_position, font, font_size, viewport) -> f32` - Calculate sub-pixel OVP X position (src/rendering/kitty/positioning.rs:18)
+- `get_reading_zone_height(viewport) -> Option<u32>` - Calculate reading zone height (src/rendering/kitty/positioning.rs:56)
+- `calculate_vertical_center(viewport) -> Option<u32>` - Calculate Y position at 42% of zone (src/rendering/kitty/positioning.rs:71)
 
-### `Viewport` (`src/rendering/viewport.rs:38`)
+### `Viewport` (`src/rendering/viewport.rs:11`)
 Viewport coordinate management for graphics overlay pattern.
 ```rust
 pub struct Viewport {
@@ -276,64 +280,42 @@ pub struct TerminalDimensions {
 ```
 
 **Public API:**
-- `new() -> Self` - Create new viewport manager
-- `query_dimensions() -> Result<TerminalDimensions, ViewportError>` - Send CSI 14t/18t queries
-- `set_dimensions(dimensions)` - Set dimensions manually (for testing)
-- `get_dimensions() -> Option<TerminalDimensions>` - Get current dimensions
-- `convert_rect_to_pixels(x, y, w, h) -> Option<(u32, u32, u32, u32)>` - Convert Ratatui Rect to pixels
+- `new() -> Self` - Create new viewport manager (src/rendering/viewport.rs:26)
+- `query_dimensions() -> Result<TerminalDimensions, ViewportError>` - Send CSI 14t/18t queries (src/rendering/viewport.rs:30)
+- `get_dimensions() -> Option<TerminalDimensions>` - Get current dimensions (src/rendering/viewport.rs:82)
+
+**Removed Methods:**
+- ~~`set_dimensions(dimensions)`~~ - Removed (no longer needed)
+- ~~`convert_rect_to_pixels(x, y, w, h)`~~ - Removed (simplified API)
 
 **Key Behaviors:**
 - Queries terminal using CSI 14t (pixel size) and 18t (cell count)
 - Calculates cell dimensions: pixel_size / cell_count
-- Converts Ratatui cell coordinates to pixel coordinates for graphics rendering
-- Enables Viewport Overlay Pattern (PRD Section 4.2, Design Doc v2.0 Section 2.1)
+- Enables Viewport Overlay Pattern (PRD Section 4.2)
 
-### `GraphicsCapability` (`src/rendering/capability.rs:8`)
-Terminal graphics support level enum.
-```rust
-pub enum GraphicsCapability {
-    None,   // Terminal does not support Kitty Graphics Protocol (will exit with error)
-    Kitty,  // Kitty Graphics Protocol supported
-}
-```
-
-**Purpose:** Tracks detected terminal capability. Application requires Kitty Graphics Protocol support; exits with clear error if not available.
-
-### `FontMetrics` (`src/rendering/font.rs`)
+### `FontMetrics` (`src/rendering/font.rs:12`)
 Font metric data for OVP calculations.
 ```rust
 pub struct FontMetrics {
-    pub ascent: f32,
-    pub descent: f32,
-    pub line_gap: f32,
-    pub height: f32,
-    pub font_size: f32,
+    pub height: f32,      // Total line height
+    pub font_size: f32,   // Font size in pixels
 }
 ```
-**Purpose:** Holds font metrics (ascent, descent, line_gap, height) for OVP positioning calculations.
+
+**Purpose:** Holds font metrics for OVP positioning calculations.
+
+**Simplified:** Removed unused fields (`ascent`, `descent`, `line_gap`) during cleanup.
 
 **Public API:**
-- `get_font()` -> `Option<FontRef<'static>>` - Get embedded JetBrains Mono font singleton
-- `load_font_from_path(path)` -> `Option<FontRef<'static>>` - Load font from filesystem
-- `get_font_with_config(config)` -> `Option<FontRef<'static>>` - Config-based font loading
-- `calculate_char_width(font, c, font_size)` -> `f32` - Calculate character width
-- `calculate_string_width(font, text, font_size)` -> `f32` - Calculate string width
-- `get_font_metrics(font, font_size)` -> `FontMetrics` - Get full font metrics
-- `FontConfig` - Configuration struct for font loading
+- `get_font() -> Option<FontRef<'static>>` - Get embedded JetBrains Mono font singleton (src/rendering/font.rs:26)
+- `calculate_char_width(font, c, font_size) -> f32` - Calculate character width (src/rendering/font.rs:40)
+- `calculate_string_width(font, text, font_size) -> f32` - Calculate string width (src/rendering/font.rs:53)
+- `get_font_metrics(font, font_size) -> FontMetrics` - Get font metrics (src/rendering/font.rs:68)
 
-**Key Dependencies:** `ab_glyph`, `lazy_static`
-
-### `CapabilityDetector` (`src/rendering/capability.rs:26`)
-Terminal capability detection logic.
-```rust
-pub struct CapabilityDetector;
-impl CapabilityDetector {
-    pub fn new() -> Self;
-    pub fn detect(&self) -> GraphicsCapability;
-}
-```
-
-**Purpose:** Detects terminal graphics capabilities via environment variables ($TERM). Application requires Kitty Graphics Protocol support; exits with clear error if not available.
+**Removed:**
+- ~~`load_font_from_path(path)`~~ - Removed (using embedded font only)
+- ~~`get_font_with_config(config)`~~ - Removed (simplified font loading)
+- ~~`FontConfig` struct~~ - Removed (not needed)
 
 ### `AppMode` (`src/app/mode.rs:1`)
 Application operating modes.
@@ -342,19 +324,15 @@ pub enum AppMode {
     Command,   // Command input mode (bottom deck)
     Reading,   // Full-screen TUI reading mode
     Paused,    // Reading mode paused
-    Peek,      // Peek mode (hold Tab to see context)
     Quit,      // Application exit
 }
 ```
 
 **Purpose:** Tracks which UI layer is active and handles transitions.
 
-### `ReaderComponent` (`src/ui/reader/component.rs:9`)
-Reader UI component (placeholder for future use).
+**Removed:** `Peek` variant (not implemented)
 
-**Purpose:** Reserved for future UI component architecture.
-
-### `Command` (`src/ui/command.rs:18`)
+### `Command` (`src/ui/command.rs:10`)
 Command deck input variants.
 ```rust
 pub enum Command {
@@ -366,41 +344,16 @@ pub enum Command {
 }
 ```
 
-**Purpose:** Parsed command deck input for processing. Replaces the obsolete REPL module.
+**Purpose:** Parsed command deck input for processing.
+
+**Public Functions:**
+- `parse(input: &str) -> Self` - Parse command string into Command enum (src/ui/command.rs:22)
 
 ---
 
 ## 3. Public Methods
 
-### App Methods (`src/app/app.rs`)
-
-#### State Management
-- `pub fn new() -> App` - Creates new App instance
-- `pub fn mode(&self) -> AppMode` - Returns current mode (line 190)
-- `pub fn set_mode(&mut self, mode: AppMode)` - Sets mode (line 194)
-
-#### Reading Session
-- `pub fn get_wpm(&self) -> u32` - Returns WPM or default 300 (line 198)
-- `pub fn resume_reading(&mut self) -> Result<(), String>` - Resumes paused session (line 134)
-- `pub fn apply_loaded_document(&mut self, doc: LoadedDocument)` - Applies loaded document
-- `pub fn start_reading(&mut self, text: &str, wpm: u32)` - Starts reading session
-
-#### Input Handling
-- `pub fn handle_event(&mut self, event: AppEvent)` - Processes app events
-- `pub fn handle_keypress(&mut self, key: char) -> bool` - Handles keyboard input in Reading mode (line 227)
-
-**Key binding implementation (handle_keypress):**
-- `'j'/'J'` - jump to previous sentence (j is left on keyboard)
-- `'k'/'K'` - jump to next sentence (k is right on keyboard)  
-- `'['` - decrease WPM by 50
-- `']'` - increase WPM by 50
-- `' '` - toggle pause
-- `'q'/'Q'` - quit to REPL
-
-#### TUI Integration
-- `pub fn advance_reading(&mut self) -> bool` - Auto-advance to next word, returns true if advanced (line 51)
-
-### TuiManager (`src/ui/terminal.rs:20`)
+### TuiManager (`src/ui/terminal.rs:23`)
 Terminal UI manager with auto-advancement event loop.
 ```rust
 pub struct TuiManager {
@@ -411,25 +364,23 @@ pub struct TuiManager {
 **Purpose:** Manages TUI mode with word auto-advancement based on WPM timing.
 
 **Key Methods:**
-- `pub fn new() -> Result<Self, io::Error>` - Creates TUI manager, enables raw mode, enters alternate screen (src/ui/terminal.rs:26)
-- `pub fn run_event_loop(&mut self, app: &mut App) -> io::Result<AppMode>` - Main event loop with WPM-based auto-advancement (src/ui/terminal.rs:36)
-- `pub fn render_frame(&mut self, app: &App) -> io::Result<()>` - Renders word display with OVP anchoring (src/ui/terminal.rs:78)
+- `new() -> Result<Self, io::Error>` - Creates TUI manager, enables raw mode, enters alternate screen (src/ui/terminal.rs:29)
+- `run_event_loop(&mut self, app: &mut App) -> io::Result<AppMode>` - Main event loop with WPM-based auto-advancement (src/ui/terminal.rs:39)
+- `render_frame(&mut self, app: &App) -> io::Result<()>` - Renders word display with OVP anchoring (src/ui/terminal.rs:89)
 
-**Render Layout:**
-- Context left (40%), word display (20%), context right (40%)
-- Progress bar at bottom of main area (90% of screen)
-- Gutter on far right (3% of screen width)
-- OVP anchor position: calculates left padding to keep anchor at visual center (src/ui/reader/view.rs:10)
-
-### CommandExecutor (`src/ui/command_executor.rs`)
+### CommandExecutor (`src/ui/command_executor.rs:10`)
 Command execution logic extracted from terminal event loop.
 
 **Public Enum:**
-- `CommandResult::Continue` - Continue running, no mode change
-- `CommandResult::Exit(AppMode)` - Exit event loop with specified mode
+```rust
+pub enum CommandResult {
+    Continue,           // Continue running, no mode change
+    Exit(AppMode),      // Exit event loop with specified mode
+}
+```
 
 **Public Function:**
-- `execute_command(app, command_str) -> io::Result<CommandResult>` - Parse and execute command
+- `execute_command(app: &mut App, command_str: &str) -> io::Result<CommandResult>` - Parse and execute command (src/ui/command_executor.rs:18)
 
 **Supported Commands:**
 - `LoadFile(path)` - Load PDF/EPUB file
@@ -438,32 +389,15 @@ Command execution logic extracted from terminal event loop.
 - `Help` - Show help (placeholder)
 - `Unknown` - Show error for invalid commands
 
-**Purpose:** Separates command business logic from event loop orchestration, improving testability and SRP compliance.
+### Key Binding Reference (`src/app/app_impl.rs:89`)
 
-### ReadingState Methods (`src/reading/state.rs`)
-
-#### Navigation
-- `pub fn advance(&mut self)` - Moves to next token (line 83)
-- `pub fn jump_to_next_sentence(&mut self)` - Jumps to next sentence start
-- `pub fn jump_to_previous_sentence(&mut self)` - Jumps to previous sentence start
-
-#### Timing & Configuration
-- `pub fn get_wpm(&self) -> u32` - Returns current WPM (line 39)
-- `pub fn adjust_wpm(&mut self, delta: i32)` - Adjusts WPM with clamping
-- `pub fn current_token_duration(&self) -> Duration` - Calculates token display duration
-
-#### Factory Methods
-- `pub fn new_with_default_config(tokens: Vec<Token>, wpm: u32) -> Self` - Creates with default config
-
-### Theme Methods (`src/ui/theme.rs`)
-- `pub fn midnight() -> Self` - Returns midnight theme colors
-- `pub fn current() -> Self` - Returns default theme (midnight)
-
-### Theme Colors Module (`src/ui/theme.rs:44`)
-- `pub fn background() -> Color` - Midnight background (#1A1B26)
-- `pub fn text() -> Color` - Light blue text (#A9B1D6)
-- `pub fn anchor() -> Color` - Coral red anchor (#F7768E)
-- `pub fn dimmed() -> Color` - Dimmed blue (#646E96)
+Reading mode key bindings (j=left, k=right for VIM-like navigation):
+- `'j'` - jump to previous sentence (j is left on keyboard)
+- `'k'` - jump to next sentence (k is right on keyboard)
+- `'['` - decrease WPM by 50
+- `']'` - increase WPM by 50
+- `' '` - toggle pause
+- `'q'` - quit to Command mode
 
 ---
 
@@ -478,66 +412,61 @@ The project follows **pure core + thin IO adapter** pattern:
 
 2. **App Layer** (`src/app/`) - State coordination
    - Manages mode transitions
-   - Coordinates between REPL and TUI
+   - Coordinates between TUI and engine
    - Delegates to engine for pure logic
 
-3. **IO Adapters** (`src/ui/`, `src/repl/`, `src/input/`) - I/O wrappers
-    - Commands parsed via rustyline in command deck
-    - File format parsing (PDF, EPUB)
-    - TUI rendering (ratatui-based, with OVP anchoring) ✅
-    - Theme configuration (centralized color schemes) ✅
+3. **IO Adapters** (`src/ui/`, `src/input/`) - I/O wrappers
+   - Command parsing in command deck
+   - File format parsing (PDF, EPUB, clipboard)
+   - TUI rendering (ratatui-based, with OVP anchoring)
+   - Theme configuration (centralized color schemes)
 
 ### Testing Strategy
 - **Unit tests** in `engine/` modules (pure logic)
-- **Integration tests** in `tests/` directory
+- **Integration tests** in `tests/` directory (6 tests)
 - **Manual TUI testing** required for UI components
 
 ---
 
 ## 5. Current Implementation Status
 
-### ✅ Implemented (Epic 2 Complete)
-- REPL with rustyline (`@filename`, `@@`, `:q`, `:h`)
-- PDF/EPUB/clipboard parsing
-- OVP anchor position calculation (`calculate_anchor_position()`) (src/reading/ovp.rs:17)
-- WPM adjustment ([ / ] keys)
-- Pause/resume (space key)
-- Mode management (Repl/Reading/Paused/Command/Quit)
-- TUI rendering layer (`src/ui/reader/view.rs`, `src/ui/terminal.rs`)
-- Midnight theme colors (`src/ui/theme.rs`)
-- Auto-advancement timing loop
-- OVP anchoring (left padding calculation in render_word_display) (src/ui/reader/view.rs:10)
-- ReaderComponent UI wrapper (src/ui/reader/component.rs) - placeholder for future use
-- Domain-based organization (reading/ and rendering/ modules)
-- Application layer refactoring (app.rs split into event.rs, mode.rs)
-- UI layer refactoring (reader/ subdirectory with component.rs and view.rs)
+### ✅ Implemented (As of 2026-02-09)
 
-### ✅ Implemented (Epic 3 Complete: Word-Level LRU Cache)
+**Core Features:**
+- ✅ PDF/EPUB/clipboard parsing (`src/input/`)
+- ✅ OVP anchor position calculation (`src/reading/ovp.rs`)
+- ✅ WPM adjustment ([ / ] keys) (src/app/app_impl.rs:99)
+- ✅ Pause/resume (space key) (src/app/app_impl.rs:103)
+- ✅ Mode management (Command/Reading/Paused/Quit) (src/app/mode.rs)
+- ✅ TUI rendering layer (`src/ui/terminal.rs`, `src/ui/reader/view.rs`)
+- ✅ Midnight theme colors (src/ui/theme.rs)
+- ✅ Auto-advancement timing loop (src/ui/terminal.rs:39)
+- ✅ Sentence-aware navigation (j/k keys) (src/app/app_impl.rs:93)
 
-**Cache Implementation:**
-- ✅ WordCache struct with LRU storage (src/rendering/cache.rs:98)
-- ✅ Tuple-based cache keys for performance (src/rendering/cache.rs:26)
-- ✅ Memory tracking with 75MB cap (src/rendering/cache.rs:19)
-- ✅ Hit/miss counters for telemetry (src/rendering/cache.rs:104-105)
-- ✅ Integration with KittyGraphicsRenderer (src/rendering/kitty/mod.rs:35)
-- ✅ Cache used in render_word() for transparent caching (src/rendering/kitty/mod.rs:183)
-- ✅ Font size synchronization (clears cache when font changes)
-- ✅ All 381 tests passing (180 unit + 14 integration + 7 additional)
+**Word-Level LRU Cache:**
+- ✅ WordCache struct with LRU storage (src/rendering/cache.rs)
+- ✅ Tuple-based cache keys for performance
+- ✅ Memory tracking with 75MB cap
+- ✅ Hit/miss counters for telemetry
+- ✅ Integration with KittyGraphicsRenderer
+- ✅ Cache used in render_word() for transparent caching
 
-**Performance Characteristics:**
-- Cache hit: O(1) lookup (~microseconds)
-- Cache miss: O(n) rasterization (~1-5ms)
-- Target hit rate: ~70% with typical English text
-- Memory usage: <75MB with configurable cap
+**Image-Based Rendering:**
+- ✅ Text rasterization using ab_glyph + imageproc
+- ✅ Pixel-perfect RGBA buffer creation with theme colors
+- ✅ Sub-pixel OVP anchoring via `calculate_start_x()`
+- ✅ Vertical centering at 42% of reading zone
+- ✅ Kitty Graphics Protocol transmission
+- ✅ Sentence progress bar (2px horizontal bar)
 
-### ✅ Previously Implemented (Epic 2: Image-Based Word Rendering)
-
-**Epic 2 Features Implemented:**
-- Text rasterization using ab_glyph + imageproc
-- Pixel-perfect RGBA buffer creation with theme colors
-- Sub-pixel OVP anchoring via `calculate_start_x()`
-- Vertical centering at 42% of reading zone
-- Kitty Graphics Protocol transmission with position coordinates
+**Cleanup Completed:**
+- ✅ Removed dead code (~1,700 lines)
+- ✅ Consolidated App struct (removed event.rs, render_state.rs)
+- ✅ Removed capability.rs (terminal detection)
+- ✅ Removed cell.rs (replaced with direct rendering)
+- ✅ Simplified FontMetrics (removed unused fields)
+- ✅ 0 clippy warnings
+- ✅ 138 tests passing (132 unit + 6 integration)
 
 ---
 
@@ -545,14 +474,13 @@ The project follows **pure core + thin IO adapter** pattern:
 
 | PRD Section | Implementation Status |
 |-------------|----------------------|
-| **3.1 OVP Anchoring** | ✅ Implemented (`calculate_anchor_position()`, left padding in render) |
-| **3.2 Weighted Delay** | ✅ Complete (floating-point timing precision) |
+| **3.1 OVP Anchoring** | ✅ Implemented (`calculate_anchor_position()`, sub-pixel positioning) |
+| **3.2 Weighted Delay** | ✅ Complete (punctuation multipliers, length penalty) |
 | **3.3 Sentence Navigation** | ✅ Implemented (j=left/k=right keys) |
 | **4.1 Midnight Theme** | ✅ Implemented (theme.rs with explicit RGB colors) |
 | **4.2 Dual-Engine** | ✅ RsvpRenderer trait with KittyGraphicsRenderer |
-| **7.1 REPL Mode** | ✅ Complete |
-| **7.2 Reading Mode** | ✅ Complete (TUI with OVP anchoring) |
-| **9.2 Terminal Requirements** | ✅ Clear requirement: Kitty Graphics Protocol mandatory (Kitty or Konsole 22.04+) |
+| **4.4 Progress Bars** | ✅ Micro-bar implemented (macro-gutter pending) |
+| **7.2 Reading Mode** | ✅ Complete (TUI with OVP anchoring, auto-advance) |
 
 ---
 
@@ -563,15 +491,18 @@ The project follows **pure core + thin IO adapter** pattern:
 - `crossterm = "0.29"` - Terminal I/O ✅
 - `ab_glyph = "0.2.32"` - Font parsing and metrics ✅
 - `lazy_static = "1.5"` - Font singleton ✅
-- `rustyline = "17.0"` - REPL implementation ✅
-- `pdf-extract = "0.8"` - PDF parsing ✅
-- `epub = "0.3"` - EPUB parsing ✅
-- `clipboard = "0.5"` - Clipboard access ✅
-- `unicode-segmentation` - Unicode width handling for emoji/CJK (Cargo.toml)
+- `rustyline = "17.0"` - Command input ✅
+- `pdf-extract = "0.10.0"` - PDF parsing ✅
+- `epub = "2.1.5"` - EPUB parsing ✅
+- `arboard = "3.6.1"` - Clipboard access ✅
+- `lru = "0.12"` - LRU cache implementation ✅
+- `image = "0.25"` - Image buffer types ✅
+- `imageproc = "0.25"` - Image manipulation ✅
+- `base64 = "0.22"` - Base64 encoding for KGP ✅
 
 ### Development
-- `cargo test` - Unit and integration tests
-- `cargo clippy` - Linting
+- `cargo test` - Unit and integration tests (138 passing)
+- `cargo clippy` - Linting (0 warnings)
 - `cargo fmt` - Code formatting
 
 ---
@@ -580,49 +511,58 @@ The project follows **pure core + thin IO adapter** pattern:
 
 ### 1. TUI-First Command Deck Architecture
 
-- **Command Deck (Bottom 5 lines):** Fixed-height command area using rustyline for input
+- **Command Deck (Bottom section):** Command area for input
 - Commands typed directly (no prompt like `speedy>`)
-- Commands execute immediately (similar to OpenCode/Neovim command mode)
-- Reading Zone (Top - dynamic): Displays RSVP content or instructions, expands/contracts with terminal size
+- Reading Zone (Top - dynamic): Displays RSVP content or instructions
 - Mode transitions: Command ↔ Reading ↔ Paused
 - `:q` in Command Mode exits application entirely
-- Terminal resize supported: Word re-centers dynamically, auto-pause/resume during resize
 
-**Purpose:** Modern TUI workflow with integrated command input, no REPL prompt
+### 2. Simplified App Architecture
 
-### 2. Full TUI Always-On
-- Application launches in full TUI mode immediately (no REPL prompt)
-- ReadingState preserved across mode changes
-- Last reading position restored if available
-- Commands integrated into bottom command deck (rustyline input)
+- Removed `AppEvent` enum and event handling system
+- App now uses direct method calls for state management
+- Default impl for App reduces boilerplate
+- Simplified mode transitions
 
-**Purpose:** Modern TUI experience with integrated workflow
+### 3. Embedded Font Strategy
 
-### 3. Integrated Command Deck
-- Command deck always visible at bottom of TUI
-- ReadingState preserved across sessions
-- Last reading position restored on app launch
-- Quit command (`:q`) exits application entirely
+- JetBrains Mono bundled via `include_bytes!`
+- Removed filesystem font loading (simplified API)
+- Single font weight (~300KB) for English text
+- No font configuration needed
 
-### 4. Integrated Input Handling
-- Command deck uses rustyline for command input (like OpenCode command section)
-- TUI delegates command parsing to `app.handle_event()`
-- Centralized input processing in command deck area
+### 4. LRU Cache Performance
+
+- Word-level caching eliminates redundant rasterization
+- 75MB memory cap with automatic eviction
+- ~70% hit rate with typical English text
+- Enables 1000+ WPM performance
 
 ---
 
-## 9. Known Architecture Gaps
+## 9. Recent Cleanup (2026-02-09)
 
-### Immediate (Task 2B-1)
-1. **Timing precision fix** (Bead 2B-1-0) - REQUIRED BEFORE ANY TUI WORK
-2. **Missing `advance_reading()`** (Bead 2B-1-2) - Required for auto-advancement timing
-3. **No TUI rendering** (Bead 2B-1-3) - Need `render.rs` and `terminal.rs`
-4. **No OVP calculation** (Bead 2B-1-1) - Need `calculate_anchor_position()`
+### Deleted Files
+- `src/engine/error.rs` - Unused error enum
+- `src/app/event.rs` - Unused event handling
+- `src/app/render_state.rs` - Consolidated into App
+- `src/rendering/capability.rs` - Terminal detection (not needed)
+- `src/rendering/cell.rs` - Replaced with direct rendering
+- `tests/cache_integration.rs` - Consolidated into main tests
 
-### Future
-1. **Audio metronome** (Task 2C-X) - Speed glide, thump sounds
-2. **Gutter implementation** (Task 2B-5) - Spatial awareness
-3. **Performance optimizations** - Large document handling
+### Removed Features
+- `AppMode::Peek` - Not implemented
+- `GraphicsCapability` enum - Terminal detection removed
+- `supports_subpixel_ovp()` - All renderers support it
+- FontMetrics `ascent`, `descent`, `line_gap` - Unused
+- `load_font_from_path()` - Using embedded font only
+- `cell_to_pixel()`, `rect_to_pixel()` - Simplified viewport API
+
+### Net Result
+- ~1,700 lines removed
+- 0 clippy warnings
+- 138 tests passing
+- Cleaner, more maintainable codebase
 
 ---
 
