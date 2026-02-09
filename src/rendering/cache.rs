@@ -203,6 +203,7 @@ impl WordCache {
 
     /// Get cache hit rate (0.0 to 1.0)
     ///
+    #[cfg(test)]
     /// Returns hits / (hits + misses), or 0.0 if no lookups performed
     pub fn get_hit_rate(&self) -> f64 {
         let total = self.hits + self.misses;
@@ -213,26 +214,31 @@ impl WordCache {
         }
     }
 
+    #[cfg(test)]
     /// Get memory usage in megabytes
     pub fn get_memory_usage_mb(&self) -> f64 {
         self.total_cached_bytes as f64 / (1024.0 * 1024.0)
     }
 
+    #[cfg(test)]
     /// Get total cached bytes
     pub fn total_cached_bytes(&self) -> u64 {
         self.total_cached_bytes
     }
 
+    #[cfg(test)]
     /// Get number of cache hits
     pub fn hits(&self) -> u64 {
         self.hits
     }
 
+    #[cfg(test)]
     /// Get number of cache misses
     pub fn misses(&self) -> u64 {
         self.misses
     }
 
+    #[cfg(test)]
     /// Get current number of cached entries
     pub fn len(&self) -> usize {
         self.cache.len()

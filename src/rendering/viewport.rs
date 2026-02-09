@@ -40,8 +40,7 @@ impl TerminalDimensions {
             cell_size: (cell_width, cell_height),
         }
     }
-
-    }
+}
 
 /// Viewport manager for coordinating Ratatui layout with graphics rendering
 #[derive(Debug, Clone)]
@@ -157,9 +156,6 @@ impl Viewport {
     }
 
     /// Convert Ratatui Rect to pixel coordinates
-    ///
-    /// # Arguments
-    /// * `x` - Column start
     /// Convert pixel coordinates to cell coordinates (for cursor positioning)
     ///
     /// # Arguments
@@ -218,7 +214,6 @@ mod tests {
         assert_eq!(dims.cell_size.0, 24.0); // 1920 / 80
         assert_eq!(dims.cell_size.1, 45.0); // 1080 / 24
     }
-
 
     #[test]
     fn test_viewport_creation() {
