@@ -1,6 +1,10 @@
 use crate::app::{mode::AppMode, App};
 use crate::rendering::kitty::KittyGraphicsRenderer;
 use crate::rendering::renderer::RsvpRenderer;
+use crate::ui::autocomplete::cache::PerDirectoryCache;
+use crate::ui::autocomplete::discovery::spawn_discovery_thread;
+use crate::ui::autocomplete::render::render_autocomplete_popup;
+use crate::ui::autocomplete::state::AutocompleteState;
 use crate::ui::reader::view::{render_command_deck, render_wpm};
 use crate::ui::theme::Theme;
 
@@ -44,6 +48,9 @@ fn calculate_margins(area: Rect) -> (u16, u16, u16, u16) {
     }
 }
 use std::io::{self, Stdout, Write};
+use std::path::PathBuf;
+use std::sync::mpsc::Receiver;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -54,6 +61,11 @@ pub struct TuiManager {
     cursor_visible: bool,        // Blink state
     last_cursor_toggle: Instant, // Last toggle time
     last_keypress: Instant,      // For pause-on-type
+    
+    // Autocomplete state
+    autocomplete_state: AutocompleteState,
+    discovery_receiver: Option<Receiver<PathBuf>>,
+    discovery_cache: Arc<Mutex<PerDirectoryCache>>,
 }
 
 impl TuiManager {
@@ -97,6 +109,9 @@ impl TuiManager {
             cursor_visible: true, // Start visible
             last_cursor_toggle: Instant::now(),
             last_keypress: Instant::now(),
+            autocomplete_state: AutocompleteState::new(),
+            discovery_receiver: None,
+            discovery_cache: Arc::new(Mutex::new(PerDirectoryCache::new())),
         })
     }
 
@@ -163,44 +178,106 @@ impl TuiManager {
                                 app.set_mode(AppMode::Quit);
                                 return Ok(AppMode::Quit);
                             }
+                            
+                            // Handle Ctrl+R to refresh autocomplete cache
+                            if key.code == KeyCode::Char('r')
+                                && key.modifiers.contains(event::KeyModifiers::CONTROL)
+                                && self.autocomplete_state.active
+                            {
+                                // Invalidate cache for current directory
+                                let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                                self.discovery_cache.lock().unwrap().invalidate(&current_dir);
+                                // Restart discovery
+                                self.autocomplete_state.files.clear();
+                                self.autocomplete_state.filtered_indices.clear();
+                                self.spawn_file_discovery();
+                            }
 
                             match key.code {
                                 KeyCode::Char(c) => {
                                     if app.mode() == AppMode::Command {
+                                        // Check if @ should trigger autocomplete
+                                        let should_activate_autocomplete = c == '@' && AutocompleteState::should_activate(&self.command_buffer, self.command_buffer.len());
+                                        if should_activate_autocomplete {
+                                            // Activate autocomplete
+                                            let cursor_pos = self.command_buffer.len();
+                                            let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                                            self.autocomplete_state.activate(&self.command_buffer, cursor_pos, &current_dir);
+                                            self.spawn_file_discovery();
+                                        }
+                                        
                                         // In command mode, collect input
                                         self.command_buffer.push(c);
                                         self.last_keypress = Instant::now(); // Reset blink pause
                                         self.cursor_visible = true; // Show cursor immediately
+                                        
+                                        // Handle input for autocomplete if active
+                                        // Skip handle_input for @ when we just activated - query should be empty after @
+                                        if self.autocomplete_state.active && !should_activate_autocomplete {
+                                            self.autocomplete_state.handle_input(c);
+                                        }
                                     } else {
                                         // In reading/paused mode, use app key handling
                                         app.handle_keypress(c);
                                     }
                                 }
                                 KeyCode::Enter => {
-                                    if app.mode() == AppMode::Command
-                                        && !self.command_buffer.is_empty()
-                                    {
-                                        // Execute the command
-                                        let command = self.command_buffer.clone();
-                                        self.command_buffer.clear();
+                                    if app.mode() == AppMode::Command {
+                                        if self.autocomplete_state.active {
+                                            // Apply selection and close autocomplete
+                                            self.autocomplete_state.apply_selection(&mut self.command_buffer);
+                                            self.autocomplete_state.deactivate();
+                                        } else if !self.command_buffer.is_empty() {
+                                            // Execute the command
+                                            let command = self.command_buffer.clone();
+                                            self.command_buffer.clear();
 
-                                        // Parse and execute
-                                        use crate::ui::command_executor::{
-                                            execute_command, CommandResult,
-                                        };
-                                        match execute_command(app, &command)? {
-                                            CommandResult::Continue => {}
-                                            CommandResult::Exit(mode) => return Ok(mode),
+                                            // Parse and execute
+                                            use crate::ui::command_executor::{
+                                                execute_command, CommandResult,
+                                            };
+                                            match execute_command(app, &command)? {
+                                                CommandResult::Continue => {}
+                                                CommandResult::Exit(mode) => return Ok(mode),
+                                            }
                                         }
                                     }
                                 }
                                 KeyCode::Backspace => {
                                     if app.mode() == AppMode::Command {
+                                        if self.autocomplete_state.active {
+                                            self.autocomplete_state.backspace();
+                                            if self.autocomplete_state.query.is_empty() {
+                                                // User deleted the @, close autocomplete
+                                                self.autocomplete_state.deactivate();
+                                            }
+                                        }
                                         self.command_buffer.pop();
                                     }
                                 }
+                                KeyCode::Up => {
+                                    if app.mode() == AppMode::Command && self.autocomplete_state.active {
+                                        self.autocomplete_state.select_previous();
+                                    }
+                                }
+                                KeyCode::Down => {
+                                    if app.mode() == AppMode::Command && self.autocomplete_state.active {
+                                        self.autocomplete_state.select_next();
+                                    }
+                                }
+                                KeyCode::Tab => {
+                                    if app.mode() == AppMode::Command && self.autocomplete_state.active {
+                                        // Apply selection with trailing space
+                                        self.autocomplete_state.apply_selection(&mut self.command_buffer);
+                                        self.command_buffer.push(' ');
+                                        // Keep autocomplete open for chaining
+                                    }
+                                }
                                 KeyCode::Esc => {
-                                    if app.mode() == AppMode::Reading
+                                    if self.autocomplete_state.active {
+                                        // Close autocomplete but keep typed text
+                                        self.autocomplete_state.deactivate();
+                                    } else if app.mode() == AppMode::Reading
                                         || app.mode() == AppMode::Paused
                                     {
                                         app.set_mode(AppMode::Command);
@@ -226,6 +303,28 @@ impl TuiManager {
                 Err(e) => {
                     // Propagate I/O errors instead of ignoring them
                     return Err(e);
+                }
+            }
+
+            // Check for incoming files from discovery thread
+            if let Some(ref receiver) = self.discovery_receiver {
+                // Process all available files without blocking
+                loop {
+                    match receiver.try_recv() {
+                        Ok(file) => {
+                            self.autocomplete_state.add_file(file);
+                        }
+                        Err(std::sync::mpsc::TryRecvError::Empty) => {
+                            // No more files available right now, but thread is still running
+                            break;
+                        }
+                        Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                            // Thread has finished and sender dropped
+                            self.autocomplete_state.mark_scanning_complete();
+                            self.discovery_receiver = None;
+                            break;
+                        }
+                    }
                 }
             }
 
@@ -333,6 +432,15 @@ impl TuiManager {
                 app.get_error(),
                 self.cursor_visible && app.mode() == AppMode::Command, // Only blink cursor in Command mode
             );
+
+            // Render autocomplete popup if active
+            let terminal_height = frame.area().height;
+            render_autocomplete_popup(
+                frame,
+                &self.autocomplete_state,
+                command_area,
+                terminal_height,
+            );
         })?;
 
         // Flush stdout to ensure ratatui output appears immediately
@@ -406,6 +514,18 @@ impl TuiManager {
         }
 
         Ok(())
+    }
+
+    /// Spawn file discovery thread for autocomplete
+    fn spawn_file_discovery(&mut self) {
+        // Get current directory
+        let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        
+        // Spawn discovery thread
+        let cache = Arc::clone(&self.discovery_cache);
+        let handle = spawn_discovery_thread(current_dir, cache);
+        
+        self.discovery_receiver = Some(handle.receiver);
     }
 
     /// Handle terminal resize events

@@ -17,3 +17,6 @@ imageproc = "0.25"
 base64 = "0.22"
 lazy_static = "1.5"
 lru = "0.12"
+
+[dev-dependencies]
+tempfile = "3.8"

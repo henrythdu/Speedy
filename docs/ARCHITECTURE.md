@@ -1,6 +1,6 @@
 # Speedy Architecture Document
 
-**Last Updated:** 2026-02-10 (Removed unused SentenceProgressBar module, updated PRD, 0 clippy warnings)
+**Last Updated:** 2026-02-10 (File autocomplete feature complete, fixed receiver bug, proper ListState rendering)
 **Purpose:** Document actual codebase structure, methods, structs, and architecture to prevent duplication and confusion.
 
 ## ⚠️ Important Notes
@@ -45,6 +45,12 @@ src/
 │   ├── reader/         # Reader feature module
 │   │   ├── view.rs     # Render functions (OVP word, progress)
 │   │   └── mod.rs      # Reader module exports
+│   ├── autocomplete/   # File picker autocomplete (NEW)
+│   │   ├── mod.rs      # Module exports and constants
+│   │   ├── cache.rs    # Per-directory file cache with TTL
+│   │   ├── discovery.rs # Threaded file discovery
+│   │   ├── state.rs    # Autocomplete state management
+│   │   └── render.rs   # Popup rendering with ratatui
 │   ├── command.rs      # Command parsing and token utilities
 │   ├── command_executor.rs # Command execution logic
 │   ├── terminal.rs     # TuiManager with event loop and frame rendering
@@ -371,6 +377,81 @@ pub enum CommandResult {
 - `Help` - Show help (placeholder)
 - `Unknown` - Show error for invalid commands
 
+### AutocompleteState (`src/ui/autocomplete/state.rs:14`)
+Manages the file picker autocomplete popup state.
+```rust
+pub struct AutocompleteState {
+    pub active: bool,              // Whether popup is visible
+    pub query: String,             // Text after @ for filtering
+    pub anchor_idx: usize,         // Position of @ in command buffer
+    pub files: Vec<PathBuf>,       // All discovered files
+    pub filtered_indices: Vec<usize>, // Indices of files matching query
+    pub selected_idx: usize,       // Currently selected item index
+    pub scroll_offset: usize,      // Scroll position for viewport
+    pub is_scanning: bool,         // Discovery thread running
+    pub scan_root: PathBuf,        // Root directory being scanned
+}
+```
+
+**Purpose:** Tracks autocomplete popup state, file list, filtering, and user selection.
+
+**Key Methods:**
+- `new() -> Self` - Creates inactive state (src/ui/autocomplete/state.rs:42)
+- `activate(command_buffer, cursor_pos, root)` - Activates when @ typed (src/ui/autocomplete/state.rs:54)
+- `add_file(file)` - Adds discovered file, filters by extension (src/ui/autocomplete/state.rs:72)
+- `handle_input(c)` - Processes typed character for filtering (src/ui/autocomplete/state.rs:89)
+- `select_next()` / `select_previous()` - Navigate with wrap-around (src/ui/autocomplete/state.rs:98)
+- `apply_selection(command_buffer)` - Inserts @filepath into buffer (src/ui/autocomplete/state.rs:132)
+- `should_activate(buffer, cursor_pos) -> bool` - Checks if @ should trigger autocomplete (src/ui/autocomplete/state.rs:150)
+- `match_count() -> usize` - Returns number of filtered matches (src/ui/autocomplete/state.rs:162)
+
+### PerDirectoryCache (`src/ui/autocomplete/cache.rs:9`)
+Thread-safe cache for file discovery results with TTL.
+```rust
+pub struct PerDirectoryCache {
+    entries: HashMap<PathBuf, CacheEntry>,
+    ttl: Duration,  // 30 second default
+}
+```
+
+**Purpose:** Avoids repeated directory scans within TTL window.
+
+**Key Methods:**
+- `new() -> Self` - Creates cache with 30s TTL (src/ui/autocomplete/cache.rs:20)
+- `get(dir) -> Option<&Vec<PathBuf>>` - Returns cached files if not expired (src/ui/autocomplete/cache.rs:28)
+- `put(dir, files)` - Stores files with timestamp (src/ui/autocomplete/cache.rs:44)
+- `invalidate(dir)` - Removes specific directory from cache (src/ui/autocomplete/cache.rs:60)
+
+### DiscoveryHandle (`src/ui/autocomplete/discovery.rs:14`)
+Handle to background file discovery thread.
+```rust
+pub struct DiscoveryHandle {
+    pub receiver: Receiver<PathBuf>,
+}
+```
+
+**Purpose:** Allows main thread to receive discovered files via channel.
+
+**Key Functions:**
+- `spawn_discovery_thread(root, cache) -> DiscoveryHandle` - Spawns thread to scan directories (src/ui/autocomplete/discovery.rs:24)
+- `scan_directories(root) -> Vec<PathBuf>` - Recursively scans for PDF/EPUB files (src/ui/autocomplete/discovery.rs:77)
+
+### render_autocomplete_popup (`src/ui/autocomplete/render.rs:21`)
+Renders file picker popup above/below command deck.
+
+**Parameters:**
+- `frame` - ratatui Frame for rendering
+- `state` - Current AutocompleteState
+- `command_area` - Command deck area for positioning
+- `terminal_height` - Total terminal height
+
+**Features:**
+- Dynamic positioning (prefers above command deck)
+- Shows "Scanning..." indicator during discovery
+- Lists files with [PDF] / [EPUB] prefixes
+- Keyboard shortcut help footer (↑↓ navigate, Enter select, etc.)
+- Truncation indicator when files exceed viewport
+
 ### Key Binding Reference (`src/app/app_impl.rs:89`)
 
 Reading mode key bindings (j=left, k=right for VIM-like navigation):
@@ -433,6 +514,18 @@ The project follows **pure core + thin IO adapter** pattern:
 - ✅ Integration with KittyGraphicsRenderer
 - ✅ Cache used in render_word() for transparent caching
 
+**File Autocomplete:**
+- ✅ Triggered by `@` in command deck (src/ui/autocomplete/state.rs:54)
+- ✅ Threaded file discovery with mpsc channels (src/ui/autocomplete/discovery.rs:24)
+- ✅ Per-directory cache with 30s TTL (src/ui/autocomplete/cache.rs)
+- ✅ Real-time filtering as user types
+- ✅ Keyboard navigation (↑/↓, Enter, Tab, Esc)
+- ✅ Dynamic popup positioning (prefers above command deck)
+- ✅ Support for PDF and EPUB files
+- ✅ Scanning indicator during discovery
+- ✅ Keyboard shortcut help in popup footer
+- ✅ Cache refresh with Ctrl+R
+
 **Image-Based Rendering:**
 - ✅ Text rasterization using ab_glyph + imageproc
 - ✅ Pixel-perfect RGBA buffer creation with theme colors
@@ -455,7 +548,7 @@ The project follows **pure core + thin IO adapter** pattern:
 - ✅ Removed cell.rs (replaced with direct rendering)
 - ✅ Simplified FontMetrics (removed unused fields)
 - ✅ 0 clippy warnings
-- ✅ 138 tests passing (132 unit + 6 integration)
+- ✅ 175 tests passing (162 unit + 13 integration)
 
 ---
 

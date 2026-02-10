@@ -80,7 +80,7 @@ pub fn render_command_deck(
     let input_text = if let Some(error) = error_message {
         format!("ERROR: {}{}", error, cursor_char)
     } else if command_buffer.is_empty() {
-        format!("Type @file.pdf, @@, or :q{}", cursor_char)
+        format!("Type @ for files, @@, or :q{}", cursor_char)
     } else {
         format!("{}{}", command_buffer, cursor_char)
     };
