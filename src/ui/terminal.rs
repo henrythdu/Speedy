@@ -16,7 +16,8 @@ use ratatui::{
     widgets::Block,
     Terminal,
 };
-use std::io::{self, Stdout};
+use std::io::{self, Stdout, Write};
+use std::thread;
 use std::time::{Duration, Instant};
 
 pub struct TuiManager {
@@ -29,9 +30,16 @@ impl TuiManager {
     pub fn new() -> Result<Self, io::Error> {
         enable_raw_mode()?;
         execute!(io::stdout(), EnterAlternateScreen)?;
+        io::stdout().flush()?;
+        
+        // Give terminal time to switch to alternate screen
+        thread::sleep(Duration::from_millis(100));
 
         let backend = CrosstermBackend::new(io::stdout());
-        let terminal = Terminal::new(backend)?;
+        let mut terminal = Terminal::new(backend)?;
+        
+        // Force initial draw to initialize terminal size
+        terminal.autoresize()?;
 
         // Initialize Kitty Graphics renderer (always required - no fallback)
         let mut renderer = KittyGraphicsRenderer::new();
@@ -41,6 +49,8 @@ impl TuiManager {
         .expect("Failed to initialize KittyGraphicsRenderer");
 
         // Query terminal dimensions and calculate font size
+        // Note: This uses CSI escape sequences that may not be supported by all terminals
+        // If the query fails, we fall back to estimated dimensions
         let _ = renderer.viewport().query_dimensions();
         if let Some(dims) = renderer.viewport().get_dimensions() {
             // Calculate font size for 5-line height (cell height * 5)
@@ -59,6 +69,8 @@ impl TuiManager {
         let render_tick = Duration::from_millis(1000 / 60);
 
         // Force initial render before entering loop
+        self.terminal.clear()?;
+        self.terminal.flush()?;
         self.render_frame(app)?;
 
         loop {
@@ -71,7 +83,8 @@ impl TuiManager {
             // Reading and Paused modes show the RSVP display
 
             let timeout_ms = app.get_current_token_duration();
-            let poll_timeout = Duration::from_millis(timeout_ms);
+            // Ensure minimum timeout to prevent busy-waiting and allow render tick to fire
+            let poll_timeout = Duration::from_millis(timeout_ms.max(16));
 
             match event::poll(poll_timeout) {
                 Ok(true) => {
@@ -206,6 +219,9 @@ impl TuiManager {
                 app.get_error(),
             );
         })?;
+        
+        // Flush stdout to ensure ratatui output appears immediately
+        io::stdout().flush()?;
 
         // Render word via Kitty Graphics Protocol
         // Skip rendering pure whitespace/newline tokens to avoid blank screens
