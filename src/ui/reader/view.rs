@@ -23,9 +23,10 @@ pub fn render_command_deck(
         .constraints([Constraint::Length(1), Constraint::Min(1)])
         .split(area);
 
-    // Left accent bar
-    let accent_bar =
-        Paragraph::new("▌").style(Style::default().fg(colors::anchor()).bg(colors::surface()));
+    // Left accent bar - full height of command section
+    let accent_text = "▌\n▌\n▌\n▌\n▌"; // One per row for full 5-cell height
+    let accent_bar = Paragraph::new(accent_text)
+        .style(Style::default().fg(colors::anchor()).bg(colors::surface()));
     frame.render_widget(accent_bar, layout[0]);
 
     // Command input area
@@ -62,7 +63,6 @@ pub fn render_command_deck(
     frame.render_widget(input_widget, layout[1]);
 }
 
-
 /// Render WPM display in the reading zone
 ///
 /// Shows current words-per-minute in the top-left corner of the reading area.
@@ -81,9 +81,8 @@ pub fn render_wpm(frame: &mut Frame, area: Rect, wpm: u32, theme: &crate::ui::th
     );
 
     let wpm_text = format!("{} WPM", wpm);
-    let wpm_widget = Paragraph::new(wpm_text)
-        .style(Style::default().fg(theme.text).bg(theme.background));
+    let wpm_widget =
+        Paragraph::new(wpm_text).style(Style::default().fg(theme.text).bg(theme.background));
 
     frame.render_widget(wpm_widget, wpm_area);
 }
-
