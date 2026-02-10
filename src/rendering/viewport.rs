@@ -155,6 +155,31 @@ impl Viewport {
         self.dimensions.is_some()
     }
 
+    /// Update dimensions after terminal resize using event-provided cell count
+    ///
+    /// Uses the new cols/rows from the resize event and attempts to get fresh
+    /// pixel dimensions. Falls back to calculating pixel dimensions from the
+    /// previous cell_size if CSI 14t query fails.
+    ///
+    /// # Arguments
+    /// * `cols` - New column count from resize event
+    /// * `rows` - New row count from resize event
+    pub fn update_from_resize(&mut self, cols: u16, rows: u16) {
+        // Try to get fresh pixel dimensions
+        if let Some((pixel_width, pixel_height)) = self.query_pixel_size() {
+            // Use fresh pixel data
+            let dims = TerminalDimensions::new(pixel_width, pixel_height, cols, rows);
+            self.dimensions = Some(dims);
+        } else if let Some(existing) = self.dimensions {
+            // Fallback: calculate new pixel dimensions from existing cell_size
+            let pixel_width = (cols as f32 * existing.cell_size.0) as u32;
+            let pixel_height = (rows as f32 * existing.cell_size.1) as u32;
+            let dims = TerminalDimensions::new(pixel_width, pixel_height, cols, rows);
+            self.dimensions = Some(dims);
+        }
+        // If no existing dimensions, leave as None - will use fallback on next query
+    }
+
     /// Convert Ratatui Rect to pixel coordinates
     /// Convert pixel coordinates to cell coordinates (for cursor positioning)
     ///

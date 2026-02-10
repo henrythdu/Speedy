@@ -532,17 +532,24 @@ impl TuiManager {
     ///
     /// Updates viewport dimensions and redraws the current word at the new center position.
     /// Auto-pauses reading during resize to prevent visual artifacts (per Design Doc Section 8.1).
-    fn handle_resize(&mut self, _cols: u16, _rows: u16, app: &mut App) -> io::Result<()> {
+    fn handle_resize(&mut self, cols: u16, rows: u16, app: &mut App) -> io::Result<()> {
         // Auto-pause if currently reading to prevent visual artifacts
         let was_reading = app.mode() == AppMode::Reading;
         if was_reading {
             app.toggle_pause();
         }
 
-        // Update viewport dimensions by re-querying terminal
-        // This updates the viewport dimensions which are now used dynamically
-        // for both X and Y center calculations
-        let _ = self.kitty_renderer.viewport().query_dimensions();
+        // Update ratatui's internal terminal size to match actual terminal
+        // This ensures frame.area() returns correct dimensions for layout calculations
+        self.terminal.autoresize()?;
+
+        // Give terminal a moment to settle after resize before querying pixel dimensions
+        // This helps ensure CSI 14t returns updated dimensions
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        // Update viewport dimensions using the resize event data
+        // This is more reliable than querying CSI 14t which can return stale data
+        self.kitty_renderer.viewport().update_from_resize(cols, rows);
 
         // Clear previous graphics and redraw at new position
         if let Err(e) = RsvpRenderer::clear(&mut self.kitty_renderer) {
