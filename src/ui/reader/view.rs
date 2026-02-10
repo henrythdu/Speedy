@@ -48,17 +48,20 @@ pub fn render_command_deck(
 
     let padded_content = padded_layout[1];
 
-    // Split content area to put label at bottom
+    // Split content area with padding: empty row at top, input, empty row, label at bottom
     let content_layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Min(0),    // Input area (flexible)
-            Constraint::Length(1), // Label row (fixed at bottom)
+            Constraint::Length(1), // Top padding (empty row)
+            Constraint::Min(0),    // Input area
+            Constraint::Length(1), // Middle padding (empty row)
+            Constraint::Length(1), // Label row
+            Constraint::Length(1), // Bottom padding (empty row)
         ])
         .split(padded_content);
 
-    let input_area = content_layout[0];
-    let label_area = content_layout[1];
+    let input_area = content_layout[1];
+    let label_area = content_layout[3];
 
     // Render mode label at bottom
     let mode_label = match mode {
