@@ -21,7 +21,7 @@ use ratatui::{
 /// Returns (top_margin, bottom_margin, left_margin, right_margin)
 fn calculate_margins(area: Rect) -> (u16, u16, u16, u16) {
     const MIN_HEIGHT_FOR_FULL_MARGINS: u16 = 15;
-    const TARGET_TOP_BOTTOM: u16 = 3;
+    const TARGET_TOP_BOTTOM: u16 = 1;
     const TARGET_LEFT_RIGHT: u16 = 1;
 
     let height = area.height;
@@ -139,9 +139,14 @@ impl TuiManager {
                 }
             }
 
-            let timeout_ms = app.get_current_token_duration();
-            // Ensure minimum timeout to prevent busy-waiting and allow render tick to fire
-            let poll_timeout = Duration::from_millis(timeout_ms.max(16));
+            // Use fixed short timeout in Command mode for responsive input
+            // Use token duration in Reading/Paused modes for word timing
+            let poll_timeout = if app.mode() == AppMode::Command {
+                Duration::from_millis(50) // 50ms for responsive cursor blink and input
+            } else {
+                let timeout_ms = app.get_current_token_duration();
+                Duration::from_millis(timeout_ms.max(16))
+            };
 
             match event::poll(poll_timeout) {
                 Ok(true) => {
@@ -202,10 +207,8 @@ impl TuiManager {
                             }
                         }
                         Event::Resize(cols, rows) => {
-                            // Handle terminal resize with minimum size enforcement
-                            if cols >= 80 && rows >= 24 {
-                                let _ = self.handle_resize(cols, rows, app);
-                            }
+                            // Handle terminal resize - always update viewport
+                            let _ = self.handle_resize(cols, rows, app);
                         }
                         _ => {}
                     }
@@ -229,15 +232,32 @@ impl TuiManager {
         }
     }
 
-    /// Calculate the reader area (terminal minus command section)
+    /// Calculate the reader area (terminal minus command section and margins)
     fn calculate_reader_area(&mut self) -> Rect {
         if let Some(dims) = self.kitty_renderer.viewport().get_dimensions() {
             let command_height = (dims.cell_size.1 * 5.0) as u32;
+
+            // Calculate margins in pixels based on terminal height
+            let terminal_height_cells = (dims.pixel_size.1 as f32 / dims.cell_size.1) as u16;
+            let (top_margin_cells, bottom_margin_cells, left_margin_cells, right_margin_cells) =
+                calculate_margins(Rect::new(
+                    0,
+                    0,
+                    dims.pixel_size.0 as u16,
+                    terminal_height_cells,
+                ));
+
+            // Convert cell margins to pixels
+            let top_margin_px = (top_margin_cells as f32 * dims.cell_size.1) as u32;
+            let bottom_margin_px = (bottom_margin_cells as f32 * dims.cell_size.1) as u32;
+            let left_margin_px = (left_margin_cells as f32 * dims.cell_size.0) as u32;
+            let right_margin_px = (right_margin_cells as f32 * dims.cell_size.0) as u32;
+
             Rect::new(
-                0,
-                0,
-                dims.pixel_size.0 as u16,
-                (dims.pixel_size.1 - command_height) as u16,
+                left_margin_px as u16,
+                top_margin_px as u16,
+                (dims.pixel_size.0 - left_margin_px - right_margin_px) as u16,
+                (dims.pixel_size.1 - command_height - top_margin_px - bottom_margin_px) as u16,
             )
         } else {
             // Fallback dimensions
@@ -252,6 +272,11 @@ impl TuiManager {
         // Render background via Ratatui
         self.terminal.draw(|frame| {
             let area = frame.area();
+            let theme = Theme::midnight();
+
+            // Fill entire viewport with background color first
+            let full_bg = Block::default().style(Style::default().bg(theme.background));
+            frame.render_widget(full_bg, area);
 
             // Calculate responsive margins based on terminal size
             let (top, bottom, left, right) = calculate_margins(area);
@@ -289,9 +314,8 @@ impl TuiManager {
             let reading_area = main_layout[0];
             let command_area = main_layout[1];
 
-            let theme = Theme::midnight();
-            let reading_bg = Block::default().style(Style::default().bg(theme.background));
-            frame.render_widget(reading_bg, reading_area);
+            // Content areas use same background as margins for seamless look
+            // (Background already filled entire viewport above)
 
             // Render WPM display in top-left of reading area
             let wpm = app.get_wpm();
@@ -303,7 +327,7 @@ impl TuiManager {
                 app.mode(),
                 &self.command_buffer,
                 app.get_error(),
-                self.cursor_visible, // NEW: pass cursor state
+                self.cursor_visible && app.mode() == AppMode::Command, // Only blink cursor in Command mode
             );
         })?;
 
@@ -311,14 +335,15 @@ impl TuiManager {
         io::stdout().flush()?;
 
         // Render word via Kitty Graphics Protocol
+        // Always clear previous graphics first to prevent artifacts when switching modes
+        if let Err(e) = RsvpRenderer::clear(&mut self.kitty_renderer) {
+            app.set_error(format!("Failed to clear previous word: {}", e));
+        }
+
         // Skip rendering pure whitespace/newline tokens to avoid blank screens
         if let Some(word) = app.get_current_word() {
             let trimmed = word.trim();
             if !trimmed.is_empty() && trimmed != "\n" && trimmed != "\r\n" {
-                // Clear previous word only when rendering a new one
-                if let Err(e) = RsvpRenderer::clear(&mut self.kitty_renderer) {
-                    app.set_error(format!("Failed to clear previous word: {}", e));
-                }
                 let anchor_pos = crate::reading::calculate_anchor_position(&word);
 
                 // Render word
@@ -353,10 +378,9 @@ impl TuiManager {
                             bar_image_id,
                         ) {
                             app.set_error(format!("Bar render error: {}", e));
-                        } else {
-                            // Increment image ID after successful bar render
-                            self.kitty_renderer.current_image_id += 1;
                         }
+                        // Always increment image ID to maintain ID sequence
+                        self.kitty_renderer.current_image_id += 1;
 
                         // Render macro gutter (document progress)
                         let gutter_id = self.kitty_renderer.current_image_id;
@@ -368,9 +392,9 @@ impl TuiManager {
                             gutter_id,
                         ) {
                             app.set_error(format!("Gutter render error: {}", e));
-                        } else {
-                            self.kitty_renderer.current_image_id += 1;
                         }
+                        // Always increment image ID to maintain ID sequence
+                        self.kitty_renderer.current_image_id += 1;
                     }
                 }
             }

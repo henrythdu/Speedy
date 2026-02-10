@@ -3,7 +3,7 @@ use crate::ui::theme::colors;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::Style,
-    widgets::{Block, Borders, Clear, Paragraph},
+    widgets::{Block, Clear, Paragraph},
     Frame,
 };
 
@@ -17,6 +17,10 @@ pub fn render_command_deck(
 ) {
     // Clear the command area first
     frame.render_widget(Clear, area);
+
+    // Fill entire command area with surface color
+    let surface_block = Block::default().style(Style::default().bg(colors::surface()));
+    frame.render_widget(surface_block, area);
 
     // Create layout with left accent bar and input area
     let layout = Layout::default()
@@ -32,6 +36,18 @@ pub fn render_command_deck(
 
     let content_area = layout[1];
 
+    // Add internal padding (1 cell margin inside command section)
+    let padded_layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Length(1), // Left padding
+            Constraint::Fill(1),   // Content
+            Constraint::Length(1), // Right padding
+        ])
+        .split(content_area);
+
+    let padded_content = padded_layout[1];
+
     // Split content area to put label at bottom
     let content_layout = Layout::default()
         .direction(Direction::Vertical)
@@ -39,7 +55,7 @@ pub fn render_command_deck(
             Constraint::Min(0),    // Input area (flexible)
             Constraint::Length(1), // Label row (fixed at bottom)
         ])
-        .split(content_area);
+        .split(padded_content);
 
     let input_area = content_layout[0];
     let label_area = content_layout[1];
