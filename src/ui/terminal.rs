@@ -303,6 +303,7 @@ impl TuiManager {
                 app.mode(),
                 &self.command_buffer,
                 app.get_error(),
+                self.cursor_visible, // NEW: pass cursor state
             );
         })?;
 

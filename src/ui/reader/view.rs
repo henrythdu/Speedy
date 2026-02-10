@@ -13,6 +13,7 @@ pub fn render_command_deck(
     mode: AppMode,
     command_buffer: &str,
     error_message: Option<&str>,
+    cursor_visible: bool, // NEW: Blink state
 ) {
     // Clear the command area first
     frame.render_widget(Clear, area);
@@ -55,13 +56,14 @@ pub fn render_command_deck(
         .style(Style::default().fg(colors::anchor()).bg(colors::surface()));
     frame.render_widget(label_widget, label_area);
 
-    // Render input above label
+    // Render input above label with blinking cursor
+    let cursor_char = if cursor_visible { "█" } else { " " };
     let input_text = if let Some(error) = error_message {
-        format!("ERROR: {}", error)
+        format!("ERROR: {}{}", error, cursor_char)
     } else if command_buffer.is_empty() {
-        "Type @file.pdf, @@, or :q".to_string()
+        format!("Type @file.pdf, @@, or :q{}", cursor_char)
     } else {
-        command_buffer.to_string()
+        format!("{}{}", command_buffer, cursor_char)
     };
 
     let text_color = if error_message.is_some() {
