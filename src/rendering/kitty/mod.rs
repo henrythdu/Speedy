@@ -155,8 +155,18 @@ impl KittyGraphicsRenderer {
         let bright_alpha = (PROGRESS_BRIGHT_ALPHA as f32 * alpha_mult) as u8;
         let dim_alpha = (PROGRESS_DIM_ALPHA as f32 * alpha_mult) as u8;
 
-        let fill_color = Rgba([PROGRESS_COLOR_R, PROGRESS_COLOR_G, PROGRESS_COLOR_B, bright_alpha]);
-        let bg_color = Rgba([PROGRESS_COLOR_R, PROGRESS_COLOR_G, PROGRESS_COLOR_B, dim_alpha]);
+        let fill_color = Rgba([
+            PROGRESS_COLOR_R,
+            PROGRESS_COLOR_G,
+            PROGRESS_COLOR_B,
+            bright_alpha,
+        ]);
+        let bg_color = Rgba([
+            PROGRESS_COLOR_R,
+            PROGRESS_COLOR_G,
+            PROGRESS_COLOR_B,
+            dim_alpha,
+        ]);
 
         // Create bar buffer manually with mode-aware colors
         let fill_width = (bar_width as f64 * progress.clamp(0.0, 1.0)) as u32;
@@ -235,8 +245,18 @@ impl KittyGraphicsRenderer {
         let bright_alpha = (PROGRESS_BRIGHT_ALPHA as f32 * alpha_mult) as u8;
         let dim_alpha = (PROGRESS_DIM_ALPHA as f32 * alpha_mult) as u8;
 
-        let read_color = Rgba([PROGRESS_COLOR_R, PROGRESS_COLOR_G, PROGRESS_COLOR_B, bright_alpha]);
-        let unread_color = Rgba([PROGRESS_COLOR_R, PROGRESS_COLOR_G, PROGRESS_COLOR_B, dim_alpha]);
+        let read_color = Rgba([
+            PROGRESS_COLOR_R,
+            PROGRESS_COLOR_G,
+            PROGRESS_COLOR_B,
+            bright_alpha,
+        ]);
+        let unread_color = Rgba([
+            PROGRESS_COLOR_R,
+            PROGRESS_COLOR_G,
+            PROGRESS_COLOR_B,
+            dim_alpha,
+        ]);
 
         let mut buffer: ImageBuffer<Rgba<u8>, Vec<u8>> =
             ImageBuffer::new(gutter_width, reader_height);

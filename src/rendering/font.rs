@@ -55,7 +55,10 @@ mod tests {
         let font = get_font().expect("Font should be available");
         let font_metrics = get_font_metrics(&font, 24.0);
 
-        assert!(font_metrics.height > 0.0, "Font should have positive height");
+        assert!(
+            font_metrics.height > 0.0,
+            "Font should have positive height"
+        );
     }
 
     #[test]
