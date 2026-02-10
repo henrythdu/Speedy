@@ -29,21 +29,39 @@ pub fn render_command_deck(
         .style(Style::default().fg(colors::anchor()).bg(colors::surface()));
     frame.render_widget(accent_bar, layout[0]);
 
-    // Command input area
-    let mode_indicator = match mode {
-        AppMode::Command => " COMMAND ",
-        AppMode::Reading => " READING ",
-        AppMode::Paused => " PAUSED ",
-        AppMode::Quit => " QUIT ",
+    let content_area = layout[1];
+
+    // Split content area to put label at bottom
+    let content_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(0),    // Input area (flexible)
+            Constraint::Length(1), // Label row (fixed at bottom)
+        ])
+        .split(content_area);
+
+    let input_area = content_layout[0];
+    let label_area = content_layout[1];
+
+    // Render mode label at bottom
+    let mode_label = match mode {
+        AppMode::Command => "COMMAND",
+        AppMode::Reading => "READING",
+        AppMode::Paused => "PAUSED",
+        AppMode::Quit => "QUIT",
     };
 
+    let label_widget = Paragraph::new(mode_label)
+        .style(Style::default().fg(colors::anchor()).bg(colors::surface()));
+    frame.render_widget(label_widget, label_area);
+
+    // Render input above label
     let input_text = if let Some(error) = error_message {
-        // Show error in red
-        format!("{} ERROR: {}", mode_indicator, error)
+        format!("ERROR: {}", error)
     } else if command_buffer.is_empty() {
-        format!("{} Type @file.pdf, @@, or :q", mode_indicator)
+        "Type @file.pdf, @@, or :q".to_string()
     } else {
-        format!("{} {}", mode_indicator, command_buffer)
+        command_buffer.to_string()
     };
 
     let text_color = if error_message.is_some() {
@@ -52,15 +70,11 @@ pub fn render_command_deck(
         colors::text()
     };
 
-    let input_widget = Paragraph::new(input_text)
-        .block(
-            Block::default()
-                .borders(Borders::TOP)
-                .border_style(Style::default().fg(colors::dimmed())),
-        )
-        .style(Style::default().fg(text_color).bg(colors::surface()));
+    // Input widget without borders (cleaner look)
+    let input_widget =
+        Paragraph::new(input_text).style(Style::default().fg(text_color).bg(colors::surface()));
 
-    frame.render_widget(input_widget, layout[1]);
+    frame.render_widget(input_widget, input_area);
 }
 
 /// Render WPM display in the reading zone
