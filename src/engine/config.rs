@@ -23,7 +23,7 @@ pub const DEFAULT_FONT_SIZE: f32 = 24.0;
 
 /// Rendering Constants
 pub const PROGRESS_BAR_MARGIN_PX: u32 = 10;
-pub const PROGRESS_BAR_WIDTH_PCT: f64 = 0.5;
+pub const PROGRESS_BAR_WIDTH_PCT: f64 = 0.3;
 pub const PROGRESS_BAR_HEIGHT: u32 = 2;
 
 /// Cache Constants
@@ -35,8 +35,8 @@ pub const DEFAULT_MEMORY_CAP_BYTES: u64 = 100 * 1024 * 1024; // 100MB
 pub const PROGRESS_COLOR_R: u8 = 169;
 pub const PROGRESS_COLOR_G: u8 = 177;
 pub const PROGRESS_COLOR_B: u8 = 214;
-pub const PROGRESS_BRIGHT_ALPHA: u8 = 255;  // Full opacity for read portion
-pub const PROGRESS_DIM_ALPHA: u8 = 50;      // 20% opacity for unread portion
+pub const PROGRESS_BRIGHT_ALPHA: u8 = 255; // Full opacity for read portion
+pub const PROGRESS_DIM_ALPHA: u8 = 50; // 20% opacity for unread portion
 
 /// Timing configuration per PRD Section 3.2
 #[derive(Debug, Clone, PartialEq)]
