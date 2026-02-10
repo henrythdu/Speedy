@@ -2,8 +2,8 @@
 
 # 🚀 SPEEDY: MASTER PRODUCT REQUIREMENTS DOCUMENT
 
-**Version:** 2.0  
-**Last Updated:** 2026-01-28
+**Version:** 2.1  
+**Last Updated:** 2026-02-10
 
 **Project Intent:** A terminal RSVP reader that serves as a pacing and focus tool through foveal anchoring and spatial awareness. Uses a **Dual-Engine Architecture** combining traditional TUI for commands with pixel-perfect graphics rendering for reading.
 
@@ -159,31 +159,39 @@ Designed to meet **WCAG AA accessibility** while minimizing eye strain.
 
 The "Anchor" letter (Optimal Recognition Point) remains **mathematically stationary** to eliminate eye jitter.
 
-**Three-Container Model:**
-- **Ghost Left:** Previous word, right-aligned, **15% opacity**
+**Current Implementation (Single Word):**
 - **Focus Center:** Current word, Anchor centered on ORP, **100% opacity**
+- Anchor letter highlighted in coral red (`#F7768E`)
+
+**Future Enhancement (Three-Container Model):** ⏳ NOT IMPLEMENTED
+- **Ghost Left:** Previous word, right-aligned, **15% opacity** 
 - **Ghost Right:** Next word, left-aligned, **15% opacity**
+- *Rationale: Single-word focus reduces cognitive load; ghost words may be revisited in future*
 
 **Visual Layout:**
 - Reader Zone occupies **all space above command deck** (dynamic height)
-- Reading line centered of Reader Zone height
-- **10% horizontal padding** inside canvas to buffer word cluster
+- Reading line centered at 42% of Reader Zone height
 - Command Section occupies **fixed 5 lines** at bottom
 - **1-line transparent gutter** separates Reader from Command
 - **Minimum terminal size:** 80×24 characters
 
 ### 4.4 Progress & Spatial Awareness
 
-**Macro-Gutter (Document Depth):**
+**Macro-Gutter (Document Depth):** ✅ IMPLEMENTED
 - **Visual:** 4px vertical bar on extreme right of Reader Zone
 - **Fill Logic:** Top-to-Bottom fill representing `Current Word Index / Total Words`
-- **UX Detail:** Dims during Reading Mode (20% opacity); brightens during Pause Mode (100% opacity)
+- **UX Detail:** Dims during Reading Mode (30% opacity); brightens during Pause Mode (100% opacity)
 
-**Micro-Bar (Sentence Context):**
+**Micro-Bar (Sentence Context):** ✅ IMPLEMENTED  
 - **Visual:** 2px high horizontal bar, 10px below center word
-- **Length:** 25% to 75% of center container width
+- **Length:** 50% of viewport width (centered)
 - **Fill Logic:** Left-to-Right representing progress through current sentence
-- **Style:** Completed = `Theme.fg`, Unread = `Theme.ghost`
+- **Style:** Bright fill for read portion, dim background for unread
+- **UX Detail:** Same mode-aware opacity as macro gutter (30%/100%)
+
+**WPM Display:** ✅ IMPLEMENTED
+- **Visual:** Shows current WPM in top-left corner of reading zone
+- **Update:** Real-time updates with `[` / `]` keybindings
 
 ---
 
@@ -210,19 +218,30 @@ The "Anchor" letter (Optimal Recognition Point) remains **mathematically station
 
 ```text
 speedy/
-├── assets/             # JetBrains Mono font, config.toml (Embedded via include_bytes!)
+├── assets/             # JetBrains Mono font (Embedded via include_bytes!)
 ├── src/
-│   ├── input/          # pdf.rs, epub.rs, clipboard.rs (File parsing)
-│   ├── engine/         # timing.rs, ovp.rs (Word positioning, delay logic)
-│   ├── graphics/       # NEW: Rendering backends
+│   ├── input/          # File parsing (pdf.rs, epub.rs, clipboard.rs)
+│   ├── engine/         # Core logic (timing.rs, tokenizer.rs)
+│   ├── reading/        # OVP calculation, reading state
+│   │   └── ovp.rs      # Anchor position calculation
+│   ├── rendering/      # Graphics backends
 │   │   ├── mod.rs      # RsvpRenderer trait definition
-│   │   ├── kitty.rs    # KittyGraphicsRenderer (Kitty Protocol)
-│   │   ├── cache.rs    # Word-Level LRU cache
-│   │   └── compositor.rs # CPU compositing (single buffer)
-│   ├── ui/             # theme.rs, render.rs (Ratatui TUI layer)
-│   ├── storage/        # history.rs (Recent files, reading position)
-│   ├── app.rs          # State Machine (AppMode Enum)
-│   └── main.rs         # Event Loop & REPL
+│   │   ├── renderer.rs # Trait and error types
+│   │   ├── kitty/      # Kitty Graphics Protocol
+│   │   │   ├── mod.rs  # KittyGraphicsRenderer
+│   │   │   ├── cache.rs # Word-Level LRU cache
+│   │   │   ├── positioning.rs # OVP coordinate calculation
+│   │   │   └── rasterizer.rs # Text to RGBA buffer
+│   │   ├── font.rs     # Bundled font loading
+│   │   └── viewport.rs # Terminal dimension queries
+│   ├── ui/             # TUI layer (Ratatui)
+│   │   ├── terminal.rs # TuiManager with event loop
+│   │   ├── reader/     # Reading mode UI components
+│   │   └── theme.rs    # Color definitions
+│   ├── app/            # Application state
+│   │   ├── mod.rs      # App struct
+│   │   └── app_impl.rs # Implementation
+│   └── main.rs         # Entry point
 ```
 
 ### 6.2 Distribution Strategy
@@ -235,11 +254,15 @@ speedy/
 
 **Performance Requirements (1000+ WPM):**
 - **Per-frame budget:** <10ms total
-- **Rasterization (cache hit):** <0.5ms
-- **Rasterization (cache miss):** <3ms
-- **Encoding + transmission:** <7ms
-- **Word-Level LRU Cache:** 1000 entries minimum, ~70% hit rate
-- **CPU Compositing:** Single buffer with alpha blending (no multi-layer flicker)
+- **Rasterization (cache hit):** <0.5ms (O(1) cache lookup)
+- **Rasterization (cache miss):** <3ms (font rasterization)
+- **Encoding + transmission:** <7ms (Kitty protocol)
+- **Word-Level LRU Cache:** 1000 entries minimum
+
+**Rendering Architecture:**
+- Independent renders per element (word, micro bar, macro gutter)
+- Each element has its own image ID and positioning
+- No multi-layer compositing (simplified from original single-buffer design)
 
 **Accessibility Compliance:**
 - All functional text meets WCAG AA contrast ratio (≥4.5:1)

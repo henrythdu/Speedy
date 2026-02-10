@@ -1,6 +1,6 @@
 # Speedy Architecture Document
 
-**Last Updated:** 2026-02-09 (Major cleanup: Removed dead code, consolidated modules, 138 tests passing, 0 clippy warnings)
+**Last Updated:** 2026-02-10 (Removed unused SentenceProgressBar module, updated PRD, 0 clippy warnings)
 **Purpose:** Document actual codebase structure, methods, structs, and architecture to prevent duplication and confusion.
 
 ## ⚠️ Important Notes
@@ -35,7 +35,6 @@ src/
 │   ├── renderer.rs     # RsvpRenderer trait and RendererError
 │   ├── viewport.rs     # Viewport coordinates and terminal dimensions
 │   ├── font.rs         # Font loading and metrics
-│   ├── progress_bar.rs # Sentence progress bar component
 │   ├── kitty/          # Kitty Graphics Protocol modules
 │   │   ├── mod.rs      # KittyGraphicsRenderer implementation
 │   │   ├── protocol.rs # KGP transmission and encoding
@@ -187,24 +186,6 @@ pub struct WordCache {
 - Memory cap enforcement: Evicts LRU entries when limit exceeded
 - Target hit rate: ~70% with typical English text
 
-### `SentenceProgressBar` (`src/rendering/progress_bar.rs:9`)
-2px high horizontal progress bar for sentence-level spatial awareness.
-```rust
-pub struct SentenceProgressBar {
-    width: u32,        // 50% of container
-    height: u32,       // Fixed at 2px
-    fill_pct: f64,     // 0.0 to 1.0
-    fill_color: Rgba<u8>,   // Bright for read
-    bg_color: Rgba<u8>,     // Dim for unread
-}
-```
-
-**Public API:**
-- `new(container_width) -> Self` - Create bar at 50% container width (src/rendering/progress_bar.rs:24)
-- `update_progress(pct)` - Set fill percentage (0.0 to 1.0) (src/rendering/progress_bar.rs:33)
-- `render() -> ImageBuffer` - Render with bright fill + dim background (src/rendering/progress_bar.rs:38)
-- `width() -> u32` - Get bar width (src/rendering/progress_bar.rs:56)
-
 ### `KittyGraphicsRenderer` (`src/rendering/kitty/mod.rs:20`)
 Pixel-perfect RSVP renderer using Kitty Graphics Protocol with sub-pixel OVP anchoring.
 ```rust
@@ -224,7 +205,8 @@ pub struct KittyGraphicsRenderer {
 - `get_reading_zone_height() -> Option<u32>` - Get reading zone height (total height minus fixed command deck) (src/rendering/kitty/mod.rs:57)
 - `get_vertical_center() -> Option<u32>` - Get Y position at 42% of reading zone (src/rendering/kitty/mod.rs:68)
 - `viewport() -> &mut Viewport` - Get mutable viewport access (src/rendering/kitty/mod.rs:79)
-- `render_bar(word_y, word_height, progress, image_id) -> Result<()>` - Render progress bar below word (src/rendering/kitty/mod.rs:86)
+- `render_bar(word_y, word_height, progress, mode, image_id) -> Result<()>` - Render micro progress bar below word with mode-aware opacity (30% Reading, 100% Paused) (src/rendering/kitty/mod.rs:86)
+- `render_macro_gutter(current_word, total_words, reader_area, mode, image_id) -> Result<()>` - Render 4px vertical document progress bar at right edge of reader zone (src/rendering/kitty/mod.rs:120)
 
 **Implements RsvpRenderer trait:**
 - `initialize()` - Load font, get metrics, query viewport, init word cache (src/rendering/kitty/mod.rs:108)
@@ -457,7 +439,14 @@ The project follows **pure core + thin IO adapter** pattern:
 - ✅ Sub-pixel OVP anchoring via `calculate_start_x()`
 - ✅ Vertical centering at 42% of reading zone
 - ✅ Kitty Graphics Protocol transmission
-- ✅ Sentence progress bar (2px horizontal bar)
+- ✅ Micro progress bar (2px horizontal sentence progress)
+- ✅ Macro gutter (4px vertical document progress)
+- ✅ Mode-aware opacity (30% Reading / 100% Paused) for all progress indicators
+
+**UI Features:**
+- ✅ WPM display in reading zone (top-left corner)
+- ✅ Real-time WPM adjustment with [ / ] keys
+- ✅ Pause/Resume with Space
 
 **Cleanup Completed:**
 - ✅ Removed dead code (~1,700 lines)
@@ -479,7 +468,7 @@ The project follows **pure core + thin IO adapter** pattern:
 | **3.3 Sentence Navigation** | ✅ Implemented (j=left/k=right keys) |
 | **4.1 Midnight Theme** | ✅ Implemented (theme.rs with explicit RGB colors) |
 | **4.2 Dual-Engine** | ✅ RsvpRenderer trait with KittyGraphicsRenderer |
-| **4.4 Progress Bars** | ✅ Micro-bar implemented (macro-gutter pending) |
+| **4.4 Progress Bars** | ✅ Both micro-bar and macro-gutter implemented with mode-aware opacity |
 | **7.2 Reading Mode** | ✅ Complete (TUI with OVP anchoring, auto-advance) |
 
 ---
@@ -540,9 +529,13 @@ The project follows **pure core + thin IO adapter** pattern:
 
 ---
 
-## 9. Recent Cleanup (2026-02-09)
+## 9. Recent Cleanup
 
-### Deleted Files
+### 2026-02-10
+- `src/rendering/progress_bar.rs` - Removed unused module (functionality inlined in kitty/mod.rs)
+- Updated PRD to reflect actual implementation status
+
+### 2026-02-09
 - `src/engine/error.rs` - Unused error enum
 - `src/app/event.rs` - Unused event handling
 - `src/app/render_state.rs` - Consolidated into App
