@@ -31,13 +31,13 @@ impl TuiManager {
         enable_raw_mode()?;
         execute!(io::stdout(), EnterAlternateScreen)?;
         io::stdout().flush()?;
-        
+
         // Give terminal time to switch to alternate screen
         thread::sleep(Duration::from_millis(100));
 
         let backend = CrosstermBackend::new(io::stdout());
         let mut terminal = Terminal::new(backend)?;
-        
+
         // Force initial draw to initialize terminal size
         terminal.autoresize()?;
 
@@ -153,10 +153,9 @@ impl TuiManager {
                 }
                 Ok(false) => {
                     // Only auto-advance in Reading mode, not Paused
-                    if app.mode() == AppMode::Reading
-                        && !app.advance_reading() {
-                            app.set_mode(AppMode::Paused);
-                        }
+                    if app.mode() == AppMode::Reading && !app.advance_reading() {
+                        app.set_mode(AppMode::Paused);
+                    }
                 }
                 Err(e) => {
                     // Propagate I/O errors instead of ignoring them
@@ -195,10 +194,35 @@ impl TuiManager {
         self.terminal.draw(|frame| {
             let area = frame.area();
 
+            // Apply asymmetric margins: 3 cells top/bottom, 1 cell sides
+            let vertical_margins = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(3), // Top margin
+                    Constraint::Fill(1),   // Content
+                    Constraint::Length(3), // Bottom margin
+                ])
+                .split(area);
+
+            let content_area = vertical_margins[1];
+
+            // Apply horizontal margins (1 cell left/right)
+            let horizontal_margins = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Length(1), // Left margin
+                    Constraint::Fill(1),   // Content
+                    Constraint::Length(1), // Right margin
+                ])
+                .split(content_area);
+
+            let inner_area = horizontal_margins[1];
+
+            // Split inner area into reading and command sections
             let main_layout = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Fill(1), Constraint::Length(5)])
-                .split(area);
+                .split(inner_area);
 
             let reading_area = main_layout[0];
             let command_area = main_layout[1];
@@ -219,7 +243,7 @@ impl TuiManager {
                 app.get_error(),
             );
         })?;
-        
+
         // Flush stdout to ensure ratatui output appears immediately
         io::stdout().flush()?;
 
@@ -247,7 +271,7 @@ impl TuiManager {
                     let current_index = reading_state.current_index;
                     let total_tokens = reading_state.tokens.len();
                     let app_mode = app.mode();
-                    
+
                     let progress = crate::reading::calculate_sentence_progress(
                         current_index,
                         &reading_state.tokens,
