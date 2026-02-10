@@ -5,6 +5,7 @@ use crate::ui::reader::view::{render_command_deck, render_wpm};
 use crate::ui::theme::Theme;
 
 use crossterm::{
+    cursor::{Hide, Show},
     event::{self, Event, KeyCode},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -85,6 +86,9 @@ impl TuiManager {
             // Calculate font size for 5-line height (cell height * 5)
             renderer.calculate_font_size_from_cell_height(dims.cell_size.1);
         }
+
+        // Hide terminal cursor - we use software cursor (█) instead
+        execute!(io::stdout(), Hide)?;
 
         Ok(TuiManager {
             terminal,
@@ -441,6 +445,9 @@ impl Drop for TuiManager {
     fn drop(&mut self) {
         // Cleanup Kitty graphics before exiting
         let _ = RsvpRenderer::cleanup(&mut self.kitty_renderer);
+
+        // Ensure cursor is visible on exit
+        let _ = execute!(io::stdout(), Show);
 
         let _ = disable_raw_mode();
         let _ = execute!(io::stdout(), LeaveAlternateScreen);
