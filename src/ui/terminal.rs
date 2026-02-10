@@ -16,6 +16,32 @@ use ratatui::{
     widgets::Block,
     Terminal,
 };
+
+/// Calculate responsive margins based on terminal size
+/// Returns (top_margin, bottom_margin, left_margin, right_margin)
+fn calculate_margins(area: Rect) -> (u16, u16, u16, u16) {
+    const MIN_HEIGHT_FOR_FULL_MARGINS: u16 = 15;
+    const TARGET_TOP_BOTTOM: u16 = 3;
+    const TARGET_LEFT_RIGHT: u16 = 1;
+
+    let height = area.height;
+
+    if height >= MIN_HEIGHT_FOR_FULL_MARGINS {
+        // Full margins for large terminals
+        (
+            TARGET_TOP_BOTTOM,
+            TARGET_TOP_BOTTOM,
+            TARGET_LEFT_RIGHT,
+            TARGET_LEFT_RIGHT,
+        )
+    } else if height >= 10 {
+        // Reduced margins for medium terminals
+        (1, 1, TARGET_LEFT_RIGHT, TARGET_LEFT_RIGHT)
+    } else {
+        // Minimal margins for small terminals
+        (0, 0, 0, 0)
+    }
+}
 use std::io::{self, Stdout, Write};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -194,25 +220,28 @@ impl TuiManager {
         self.terminal.draw(|frame| {
             let area = frame.area();
 
-            // Apply asymmetric margins: 3 cells top/bottom, 1 cell sides
+            // Calculate responsive margins based on terminal size
+            let (top, bottom, left, right) = calculate_margins(area);
+
+            // Apply vertical margins
             let vertical_margins = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Length(3), // Top margin
-                    Constraint::Fill(1),   // Content
-                    Constraint::Length(3), // Bottom margin
+                    Constraint::Length(top),
+                    Constraint::Fill(1),
+                    Constraint::Length(bottom),
                 ])
                 .split(area);
 
             let content_area = vertical_margins[1];
 
-            // Apply horizontal margins (1 cell left/right)
+            // Apply horizontal margins
             let horizontal_margins = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([
-                    Constraint::Length(1), // Left margin
-                    Constraint::Fill(1),   // Content
-                    Constraint::Length(1), // Right margin
+                    Constraint::Length(left),
+                    Constraint::Fill(1),
+                    Constraint::Length(right),
                 ])
                 .split(content_area);
 
