@@ -229,7 +229,8 @@ self.last_cursor_toggle = Instant::now();
 
 ## 5. Acceptance Criteria
 
-- [ ] 3-cell top/bottom margins visible around UI
+### Core Features
+- [ ] 3-cell top/bottom margins visible around UI (with responsive clamping)
 - [ ] 1-cell left/right margins visible
 - [ ] Accent bar extends full height of command section (5 cells)
 - [ ] "COMMAND" label positioned at bottom of command section
@@ -237,8 +238,18 @@ self.last_cursor_toggle = Instant::now();
 - [ ] Cursor stops blinking while typing (immediate feedback)
 - [ ] Cursor resumes blinking 500ms after last keystroke
 - [ ] All existing functionality preserved (WPM display, progress bars, etc.)
+
+### Consensus-Driven Safeguards
+- [ ] Terminal size guards: Margins clamp to minimum values when terminal height < 15 rows
+- [ ] Wall-clock timing for cursor blink (use `Instant::now()`, not tick counting)
+- [ ] Event loop poll timeout ≤500ms to support cursor blink timing
+- [ ] Cross-terminal testing: Verify in tmux, Windows Terminal, Alacritty, Kitty
 - [ ] No clippy warnings
 - [ ] Clean build and test
+
+### Future Considerations (Post-MVP)
+- [ ] Config option for cursor blink: `cursor_blink = on|off|steady`
+- [ ] Alternative label placement (top-aligned) if bottom proves problematic
 
 ---
 
@@ -263,6 +274,30 @@ self.last_cursor_toggle = Instant::now();
 - More visible than thin cursor
 - Matches modern terminal emulators
 - Clear indication of insertion point
+
+### Consensus Review Findings (Multi-Model)
+
+**Models Consulted:**
+- UI/UX Expert (FOR): 9/10 confidence - praises visual hierarchy improvements
+- Technical Architect (NEUTRAL): 9/10 confidence - validates ratatui implementation
+- Skeptical Reviewer (AGAINST): 8/10 confidence - raises terminal compatibility concerns
+
+**Key Agreements:**
+- All changes technically feasible with ratatui/crossterm
+- Implementation effort: ~2 hours total
+- Full-height accent bar has highest ROI
+- Cursor blink requires careful event loop integration
+
+**Critical Safeguards Added:**
+1. Terminal size guards (prevent margin collapse on small terminals)
+2. Wall-clock timing (prevent cursor drift)
+3. Cross-terminal testing requirement
+4. Future config option for cursor blink toggle
+
+**Resolution on Disagreements:**
+- Asymmetric margins: Proceed with responsive clamping
+- Bottom-aligned label: Proceed but consider top-aligned alternative if issues arise
+- Blinking cursor: Make toggleable in future, default to blinking for now
 
 ---
 
