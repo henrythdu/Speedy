@@ -50,6 +50,9 @@ pub struct TuiManager {
     terminal: Terminal<CrosstermBackend<Stdout>>,
     command_buffer: String,
     kitty_renderer: KittyGraphicsRenderer,
+    cursor_visible: bool,        // Blink state
+    last_cursor_toggle: Instant, // Last toggle time
+    last_keypress: Instant,      // For pause-on-type
 }
 
 impl TuiManager {
@@ -87,12 +90,19 @@ impl TuiManager {
             terminal,
             command_buffer: String::new(),
             kitty_renderer: renderer,
+            cursor_visible: true, // Start visible
+            last_cursor_toggle: Instant::now(),
+            last_keypress: Instant::now(),
         })
     }
 
     pub fn run_event_loop(&mut self, app: &mut App) -> io::Result<AppMode> {
         let mut last_tick = Instant::now();
         let render_tick = Duration::from_millis(1000 / 60);
+
+        // Cursor blink timing constants
+        const CURSOR_BLINK_INTERVAL: Duration = Duration::from_millis(500);
+        const CURSOR_PAUSE_AFTER_TYPING: Duration = Duration::from_millis(500);
 
         // Force initial render before entering loop
         self.terminal.clear()?;
@@ -107,6 +117,27 @@ impl TuiManager {
             // Command, Reading, and Paused all stay in TUI
             // Command mode shows the command deck for input
             // Reading and Paused modes show the RSVP display
+
+            // Cursor blink management (only in Command mode)
+            let mut needs_redraw = false;
+            if app.mode() == AppMode::Command {
+                let time_since_keypress = self.last_keypress.elapsed();
+
+                if time_since_keypress >= CURSOR_PAUSE_AFTER_TYPING {
+                    // Time to resume blinking
+                    if self.last_cursor_toggle.elapsed() >= CURSOR_BLINK_INTERVAL {
+                        self.cursor_visible = !self.cursor_visible;
+                        self.last_cursor_toggle = Instant::now();
+                        needs_redraw = true;
+                    }
+                } else {
+                    // Recently typed - keep cursor visible
+                    if !self.cursor_visible {
+                        self.cursor_visible = true;
+                        needs_redraw = true;
+                    }
+                }
+            }
 
             let timeout_ms = app.get_current_token_duration();
             // Ensure minimum timeout to prevent busy-waiting and allow render tick to fire
@@ -129,6 +160,8 @@ impl TuiManager {
                                     if app.mode() == AppMode::Command {
                                         // In command mode, collect input
                                         self.command_buffer.push(c);
+                                        self.last_keypress = Instant::now(); // Reset blink pause
+                                        self.cursor_visible = true; // Show cursor immediately
                                     } else {
                                         // In reading/paused mode, use app key handling
                                         app.handle_keypress(c);
@@ -189,7 +222,7 @@ impl TuiManager {
                 }
             }
 
-            if last_tick.elapsed() >= render_tick {
+            if last_tick.elapsed() >= render_tick || needs_redraw {
                 self.render_frame(app)?;
                 last_tick = Instant::now();
             }
