@@ -17,7 +17,7 @@ ab_glyph = "0.2.32"
 imageproc = "0.25"
 base64 = "0.22"
 lazy_static = "1.5"
-lru = "0.12"
+lru = "0.16"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
