@@ -66,18 +66,6 @@ impl PerDirectoryCache {
     fn is_expired(&self, entry: &CacheEntry) -> bool {
         entry.timestamp.elapsed() > self.ttl
     }
-
-    /// Get the number of cached directories
-    #[cfg(test)]
-    pub fn len(&self) -> usize {
-        self.entries.len()
-    }
-
-    /// Check if cache is empty
-    #[cfg(test)]
-    pub fn is_empty(&self) -> bool {
-        self.entries.is_empty()
-    }
 }
 
 impl Default for PerDirectoryCache {
