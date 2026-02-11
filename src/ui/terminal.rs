@@ -7,6 +7,7 @@ use crate::ui::autocomplete::render::render_autocomplete_popup;
 use crate::ui::autocomplete::state::AutocompleteState;
 use crate::ui::reader::view::{render_command_deck, render_wpm};
 use crate::ui::theme::Theme;
+use anyhow::Result;
 
 use crossterm::{
     cursor::{Hide, Show},
@@ -61,7 +62,7 @@ pub struct TuiManager {
     cursor_visible: bool,        // Blink state
     last_cursor_toggle: Instant, // Last toggle time
     last_keypress: Instant,      // For pause-on-type
-    
+
     // Autocomplete state
     autocomplete_state: AutocompleteState,
     discovery_receiver: Option<Receiver<PathBuf>>,
@@ -69,7 +70,7 @@ pub struct TuiManager {
 }
 
 impl TuiManager {
-    pub fn new() -> Result<Self, io::Error> {
+    pub fn new() -> Result<Self> {
         enable_raw_mode()?;
         execute!(io::stdout(), EnterAlternateScreen)?;
         io::stdout().flush()?;
@@ -87,8 +88,7 @@ impl TuiManager {
         let mut renderer = KittyGraphicsRenderer::new();
         <KittyGraphicsRenderer as crate::rendering::renderer::RsvpRenderer>::initialize(
             &mut renderer,
-        )
-        .expect("Failed to initialize KittyGraphicsRenderer");
+        )?;
 
         // Query terminal dimensions and calculate font size
         // Note: This uses CSI escape sequences that may not be supported by all terminals
@@ -115,7 +115,7 @@ impl TuiManager {
         })
     }
 
-    pub fn run_event_loop(&mut self, app: &mut App) -> io::Result<AppMode> {
+    pub fn run_event_loop(&mut self, app: &mut App) -> Result<AppMode> {
         let mut last_tick = Instant::now();
         let render_tick = Duration::from_millis(1000 / 60);
 
@@ -178,18 +178,21 @@ impl TuiManager {
                                 app.set_mode(AppMode::Quit);
                                 return Ok(AppMode::Quit);
                             }
-                            
+
                             // Handle Ctrl+R to refresh autocomplete cache
                             if key.code == KeyCode::Char('r')
                                 && key.modifiers.contains(event::KeyModifiers::CONTROL)
-                                && self.autocomplete_state.active
+                                && self.autocomplete_state.is_active()
                             {
                                 // Invalidate cache for current directory
-                                let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-                                self.discovery_cache.lock().unwrap().invalidate(&current_dir);
+                                // Handle lock poisoning gracefully - skip invalidation but continue
+                                let current_dir =
+                                    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                                if let Ok(mut cache) = self.discovery_cache.lock() {
+                                    cache.invalidate(&current_dir);
+                                }
                                 // Restart discovery
-                                self.autocomplete_state.files.clear();
-                                self.autocomplete_state.filtered_indices.clear();
+                                self.autocomplete_state.clear_files();
                                 self.spawn_file_discovery();
                             }
 
@@ -197,23 +200,34 @@ impl TuiManager {
                                 KeyCode::Char(c) => {
                                     if app.mode() == AppMode::Command {
                                         // Check if @ should trigger autocomplete
-                                        let should_activate_autocomplete = c == '@' && AutocompleteState::should_activate(&self.command_buffer, self.command_buffer.len());
+                                        let should_activate_autocomplete = c == '@'
+                                            && AutocompleteState::should_activate(
+                                                &self.command_buffer,
+                                                self.command_buffer.len(),
+                                            );
                                         if should_activate_autocomplete {
                                             // Activate autocomplete
                                             let cursor_pos = self.command_buffer.len();
-                                            let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-                                            self.autocomplete_state.activate(&self.command_buffer, cursor_pos, &current_dir);
+                                            let current_dir = std::env::current_dir()
+                                                .unwrap_or_else(|_| PathBuf::from("."));
+                                            self.autocomplete_state.activate(
+                                                &self.command_buffer,
+                                                cursor_pos,
+                                                &current_dir,
+                                            );
                                             self.spawn_file_discovery();
                                         }
-                                        
+
                                         // In command mode, collect input
                                         self.command_buffer.push(c);
                                         self.last_keypress = Instant::now(); // Reset blink pause
                                         self.cursor_visible = true; // Show cursor immediately
-                                        
+
                                         // Handle input for autocomplete if active
                                         // Skip handle_input for @ when we just activated - query should be empty after @
-                                        if self.autocomplete_state.active && !should_activate_autocomplete {
+                                        if self.autocomplete_state.is_active()
+                                            && !should_activate_autocomplete
+                                        {
                                             self.autocomplete_state.handle_input(c);
                                         }
                                     } else {
@@ -223,9 +237,10 @@ impl TuiManager {
                                 }
                                 KeyCode::Enter => {
                                     if app.mode() == AppMode::Command {
-                                        if self.autocomplete_state.active {
+                                        if self.autocomplete_state.is_active() {
                                             // Apply selection and close autocomplete
-                                            self.autocomplete_state.apply_selection(&mut self.command_buffer);
+                                            self.autocomplete_state
+                                                .apply_selection(&mut self.command_buffer);
                                             self.autocomplete_state.deactivate();
                                         } else if !self.command_buffer.is_empty() {
                                             // Execute the command
@@ -245,9 +260,9 @@ impl TuiManager {
                                 }
                                 KeyCode::Backspace => {
                                     if app.mode() == AppMode::Command {
-                                        if self.autocomplete_state.active {
+                                        if self.autocomplete_state.is_active() {
                                             self.autocomplete_state.backspace();
-                                            if self.autocomplete_state.query.is_empty() {
+                                            if self.autocomplete_state.query().is_empty() {
                                                 // User deleted the @, close autocomplete
                                                 self.autocomplete_state.deactivate();
                                             }
@@ -256,25 +271,32 @@ impl TuiManager {
                                     }
                                 }
                                 KeyCode::Up => {
-                                    if app.mode() == AppMode::Command && self.autocomplete_state.active {
+                                    if app.mode() == AppMode::Command
+                                        && self.autocomplete_state.is_active()
+                                    {
                                         self.autocomplete_state.select_previous();
                                     }
                                 }
                                 KeyCode::Down => {
-                                    if app.mode() == AppMode::Command && self.autocomplete_state.active {
+                                    if app.mode() == AppMode::Command
+                                        && self.autocomplete_state.is_active()
+                                    {
                                         self.autocomplete_state.select_next();
                                     }
                                 }
                                 KeyCode::Tab => {
-                                    if app.mode() == AppMode::Command && self.autocomplete_state.active {
+                                    if app.mode() == AppMode::Command
+                                        && self.autocomplete_state.is_active()
+                                    {
                                         // Apply selection with trailing space
-                                        self.autocomplete_state.apply_selection(&mut self.command_buffer);
+                                        self.autocomplete_state
+                                            .apply_selection(&mut self.command_buffer);
                                         self.command_buffer.push(' ');
                                         // Keep autocomplete open for chaining
                                     }
                                 }
                                 KeyCode::Esc => {
-                                    if self.autocomplete_state.active {
+                                    if self.autocomplete_state.is_active() {
                                         // Close autocomplete but keep typed text
                                         self.autocomplete_state.deactivate();
                                     } else if app.mode() == AppMode::Reading
@@ -302,7 +324,7 @@ impl TuiManager {
                 }
                 Err(e) => {
                     // Propagate I/O errors instead of ignoring them
-                    return Err(e);
+                    return Err(e.into());
                 }
             }
 
@@ -368,7 +390,7 @@ impl TuiManager {
         }
     }
 
-    pub fn render_frame(&mut self, app: &mut App) -> io::Result<()> {
+    pub fn render_frame(&mut self, app: &mut App) -> Result<()> {
         // Calculate reader area once at the beginning (for all rendering steps)
         let reader_area = self.calculate_reader_area();
 
@@ -456,7 +478,17 @@ impl TuiManager {
         if let Some(word) = app.get_current_word() {
             let trimmed = word.trim();
             if !trimmed.is_empty() && trimmed != "\n" && trimmed != "\r\n" {
-                let anchor_pos = crate::reading::calculate_anchor_position(&word);
+                // Use precomputed char_count from token for O(1) anchor calculation
+                // instead of O(n) chars().count() on the word string
+                let anchor_pos = if let Some(reading_state) = app.reading_state() {
+                    if let Some(token) = reading_state.current_token() {
+                        crate::reading::calculate_anchor_position_from_len(token.char_count())
+                    } else {
+                        crate::reading::calculate_anchor_position(&word)
+                    }
+                } else {
+                    crate::reading::calculate_anchor_position(&word)
+                };
 
                 // Render word
                 if let Err(e) =
@@ -466,15 +498,15 @@ impl TuiManager {
                 }
 
                 // Render progress bar and macro gutter
-                if let Some(reading_state) = &app.reading_state {
+                if let Some(reading_state) = app.reading_state() {
                     // Extract values we need to avoid borrow issues
-                    let current_index = reading_state.current_index;
-                    let total_tokens = reading_state.tokens.len();
+                    let current_index = reading_state.current_index();
+                    let total_tokens = reading_state.tokens().len();
                     let app_mode = app.mode();
 
                     let progress = crate::reading::calculate_sentence_progress(
                         current_index,
-                        &reading_state.tokens,
+                        reading_state.tokens(),
                     );
                     let word_y = self.kitty_renderer.get_vertical_center().unwrap_or(0);
                     if let Ok(word_height) =
@@ -520,19 +552,25 @@ impl TuiManager {
     fn spawn_file_discovery(&mut self) {
         // Get current directory
         let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        
+
         // Spawn discovery thread
         let cache = Arc::clone(&self.discovery_cache);
-        let handle = spawn_discovery_thread(current_dir, cache);
-        
-        self.discovery_receiver = Some(handle.receiver);
+        match spawn_discovery_thread(current_dir, cache) {
+            Ok(handle) => {
+                self.discovery_receiver = Some(handle.receiver);
+            }
+            Err(e) => {
+                tracing::warn!("Failed to spawn file discovery: {}", e);
+                // Discovery failed, but UI can continue without autocomplete
+            }
+        }
     }
 
     /// Handle terminal resize events
     ///
     /// Updates viewport dimensions and redraws the current word at the new center position.
     /// Auto-pauses reading during resize to prevent visual artifacts (per Design Doc Section 8.1).
-    fn handle_resize(&mut self, cols: u16, rows: u16, app: &mut App) -> io::Result<()> {
+    fn handle_resize(&mut self, cols: u16, rows: u16, app: &mut App) -> Result<()> {
         // Auto-pause if currently reading to prevent visual artifacts
         let was_reading = app.mode() == AppMode::Reading;
         if was_reading {
@@ -549,7 +587,9 @@ impl TuiManager {
 
         // Update viewport dimensions using the resize event data
         // This is more reliable than querying CSI 14t which can return stale data
-        self.kitty_renderer.viewport().update_from_resize(cols, rows);
+        self.kitty_renderer
+            .viewport()
+            .update_from_resize(cols, rows);
 
         // Clear previous graphics and redraw at new position
         if let Err(e) = RsvpRenderer::clear(&mut self.kitty_renderer) {

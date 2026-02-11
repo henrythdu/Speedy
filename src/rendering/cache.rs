@@ -108,8 +108,9 @@ impl WordCache {
     /// let cache = WordCache::new(1000);
     /// ```
     pub fn new(capacity: usize) -> Self {
-        let capacity =
-            NonZeroUsize::new(capacity).unwrap_or_else(|| NonZeroUsize::new(100).unwrap());
+        // SAFETY: 100 is guaranteed non-zero, so this unwrap is safe
+        let default_capacity = NonZeroUsize::new(100).expect("100 is guaranteed non-zero");
+        let capacity = NonZeroUsize::new(capacity).unwrap_or(default_capacity);
 
         Self {
             cache: LruCache::new(capacity),

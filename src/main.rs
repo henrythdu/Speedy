@@ -12,16 +12,24 @@ use crate::rendering::font::{get_font, get_font_metrics};
 use crate::ui::TuiManager;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    eprintln!("✓ Kitty Graphics Protocol detected - pixel-perfect mode enabled");
+    // Initialize tracing subscriber with env-based filtering
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
+        .init();
+
+    tracing::info!("✓ Kitty Graphics Protocol detected - pixel-perfect mode enabled");
 
     // Initialize font
     match get_font() {
         Some(font) => {
             let metrics = get_font_metrics(&font, speedy::engine::config::DEFAULT_FONT_SIZE);
-            eprintln!("Font loaded: height={:.1}", metrics.height);
+            tracing::debug!("Font loaded: height={:.1}", metrics.height);
         }
         None => {
-            eprintln!("Warning: Failed to load embedded font");
+            tracing::error!("Failed to load embedded font");
             std::process::exit(1);
         }
     }

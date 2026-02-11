@@ -1,5 +1,5 @@
 use super::{LoadError, LoadedDocument};
-use crate::engine::tokenize_text;
+use crate::reading::tokenize_text;
 use std::path::Path;
 
 /// Load text from EPUB file using epub crate.
@@ -7,7 +7,7 @@ use std::path::Path;
 /// Purpose: Provides EPUB file content as input source per PRD Section 2.2.
 /// Big Picture: Enables @filename.epub command in REPL to load EPUB content.
 /// PRD Reference: Section 2.2 (EPUB support), Section 7.1 (@filename command)
-/// Connections: Depends on engine::tokenize_text() for tokenization.
+/// Connections: Depends on reading::tokenize_text() for tokenization.
 pub fn load(path: &str) -> Result<LoadedDocument, LoadError> {
     let path = Path::new(path);
 
@@ -83,7 +83,7 @@ fn extract_plain_text(html: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::Token;
+    use crate::reading::Token;
 
     /// Test that load returns FileNotFound for non-existent files.
     #[test]
@@ -104,8 +104,11 @@ mod tests {
         assert!(doc.tokens.len() >= 4);
 
         // Find tokens that should be sentence starts
-        let sentence_starts: Vec<&Token> =
-            doc.tokens.iter().filter(|t| t.is_sentence_start).collect();
+        let sentence_starts: Vec<&Token> = doc
+            .tokens
+            .iter()
+            .filter(|t| t.is_sentence_start())
+            .collect();
 
         // Should have multiple sentence starts (first token + after each terminator)
         assert!(
@@ -115,7 +118,7 @@ mod tests {
         );
 
         // First token should always be sentence start
-        assert!(doc.tokens[0].is_sentence_start);
+        assert!(doc.tokens[0].is_sentence_start());
     }
 
     /// Test EPUB-specific error type.

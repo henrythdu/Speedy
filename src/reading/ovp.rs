@@ -16,6 +16,14 @@
 /// at a consistent vertical coordinate in the TUI.
 pub fn calculate_anchor_position(word: &str) -> usize {
     let len = word.chars().count();
+    calculate_anchor_position_from_len(len)
+}
+
+/// Calculate anchor position from precomputed word length.
+///
+/// Use this in hot paths where the character count is already known
+/// (e.g., from Token::char_count()) to avoid O(n) chars().count().
+pub fn calculate_anchor_position_from_len(len: usize) -> usize {
     match len {
         0..=1 => 0,
         2..=5 => 1,

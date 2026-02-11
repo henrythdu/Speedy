@@ -11,31 +11,31 @@ use super::is_supported_file;
 #[derive(Debug)]
 pub struct AutocompleteState {
     /// Whether the popup is currently visible
-    pub active: bool,
+    active: bool,
 
     /// Text after @ used for filtering (e.g., "file" from "@file")
-    pub query: String,
+    query: String,
 
     /// Position of @ in command_buffer (for replacement)
-    pub anchor_idx: usize,
+    anchor_idx: usize,
 
     /// All discovered files (incrementally populated)
-    pub files: Vec<PathBuf>,
+    files: Vec<PathBuf>,
 
     /// Indices into files that match current query
-    pub filtered_indices: Vec<usize>,
+    filtered_indices: Vec<usize>,
 
     /// Currently selected item index (into filtered_indices)
-    pub selected_idx: usize,
+    selected_idx: usize,
 
     /// Scroll offset for viewing items beyond viewport
-    pub scroll_offset: usize,
+    scroll_offset: usize,
 
     /// Whether discovery is currently running
-    pub is_scanning: bool,
+    is_scanning: bool,
 
     /// Root directory being scanned
-    pub scan_root: PathBuf,
+    scan_root: PathBuf,
 }
 
 impl AutocompleteState {
@@ -52,6 +52,54 @@ impl AutocompleteState {
             is_scanning: false,
             scan_root: PathBuf::new(),
         }
+    }
+
+    /// Check if the popup is currently visible
+    pub fn is_active(&self) -> bool {
+        self.active
+    }
+
+    /// Get the current filter query
+    pub fn query(&self) -> &str {
+        &self.query
+    }
+
+    /// Get the anchor index for replacement
+    #[allow(dead_code)]
+    pub fn anchor_idx(&self) -> usize {
+        self.anchor_idx
+    }
+
+    /// Get the list of discovered files
+    pub fn files(&self) -> &Vec<PathBuf> {
+        &self.files
+    }
+
+    /// Get the filtered indices
+    #[allow(dead_code)]
+    pub fn filtered_indices(&self) -> &Vec<usize> {
+        &self.filtered_indices
+    }
+
+    /// Get the currently selected index
+    pub fn selected_idx(&self) -> usize {
+        self.selected_idx
+    }
+
+    /// Get the scroll offset
+    pub fn scroll_offset(&self) -> usize {
+        self.scroll_offset
+    }
+
+    /// Check if discovery is currently running
+    pub fn is_scanning(&self) -> bool {
+        self.is_scanning
+    }
+
+    /// Get the root directory being scanned
+    #[allow(dead_code)]
+    pub fn scan_root(&self) -> &PathBuf {
+        &self.scan_root
     }
 
     /// Activate autocomplete when @ is typed
@@ -73,7 +121,7 @@ impl AutocompleteState {
         if !is_supported_file(&file) {
             return;
         }
-        
+
         // Check if file matches current query
         if self.matches_query(&file) {
             self.filtered_indices.push(self.files.len());
@@ -146,6 +194,12 @@ impl AutocompleteState {
     /// Mark discovery as complete
     pub fn mark_scanning_complete(&mut self) {
         self.is_scanning = false;
+    }
+
+    /// Clear files for cache refresh
+    pub fn clear_files(&mut self) {
+        self.files.clear();
+        self.filtered_indices.clear();
     }
 
     /// Check if a character should trigger autocomplete activation

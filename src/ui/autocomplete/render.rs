@@ -27,7 +27,7 @@ pub fn render_autocomplete_popup(
     command_area: Rect,
     terminal_height: u16,
 ) {
-    if !state.active {
+    if !state.is_active() {
         return;
     }
 
@@ -37,7 +37,7 @@ pub fn render_autocomplete_popup(
     frame.render_widget(Clear, popup_area);
 
     // Render the popup content
-    if state.is_scanning && state.files.is_empty() {
+    if state.is_scanning() && state.files().is_empty() {
         render_scanning_indicator(frame, popup_area);
     } else {
         render_file_list(frame, state, popup_area);
@@ -54,7 +54,7 @@ fn calculate_popup_area(
     const MAX_HEIGHT: u16 = 12;
 
     let match_count = state.match_count();
-    let popup_height = if (state.is_scanning && state.files.is_empty()) || match_count == 0 {
+    let popup_height = if (state.is_scanning() && state.files().is_empty()) || match_count == 0 {
         // MIN_HEIGHT: borders (2) + content (1) + help text (1) = 4, but let's use 5 for comfort
         5
     } else {
@@ -111,7 +111,7 @@ fn render_file_list(frame: &mut Frame, state: &AutocompleteState, area: Rect) {
     let match_count = state.match_count();
 
     // Build title
-    let title = if state.is_scanning {
+    let title = if state.is_scanning() {
         format!("FILES ({} matches, scanning...)", match_count)
     } else {
         format!("FILES ({} matches)", match_count)
@@ -129,13 +129,13 @@ fn render_file_list(frame: &mut Frame, state: &AutocompleteState, area: Rect) {
             .direction(Direction::Vertical)
             .constraints([Constraint::Min(1), Constraint::Length(1)])
             .split(area);
-        
+
         let paragraph = Paragraph::new("No files found")
             .block(block)
             .alignment(Alignment::Center)
             .style(Style::default().fg(colors::text()).bg(colors::surface()));
         frame.render_widget(paragraph, chunks[0]);
-        
+
         // Render help text in dedicated area
         render_help_text(frame, chunks[1]);
         return;
@@ -155,14 +155,14 @@ fn render_file_list(frame: &mut Frame, state: &AutocompleteState, area: Rect) {
     let footer_area = chunks[1];
 
     // Build list items
-    let items: Vec<ListItem> = (state.scroll_offset..)
+    let items: Vec<ListItem> = (state.scroll_offset()..)
         .take(MAX_VISIBLE_ITEMS)
         .filter_map(|filtered_idx| state.get_filtered_file(filtered_idx))
         .map(|file| render_file_item(file))
         .collect();
 
     // Calculate which visible item is selected (0-based index within visible items)
-    let visible_selected_idx = state.selected_idx.saturating_sub(state.scroll_offset);
+    let visible_selected_idx = state.selected_idx().saturating_sub(state.scroll_offset());
     let mut list_state = ListState::default();
     list_state.select(Some(visible_selected_idx));
 

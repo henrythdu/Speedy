@@ -1,10 +1,10 @@
 use crate::app::mode::AppMode;
-use crate::engine::{tokenize_text, ReadingState};
+use crate::reading::{tokenize_text, ReadingState};
 
 pub struct App {
-    pub mode: AppMode,
-    pub reading_state: Option<ReadingState>,
-    pub error_message: Option<String>,
+    mode: AppMode,
+    reading_state: Option<ReadingState>,
+    error_message: Option<String>,
 }
 
 impl Default for App {
@@ -45,9 +45,9 @@ impl App {
     pub fn advance_reading(&mut self) -> bool {
         match self.reading_state.as_mut() {
             Some(state) => {
-                let before = state.current_index;
+                let before = state.current_index();
                 state.advance();
-                state.current_index > before
+                state.current_index() > before
             }
             None => false,
         }
@@ -71,10 +71,10 @@ impl App {
     pub fn get_current_word(&self) -> Option<String> {
         self.reading_state
             .as_ref()
-            .and_then(|s| s.tokens.get(s.current_index))
+            .and_then(|s| s.current_token())
             .map(|t| {
-                let mut word = t.text.clone();
-                for p in &t.punctuation {
+                let mut word = t.text().to_string();
+                for p in t.punctuation() {
                     word.push(*p);
                 }
                 word
@@ -89,11 +89,16 @@ impl App {
         self.mode = mode;
     }
 
+    /// Get a reference to the reading state
+    pub fn reading_state(&self) -> Option<&ReadingState> {
+        self.reading_state.as_ref()
+    }
+
     /// Get current WPM from reading state
     ///
     /// Returns the current words-per-minute setting, or 0 if no reading state.
     pub fn get_wpm(&self) -> u32 {
-        self.reading_state.as_ref().map(|s| s.wpm).unwrap_or(0)
+        self.reading_state.as_ref().map(|s| s.wpm()).unwrap_or(0)
     }
 
     /// Get the duration for the current token in milliseconds
@@ -115,11 +120,10 @@ impl App {
             return false;
         }
 
-        if self.reading_state.is_none() {
-            return false;
-        }
-
-        let reading_state = self.reading_state.as_mut().unwrap();
+        let reading_state = match self.reading_state.as_mut() {
+            Some(state) => state,
+            None => return false,
+        };
 
         match key {
             // Navigation: j is LEFT on keyboard → go BACKWARD to previous sentence
@@ -179,15 +183,15 @@ mod tests {
         let mut app = App::new();
         app.start_reading("First sentence. Second sentence.", 300);
 
-        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
+        assert_eq!(app.reading_state().unwrap().current_index(), 0);
 
         let result = app.handle_keypress('k');
         assert!(result);
-        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 2);
+        assert_eq!(app.reading_state().unwrap().current_index(), 2);
 
         let result = app.handle_keypress('j');
         assert!(result);
-        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
+        assert_eq!(app.reading_state().unwrap().current_index(), 0);
     }
 
     #[test]
@@ -195,11 +199,11 @@ mod tests {
         let mut app = App::new();
         app.start_reading("First sentence. Second sentence.", 300);
 
-        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
+        assert_eq!(app.reading_state().unwrap().current_index(), 0);
 
         let result = app.handle_keypress('k');
         assert!(result);
-        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 2);
+        assert_eq!(app.reading_state().unwrap().current_index(), 2);
     }
 
     #[test]
@@ -207,11 +211,11 @@ mod tests {
         let mut app = App::new();
         app.start_reading("test", 300);
 
-        let initial_wpm = app.reading_state.as_ref().unwrap().wpm;
+        let initial_wpm = app.reading_state().unwrap().wpm();
 
         let result = app.handle_keypress(']');
         assert!(result);
-        assert_eq!(app.reading_state.as_ref().unwrap().wpm, initial_wpm + 50);
+        assert_eq!(app.reading_state().unwrap().wpm(), initial_wpm + 50);
     }
 
     #[test]
@@ -219,11 +223,11 @@ mod tests {
         let mut app = App::new();
         app.start_reading("test", 300);
 
-        let initial_wpm = app.reading_state.as_ref().unwrap().wpm;
+        let initial_wpm = app.reading_state().unwrap().wpm();
 
         let result = app.handle_keypress('[');
         assert!(result);
-        assert_eq!(app.reading_state.as_ref().unwrap().wpm, initial_wpm - 50);
+        assert_eq!(app.reading_state().unwrap().wpm(), initial_wpm - 50);
     }
 
     #[test]
@@ -273,22 +277,22 @@ mod tests {
     fn test_advance_reading_moves_to_next_word() {
         let mut app = App::new();
         app.start_reading("hello world test", 300);
-        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
+        assert_eq!(app.reading_state().unwrap().current_index(), 0);
 
         let advanced = app.advance_reading();
         assert!(advanced);
-        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 1);
+        assert_eq!(app.reading_state().unwrap().current_index(), 1);
     }
 
     #[test]
     fn test_advance_reading_returns_false_at_end() {
         let mut app = App::new();
         app.start_reading("hello", 300);
-        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
+        assert_eq!(app.reading_state().unwrap().current_index(), 0);
 
         let advanced = app.advance_reading();
         assert!(!advanced);
-        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
+        assert_eq!(app.reading_state().unwrap().current_index(), 0);
     }
 
     #[test]
@@ -328,15 +332,15 @@ mod tests {
     fn test_advance_reading_stays_false_at_end() {
         let mut app = App::new();
         app.start_reading("hello", 300);
-        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
+        assert_eq!(app.reading_state().unwrap().current_index(), 0);
         assert_eq!(app.mode, AppMode::Reading);
 
         let advanced = app.advance_reading();
         assert!(!advanced);
-        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
+        assert_eq!(app.reading_state().unwrap().current_index(), 0);
 
         let advanced = app.advance_reading();
         assert!(!advanced);
-        assert_eq!(app.reading_state.as_ref().unwrap().current_index, 0);
+        assert_eq!(app.reading_state().unwrap().current_index(), 0);
     }
 }

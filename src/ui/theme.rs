@@ -7,6 +7,8 @@ pub struct Theme {
     pub surface: Color,
     pub text: Color,
     pub anchor: Color,
+    /// Currently unused but reserved for future UI elements (e.g., dimmed text)
+    #[allow(dead_code)]
     pub dimmed: Color,
 }
 
@@ -45,6 +47,8 @@ pub mod colors {
     pub fn anchor() -> Color {
         Theme::current().anchor
     }
+    /// Currently unused but reserved for future UI elements
+    #[allow(dead_code)]
     pub fn dimmed() -> Color {
         Theme::current().dimmed
     }

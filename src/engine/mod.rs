@@ -1,6 +1,5 @@
 pub mod config;
 
-// Re-export reading module items to maintain backwards compatibility
-pub use crate::reading::{
-    tokenize_text, wpm_to_milliseconds, ReadingState, Token,
-};
+// Note: Previously re-exported reading module items here, but that created
+// circular dependencies and module confusion. Import directly from reading::
+// instead: `use crate::reading::{tokenize_text, ReadingState, Token};`

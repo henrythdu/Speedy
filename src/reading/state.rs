@@ -1,10 +1,10 @@
 use crate::engine::config::TimingConfig;
-use crate::engine::{wpm_to_milliseconds, Token};
+use crate::reading::{wpm_to_milliseconds, Token};
 
 pub struct ReadingState {
-    pub tokens: Vec<Token>,
-    pub current_index: usize,
-    pub wpm: u32,
+    tokens: Vec<Token>,
+    current_index: usize,
+    wpm: u32,
     config: TimingConfig,
 }
 
@@ -22,6 +22,21 @@ impl ReadingState {
         Self::new(tokens, wpm, TimingConfig::default())
     }
 
+    /// Get the current reading position index
+    pub fn current_index(&self) -> usize {
+        self.current_index
+    }
+
+    /// Get the current words-per-minute setting
+    pub fn wpm(&self) -> u32 {
+        self.wpm
+    }
+
+    /// Get a reference to the tokens vector
+    pub fn tokens(&self) -> &Vec<Token> {
+        &self.tokens
+    }
+
     pub fn current_token(&self) -> Option<&Token> {
         self.tokens.get(self.current_index)
     }
@@ -36,8 +51,8 @@ impl ReadingState {
     pub fn adjust_wpm(&mut self, delta: i32) {
         let new_wpm = self.wpm as i32 + delta;
         self.wpm = new_wpm.clamp(
-            *self.config.wpm_range.start() as i32,
-            *self.config.wpm_range.end() as i32,
+            *self.config.wpm_range().start() as i32,
+            *self.config.wpm_range().end() as i32,
         ) as u32;
     }
 
@@ -45,27 +60,28 @@ impl ReadingState {
         let base_delay_ms = wpm_to_milliseconds(self.wpm);
 
         // PRD Section 3.2: Punctuation Multipliers with max stacking rule
-        let punctuation_multiplier = if token.punctuation.is_empty() {
+        let punctuation_multiplier = if token.punctuation().is_empty() {
             1.0
         } else {
             token
-                .punctuation
+                .punctuation()
                 .iter()
                 .map(|&p| match p {
-                    '.' => self.config.period_multiplier,
-                    '?' => self.config.question_multiplier,
-                    '!' => self.config.exclamation_multiplier,
-                    ',' => self.config.comma_multiplier,
-                    '\n' => self.config.newline_multiplier,
+                    '.' => self.config.period_multiplier(),
+                    '?' => self.config.question_multiplier(),
+                    '!' => self.config.exclamation_multiplier(),
+                    ',' => self.config.comma_multiplier(),
+                    '\n' => self.config.newline_multiplier(),
                     _ => 1.0,
                 })
                 .fold(1.0, f64::max)
         };
 
         // PRD Section 3.2: Word Length Penalty - take MAX with punctuation, NOT multiply
-        let word_length = token.text.chars().count();
-        let length_penalty = if word_length > self.config.long_word_threshold {
-            self.config.long_word_penalty
+        // Use precomputed char_count for O(1) instead of O(n) chars().count()
+        let word_length = token.char_count();
+        let length_penalty = if word_length > self.config.long_word_threshold() {
+            self.config.long_word_penalty()
         } else {
             1.0
         };
@@ -91,7 +107,7 @@ impl ReadingState {
         }
         self.tokens[start..]
             .iter()
-            .position(|token| token.is_sentence_start)
+            .position(|token| token.is_sentence_start())
             .map(|pos| pos + start)
     }
 
@@ -116,7 +132,7 @@ impl ReadingState {
             .iter()
             .enumerate()
             .rev()
-            .find(|(_, token)| token.is_sentence_start)
+            .find(|(_, token)| token.is_sentence_start())
             .map(|(idx, _)| idx)
     }
 
@@ -136,11 +152,16 @@ mod tests {
     use super::*;
 
     fn create_test_token(text: &str, is_sentence_start: bool) -> Token {
-        Token {
-            text: text.to_string(),
-            punctuation: vec![],
+        let char_count = text.chars().count();
+        Token::new(
+            text.to_string(),
+            vec![],
             is_sentence_start,
-        }
+            char_count,
+            1.0,
+            0,
+            1,
+        )
     }
 
     #[test]
@@ -224,7 +245,7 @@ mod tests {
             create_test_token("world", false),
         ];
         let state = ReadingState::new_with_default_config(tokens, 300);
-        assert_eq!(state.current_token().unwrap().text, "hello");
+        assert_eq!(state.current_token().unwrap().text(), "hello");
     }
 
     #[test]
@@ -238,11 +259,15 @@ mod tests {
     #[test]
     fn test_current_token_duration_long_word() {
         // Create a token with a long word (> 10 chars), no punctuation
-        let tokens = vec![Token {
-            text: "extraordinarily".to_string(),
-            punctuation: vec![],
-            is_sentence_start: true,
-        }];
+        let tokens = vec![Token::new(
+            "extraordinarily".to_string(),
+            vec![],
+            true,
+            15,
+            1.0,
+            0,
+            1,
+        )];
         let state = ReadingState::new_with_default_config(tokens, 300);
         // 300 WPM = 200ms per word * max(1.0, 1.15) = 230ms
         // PRD: Apply MAX of punctuation (1.0) and length penalty (1.15)
@@ -251,11 +276,15 @@ mod tests {
 
     #[test]
     fn test_current_token_duration_with_punctuation() {
-        let tokens = vec![Token {
-            text: "hello".to_string(),
-            punctuation: vec!['.'],
-            is_sentence_start: true,
-        }];
+        let tokens = vec![Token::new(
+            "hello".to_string(),
+            vec!['.'],
+            true,
+            5,
+            2.0,
+            0,
+            1,
+        )];
         let state = ReadingState::new_with_default_config(tokens, 300);
         // 300 WPM = 200ms per word * max(3.0, 1.0) = 600ms
         // PRD: Apply MAX of punctuation (3.0) and length penalty (1.0)

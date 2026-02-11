@@ -81,7 +81,6 @@ pub fn get_file_prefix(path: &Path) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
 
     #[test]
     fn test_is_supported_file_pdf() {

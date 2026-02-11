@@ -5,6 +5,7 @@
 
 use super::cache::PerDirectoryCache;
 use super::{is_supported_file, MAX_FILES, MAX_SCAN_DEPTH};
+use crate::ui::UIError;
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -25,16 +26,22 @@ pub struct DiscoveryHandle {
 ///
 /// # Returns
 /// A DiscoveryHandle containing the receiver and thread handle
+///
+/// # Errors
+/// Returns `UIError::LockPoisoned` if the cache mutex is poisoned
 pub fn spawn_discovery_thread(
     root: PathBuf,
     cache: Arc<Mutex<PerDirectoryCache>>,
-) -> DiscoveryHandle {
+) -> Result<DiscoveryHandle, UIError> {
     let (sender, receiver) = channel();
 
     thread::spawn(move || {
         // Check cache first
         {
-            let cache_guard = cache.lock().unwrap();
+            let cache_guard = match cache.lock() {
+                Ok(guard) => guard,
+                Err(_) => return, // Lock poisoned, exit thread gracefully
+            };
             if let Some(cached_files) = cache_guard.get(&root) {
                 // Send cached files
                 for file in cached_files {
@@ -51,7 +58,10 @@ pub fn spawn_discovery_thread(
 
         // Update cache
         {
-            let mut cache_guard = cache.lock().unwrap();
+            let mut cache_guard = match cache.lock() {
+                Ok(guard) => guard,
+                Err(_) => return, // Lock poisoned, exit thread gracefully
+            };
             cache_guard.put(root, files.clone());
         }
 
@@ -63,7 +73,7 @@ pub fn spawn_discovery_thread(
         }
     });
 
-    DiscoveryHandle { receiver }
+    Ok(DiscoveryHandle { receiver })
 }
 
 /// Scan directories for supported files
@@ -86,7 +96,7 @@ fn scan_directories(root: &Path) -> Vec<PathBuf> {
             Ok(canonical) => canonical,
             Err(_) => continue, // Skip directories we can't canonicalize
         };
-        
+
         if !visited.insert(canonical) {
             continue; // Already visited this directory (symlink loop)
         }
@@ -217,7 +227,7 @@ mod tests {
         File::create(root.join("test.pdf")).unwrap();
 
         let cache = Arc::new(Mutex::new(PerDirectoryCache::new()));
-        let handle = spawn_discovery_thread(root, cache);
+        let handle = spawn_discovery_thread(root, cache).expect("Failed to spawn discovery thread");
 
         // Collect all files from receiver
         // Thread will exit when receiver is dropped or channel closes
@@ -242,7 +252,7 @@ mod tests {
             cache_guard.put(root.clone(), vec![PathBuf::from("/cached/file.pdf")]);
         }
 
-        let handle = spawn_discovery_thread(root, cache);
+        let handle = spawn_discovery_thread(root, cache).expect("Failed to spawn discovery thread");
 
         // Should receive cached file immediately
         let file = handle.receiver.recv().unwrap();

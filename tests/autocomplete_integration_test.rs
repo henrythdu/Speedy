@@ -12,8 +12,8 @@ fn autocomplete_full_workflow_basic() {
 
     // Activate autocomplete
     state.activate(&command_buffer, 1, &PathBuf::from("/test"));
-    assert!(state.active);
-    assert!(state.is_scanning);
+    assert!(state.is_active());
+    assert!(state.is_scanning());
 
     // Simulate discovering files
     state.add_file(PathBuf::from("/test/doc1.pdf"));
@@ -25,13 +25,13 @@ fn autocomplete_full_workflow_basic() {
     assert_eq!(state.match_count(), 2);
 
     // Select first file
-    assert_eq!(state.selected_idx, 0);
+    assert_eq!(state.selected_idx(), 0);
     let selected = state.get_selected().unwrap();
     assert_eq!(selected.file_name().unwrap(), "doc1.pdf");
 
     // Navigate down
     state.select_next();
-    assert_eq!(state.selected_idx, 1);
+    assert_eq!(state.selected_idx(), 1);
     let selected = state.get_selected().unwrap();
     assert_eq!(selected.file_name().unwrap(), "book.epub");
 
@@ -41,7 +41,7 @@ fn autocomplete_full_workflow_basic() {
 
     // Deactivate
     state.deactivate();
-    assert!(!state.active);
+    assert!(!state.is_active());
 }
 
 #[test]
@@ -91,19 +91,19 @@ fn autocomplete_navigation_wrapping() {
     state.add_file(PathBuf::from("/test/c.pdf"));
     state.mark_scanning_complete();
 
-    assert_eq!(state.selected_idx, 0);
+    assert_eq!(state.selected_idx(), 0);
 
     // Navigate down wraps to first
     state.select_next();
-    assert_eq!(state.selected_idx, 1);
+    assert_eq!(state.selected_idx(), 1);
     state.select_next();
-    assert_eq!(state.selected_idx, 2);
+    assert_eq!(state.selected_idx(), 2);
     state.select_next();
-    assert_eq!(state.selected_idx, 0); // Wrapped
+    assert_eq!(state.selected_idx(), 0); // Wrapped
 
     // Navigate up wraps to last
     state.select_previous();
-    assert_eq!(state.selected_idx, 2); // Wrapped
+    assert_eq!(state.selected_idx(), 2); // Wrapped
 }
 
 #[test]
@@ -169,13 +169,13 @@ fn autocomplete_backspace_closes_when_empty() {
     let command_buffer = String::from("@");
 
     state.activate(&command_buffer, 1, &PathBuf::from("/test"));
-    assert!(state.active);
+    assert!(state.is_active());
 
     // Simulate typing and then backspacing
     state.handle_input('t');
     state.backspace();
 
     // Query is now empty but autocomplete is still active
-    assert!(state.active);
-    assert!(state.query.is_empty());
+    assert!(state.is_active());
+    assert!(state.query().is_empty());
 }

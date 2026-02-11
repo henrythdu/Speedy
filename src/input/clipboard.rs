@@ -1,12 +1,12 @@
 use super::{LoadError, LoadedDocument};
-use crate::engine::tokenize_text;
+use crate::reading::tokenize_text;
 
 /// Load text from system clipboard using arboard crate.
 ///
 /// Purpose: Provides clipboard content as input source per PRD Section 2.2.
 /// Big Picture: Enables @@ command in REPL to load clipboard content.
 /// PRD Reference: Section 2.2 (Clipboard support), Section 7.1 (@@ command)
-/// Connections: Depends on engine::tokenize_text() for tokenization.
+/// Connections: Depends on reading::tokenize_text() for tokenization.
 pub fn load() -> Result<LoadedDocument, LoadError> {
     arboard::Clipboard::new()
         .and_then(|mut clipboard| clipboard.get_text())
@@ -19,7 +19,6 @@ pub fn load() -> Result<LoadedDocument, LoadError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::reading::token::Token;
 
     /// Test successful clipboard load with mocked arboard.
     /// This test verifies tokenization works correctly with clipboard content.
@@ -30,8 +29,8 @@ mod tests {
 
         // Verify tokens are created correctly
         assert!(!tokens.is_empty());
-        assert_eq!(tokens[0].text, "Hello");
-        assert!(tokens[0].is_sentence_start);
+        assert_eq!(tokens[0].text(), "Hello");
+        assert!(tokens[0].is_sentence_start());
     }
 
     /// Test that LoadedDocument tokens preserve punctuation.
@@ -42,13 +41,13 @@ mod tests {
         };
 
         // First token should be "Hello" with comma punctuation
-        assert_eq!(doc.tokens[0].text, "Hello");
-        assert_eq!(doc.tokens[0].punctuation, vec![',']);
-        assert!(doc.tokens[0].is_sentence_start);
+        assert_eq!(doc.tokens[0].text(), "Hello");
+        assert_eq!(doc.tokens[0].punctuation(), vec![',']);
+        assert!(doc.tokens[0].is_sentence_start());
 
         // Second token should be "world" with exclamation punctuation
-        assert_eq!(doc.tokens[1].text, "world");
-        assert_eq!(doc.tokens[1].punctuation, vec!['!']);
-        assert!(!doc.tokens[1].is_sentence_start);
+        assert_eq!(doc.tokens[1].text(), "world");
+        assert_eq!(doc.tokens[1].punctuation(), vec!['!']);
+        assert!(!doc.tokens[1].is_sentence_start());
     }
 }

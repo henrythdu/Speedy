@@ -300,14 +300,16 @@ impl RsvpRenderer for KittyGraphicsRenderer {
     fn initialize(&mut self) -> Result<(), RendererError> {
         // Load bundled font
         self.font = get_font();
-        if self.font.is_none() {
-            return Err(RendererError::InitializationFailed(
-                "Failed to load bundled font".to_string(),
-            ));
-        }
+        let font = match self.font.as_ref() {
+            Some(f) => f,
+            None => {
+                return Err(RendererError::InitializationFailed(
+                    "Failed to load bundled font".to_string(),
+                ))
+            }
+        };
 
         // Get font metrics
-        let font = self.font.as_ref().unwrap();
         self.font_metrics = Some(get_font_metrics(font, self.font_size));
 
         // Initialize word cache with current font size
@@ -419,7 +421,6 @@ impl RsvpRenderer for KittyGraphicsRenderer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rendering::viewport::TerminalDimensions;
 
     #[test]
     fn test_kitty_renderer_initialize_loads_font() {

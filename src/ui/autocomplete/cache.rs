@@ -40,11 +40,11 @@ impl PerDirectoryCache {
     /// Returns None if directory not cached or cache expired
     pub fn get(&self, dir: &Path) -> Option<&[PathBuf]> {
         let entry = self.entries.get(dir)?;
-        
+
         if self.is_expired(entry) {
             return None;
         }
-        
+
         Some(&entry.files)
     }
 
@@ -96,9 +96,9 @@ mod tests {
         let mut cache = PerDirectoryCache::new();
         let dir = PathBuf::from("/test/dir");
         let files = vec![PathBuf::from("/test/dir/file.pdf")];
-        
+
         cache.put(dir.clone(), files.clone());
-        
+
         let result = cache.get(&dir);
         assert!(result.is_some());
         assert_eq!(result.unwrap(), &files);
@@ -108,7 +108,7 @@ mod tests {
     fn test_cache_miss() {
         let cache = PerDirectoryCache::new();
         let dir = PathBuf::from("/nonexistent/dir");
-        
+
         assert!(cache.get(&dir).is_none());
     }
 
@@ -117,15 +117,15 @@ mod tests {
         let mut cache = PerDirectoryCache::with_ttl(Duration::from_millis(50));
         let dir = PathBuf::from("/test/dir");
         let files = vec![PathBuf::from("/test/dir/file.pdf")];
-        
+
         cache.put(dir.clone(), files);
-        
+
         // Should be available immediately
         assert!(cache.get(&dir).is_some());
-        
+
         // Wait for expiration
         thread::sleep(Duration::from_millis(60));
-        
+
         // Should be expired now
         assert!(cache.get(&dir).is_none());
     }
@@ -135,10 +135,10 @@ mod tests {
         let mut cache = PerDirectoryCache::new();
         let dir = PathBuf::from("/test/dir");
         let files = vec![PathBuf::from("/test/dir/file.pdf")];
-        
+
         cache.put(dir.clone(), files);
         assert!(cache.get(&dir).is_some());
-        
+
         cache.invalidate(&dir);
         assert!(cache.get(&dir).is_none());
     }
@@ -150,13 +150,13 @@ mod tests {
         let dir2 = PathBuf::from("/test/dir2");
         let files1 = vec![PathBuf::from("/test/dir1/file1.pdf")];
         let files2 = vec![PathBuf::from("/test/dir2/file2.pdf")];
-        
+
         cache.put(dir1.clone(), files1.clone());
         cache.put(dir2.clone(), files2.clone());
-        
+
         assert_eq!(cache.get(&dir1).unwrap(), &files1);
         assert_eq!(cache.get(&dir2).unwrap(), &files2);
-        
+
         cache.invalidate(&dir1);
         assert!(cache.get(&dir1).is_none());
         assert!(cache.get(&dir2).is_some());

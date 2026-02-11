@@ -6,7 +6,7 @@ use crate::app::mode::AppMode;
 use crate::app::App;
 use crate::engine::config::DEFAULT_WPM;
 use crate::ui::command::{parse_command, tokens_to_text, Command};
-use std::io;
+use anyhow::{Context, Result};
 
 /// Result of executing a command
 #[derive(Debug, Clone, PartialEq)]
@@ -21,37 +21,26 @@ pub enum CommandResult {
 ///
 /// Parses the command and executes it against the app state.
 /// Returns CommandResult indicating whether to continue or exit.
-pub fn execute_command(app: &mut App, command_str: &str) -> io::Result<CommandResult> {
+pub fn execute_command(app: &mut App, command_str: &str) -> Result<CommandResult> {
     match parse_command(command_str) {
         Command::LoadFile(path) => {
-            let result = if path.to_lowercase().ends_with(".epub") {
+            let doc = if path.to_lowercase().ends_with(".epub") {
                 crate::input::epub::load(&path)
             } else {
                 crate::input::pdf::load(&path)
-            };
-
-            match result {
-                Ok(doc) => {
-                    let text = tokens_to_text(&doc);
-                    app.start_reading(&text, DEFAULT_WPM);
-                }
-                Err(e) => {
-                    app.set_error(format!("Failed to load file: {}", e));
-                }
             }
+            .with_context(|| format!("Failed to load file: {}", path))?;
+
+            let text = tokens_to_text(&doc);
+            app.start_reading(&text, DEFAULT_WPM);
             Ok(CommandResult::Continue)
         }
         Command::LoadClipboard => {
             use crate::input::clipboard;
-            match clipboard::load() {
-                Ok(doc) => {
-                    let text = tokens_to_text(&doc);
-                    app.start_reading(&text, DEFAULT_WPM);
-                }
-                Err(e) => {
-                    app.set_error(format!("Failed to load clipboard: {}", e));
-                }
-            }
+            let doc = clipboard::load().with_context(|| "Failed to load clipboard")?;
+
+            let text = tokens_to_text(&doc);
+            app.start_reading(&text, DEFAULT_WPM);
             Ok(CommandResult::Continue)
         }
         Command::Quit => {

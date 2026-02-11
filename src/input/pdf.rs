@@ -1,5 +1,5 @@
 use super::{LoadError, LoadedDocument};
-use crate::engine::tokenize_text;
+use crate::reading::tokenize_text;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
@@ -9,7 +9,7 @@ use std::path::Path;
 /// Purpose: Provides PDF file content as input source per PRD Section 2.2.
 /// Big Picture: Enables @filename.pdf command in REPL to load PDF content.
 /// PRD Reference: Section 2.2 (PDF support), Section 7.1 (@filename command)
-/// Connections: Depends on engine::tokenize_text() for tokenization.
+/// Connections: Depends on reading::tokenize_text() for tokenization.
 pub fn load(path: &str) -> Result<LoadedDocument, LoadError> {
     let path = Path::new(path);
 
@@ -34,7 +34,6 @@ pub fn load(path: &str) -> Result<LoadedDocument, LoadError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::Token;
 
     /// Test that load returns FileNotFound for non-existent files.
     #[test]
@@ -54,12 +53,12 @@ mod tests {
         // Verify multiple sentences are tokenized correctly
         assert!(doc.tokens.len() >= 3);
         // First token should be sentence start
-        assert!(doc.tokens[0].is_sentence_start);
+        assert!(doc.tokens[0].is_sentence_start());
         // Tokens with periods should mark next token as sentence start
         for (i, token) in doc.tokens.iter().enumerate() {
-            if token.text == "test" && i < doc.tokens.len() - 1 {
+            if token.text() == "test" && i < doc.tokens.len() - 1 {
                 assert!(
-                    doc.tokens[i + 1].is_sentence_start,
+                    doc.tokens[i + 1].is_sentence_start(),
                     "Token after 'test.' should be sentence start"
                 );
             }

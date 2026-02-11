@@ -67,8 +67,8 @@ pub fn tokens_to_text(doc: &LoadedDocument) -> String {
     doc.tokens
         .iter()
         .map(|t| {
-            let mut s = t.text.clone();
-            for p in &t.punctuation {
+            let mut s = t.text().to_string();
+            for p in t.punctuation() {
                 s.push(*p);
             }
             s

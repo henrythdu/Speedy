@@ -42,23 +42,79 @@ pub const PROGRESS_DIM_ALPHA: u8 = 50; // 20% opacity for unread portion
 #[derive(Debug, Clone, PartialEq)]
 pub struct TimingConfig {
     /// Words per minute reading speed (default 300)
-    pub wpm: u32,
+    wpm: u32,
 
     /// Minimum and maximum allowed WPM
-    pub wpm_range: RangeInclusive<u32>,
+    wpm_range: RangeInclusive<u32>,
 
     /// Word length threshold for penalty (default 10 chars)
-    pub long_word_threshold: usize,
+    long_word_threshold: usize,
 
     /// Word length penalty multiplier for words > threshold (default 1.15x)
-    pub long_word_penalty: f64,
+    long_word_penalty: f64,
 
     /// Punctuation multipliers per PRD Section 3.2
-    pub period_multiplier: f64,
-    pub comma_multiplier: f64,
-    pub question_multiplier: f64,
-    pub exclamation_multiplier: f64,
-    pub newline_multiplier: f64,
+    period_multiplier: f64,
+    comma_multiplier: f64,
+    question_multiplier: f64,
+    exclamation_multiplier: f64,
+    newline_multiplier: f64,
+}
+
+impl TimingConfig {
+    /// Returns the current WPM setting.
+    /// Currently unused but reserved for future WPM control UI.
+    #[allow(dead_code)]
+    pub fn wpm(&self) -> u32 {
+        self.wpm
+    }
+
+    /// Sets the WPM, clamped to the valid range.
+    /// Currently unused but reserved for future WPM control UI.
+    #[allow(dead_code)]
+    pub fn set_wpm(&mut self, wpm: u32) {
+        self.wpm = wpm.clamp(*self.wpm_range.start(), *self.wpm_range.end());
+    }
+
+    /// Returns the valid WPM range.
+    pub fn wpm_range(&self) -> &RangeInclusive<u32> {
+        &self.wpm_range
+    }
+
+    /// Returns the word length threshold for penalty.
+    pub fn long_word_threshold(&self) -> usize {
+        self.long_word_threshold
+    }
+
+    /// Returns the word length penalty multiplier.
+    pub fn long_word_penalty(&self) -> f64 {
+        self.long_word_penalty
+    }
+
+    /// Returns the period/full stop multiplier.
+    pub fn period_multiplier(&self) -> f64 {
+        self.period_multiplier
+    }
+
+    /// Returns the comma multiplier.
+    pub fn comma_multiplier(&self) -> f64 {
+        self.comma_multiplier
+    }
+
+    /// Returns the question mark multiplier.
+    pub fn question_multiplier(&self) -> f64 {
+        self.question_multiplier
+    }
+
+    /// Returns the exclamation mark multiplier.
+    pub fn exclamation_multiplier(&self) -> f64 {
+        self.exclamation_multiplier
+    }
+
+    /// Returns the newline multiplier.
+    pub fn newline_multiplier(&self) -> f64 {
+        self.newline_multiplier
+    }
 }
 
 impl Default for TimingConfig {

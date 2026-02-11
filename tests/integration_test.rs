@@ -2,7 +2,8 @@ use speedy::app::mode::AppMode;
 use speedy::app::App;
 use speedy::reading::ovp::calculate_anchor_position;
 use speedy::reading::state::ReadingState;
-use speedy::reading::timing::{tokenize_text, wpm_to_milliseconds};
+use speedy::reading::timing::wpm_to_milliseconds;
+use speedy::reading::tokenization::tokenize_text;
 use std::fs::{self, File};
 use std::io::{Read, Write};
 
@@ -40,18 +41,18 @@ fn end_to_end_reading() {
 
     let tokens = tokenize_text(&loaded_content);
     assert!(!tokens.is_empty(), "Should have tokens");
-    assert_eq!(tokens[0].text, "Hello");
-    assert_eq!(tokens[1].text, "world");
+    assert_eq!(tokens[0].text(), "Hello");
+    assert_eq!(tokens[1].text(), "world");
 
     let mut state = ReadingState::new_with_default_config(tokens, 300);
     assert!(state.current_token().is_some());
-    assert_eq!(state.current_token().unwrap().text, "Hello");
+    assert_eq!(state.current_token().unwrap().text(), "Hello");
 
     state.advance();
-    assert_eq!(state.current_token().unwrap().text, "world");
+    assert_eq!(state.current_token().unwrap().text(), "world");
 
     state.adjust_wpm(50);
-    assert_eq!(state.wpm, 350);
+    assert_eq!(state.wpm(), 350);
     // File cleanup handled by guard
 }
 
@@ -88,16 +89,16 @@ fn tui_workflow_timing_precision() {
 fn tui_workflow_app_mode_transitions() {
     let mut app = App::new();
 
-    assert_eq!(app.mode, AppMode::Command);
+    assert_eq!(app.mode(), AppMode::Command);
 
     app.set_mode(AppMode::Paused);
-    assert_eq!(app.mode, AppMode::Paused);
+    assert_eq!(app.mode(), AppMode::Paused);
 
     app.set_mode(AppMode::Reading);
-    assert_eq!(app.mode, AppMode::Reading);
+    assert_eq!(app.mode(), AppMode::Reading);
 
     app.set_mode(AppMode::Command);
-    assert_eq!(app.mode, AppMode::Command);
+    assert_eq!(app.mode(), AppMode::Command);
 }
 
 #[test]
