@@ -364,7 +364,7 @@ base64 = "0.22"                 # Kitty protocol encoding
 - [ ] Memory usage optimization
 
 ### Phase 4: Polish 🔄 IN PROGRESS
-- [ ] Anti-aliased font rendering
+- [x] Anti-aliased font rendering (ab_glyph outline_glyph with coverage-based AA)
 - [ ] Cursor hiding in Reading Mode
 - [ ] User documentation (terminal requirements, config options)
 
@@ -504,6 +504,7 @@ This section documents changes from the original design during implementation.
 | **SIGWINCH resize handling** | ✅ Complete | `handle_resize()` in `src/ui/terminal.rs` pauses reading during resize |
 | **Progress bars** | ✅ Complete | Macro gutter (4px vertical) and micro bar (2px horizontal) both implemented |
 | **WPM display** | ✅ Complete | Shows current WPM in reading zone top-left corner |
+| **Anti-aliased font rendering** | ✅ Complete | ab_glyph outline_glyph with coverage-based AA in rasterizer.rs |
 
 ### ❌ Not Implemented (Scope Changes)
 
@@ -536,8 +537,8 @@ This section documents changes from the original design during implementation.
 - [x] Progress bars (macro gutter + micro-bar)
 - [x] SIGWINCH resize handling
 
-**Phase 3: Polish** 🔄 IN PROGRESS
-- [ ] Anti-aliased font rendering
+**Phase 4: Polish** 🔄 IN PROGRESS
+- [x] Anti-aliased font rendering (ab_glyph coverage-based AA)
 - [ ] Cursor hiding in Reading Mode
 - [ ] User documentation
 
