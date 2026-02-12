@@ -170,7 +170,7 @@ fn render_file_list(frame: &mut Frame, state: &AutocompleteState, area: Rect) {
         .block(block)
         .highlight_style(
             Style::default()
-                .bg(colors::anchor())
+                .bg(colors::accent())
                 .fg(Color::Black)
                 .add_modifier(Modifier::BOLD),
         )

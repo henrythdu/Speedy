@@ -196,32 +196,100 @@ When typing `@`, a popup appears with file suggestions:
 
 ## Configuration
 
+Speedy supports configuration via TOML files and command-line flags. All settings have sensible defaults, so configuration is optional.
+
+### CLI Flags
+
+| Flag | Description |
+|------|-------------|
+| `-c, --config <PATH>` | Load configuration from a custom file path |
+| `--list-themes` | List all available themes and exit |
+
+```bash
+# Use a custom config file
+speedy --config ./my-config.toml
+
+# List available themes
+speedy --list-themes
+```
+
+### Config File Location
+
+Speedy looks for configuration at platform-specific locations:
+
+| Platform | Path |
+|----------|------|
+| **Linux** | `~/.config/speedy/config.toml` |
+| **macOS** | `~/Library/Application Support/speedy/config.toml` |
+| **Windows** | `%APPDATA%\speedy\config.toml` |
+
+If no config file exists, Speedy uses built-in defaults.
+
+### Available Themes
+
+Speedy includes 6 carefully crafted color themes:
+
+| Theme | Description |
+|-------|-------------|
+| `tokyo-night` | Dark theme with blue-purple hues (default) |
+| `dracula` | Classic purple-accented dark theme |
+| `gruvbox` | Retro warm color palette |
+| `catppuccin-mocha` | Soothing pastel dark theme |
+| `nord` | Arctic, bluish color scheme |
+| `light` | Light background theme for daytime use |
+
+### Timing Parameters
+
+Control reading speed and punctuation pauses in the `[timing]` section:
+
+| Parameter | Default | Range | Description |
+|-----------|---------|-------|-------------|
+| `wpm` | 300 | 50-1000 | Words per minute reading speed |
+| `period_multiplier` | 3.0 | any | Extra pause after periods (.). |
+| `comma_multiplier` | 1.5 | any | Extra pause after commas (,) |
+| `question_multiplier` | 3.0 | any | Extra pause after question marks (?) |
+| `exclamation_multiplier` | 3.0 | any | Extra pause after exclamation marks (!) |
+| `newline_multiplier` | 4.0 | any | Extra pause at line breaks |
+| `long_word_threshold` | 10 | any | Characters before word is considered "long" |
+| `long_word_penalty` | 1.15 | any | Extra time multiplier for long words |
+
+### Example Configuration
+
+Create a config file with your preferred settings:
+
+```toml
+# ~/.config/speedy/config.toml
+
+# Theme selection (tokyo-night, dracula, gruvbox, catppuccin-mocha, nord, light)
+theme = "tokyo-night"
+
+[timing]
+# Reading speed in words per minute (50-1000)
+wpm = 350
+
+# Punctuation pause multipliers
+period_multiplier = 3.0
+comma_multiplier = 1.5
+question_multiplier = 3.0
+exclamation_multiplier = 3.0
+newline_multiplier = 4.0
+
+# Long word handling
+long_word_threshold = 10
+long_word_penalty = 1.15
+```
+
+See [example_config.toml](example_config.toml) in the repository for a fully commented example with all options.
+
 ### Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `RUST_LOG` | Logging level | `info` |
 
-Example:
 ```bash
 RUST_LOG=debug speedy
 ```
-
-### Config Directory
-
-Speedy stores configuration in:
-```
-~/.config/speedy/
-```
-
-### Default Settings
-
-| Setting | Value | Description |
-|---------|-------|-------------|
-| Default WPM | 300 | Initial reading speed |
-| WPM Range | 50-1000 | Minimum and maximum WPM |
-| Cache Size | 1000 words | LRU cache capacity |
-| Memory Cap | 75 MB | Maximum cache memory |
 
 ---
 

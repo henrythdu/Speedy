@@ -1,5 +1,6 @@
 use speedy::app::mode::AppMode;
 use speedy::app::App;
+use speedy::engine::config::TimingConfig;
 use speedy::reading::ovp::calculate_anchor_position;
 use speedy::reading::state::ReadingState;
 use speedy::reading::timing::wpm_to_milliseconds;
@@ -44,7 +45,7 @@ fn end_to_end_reading() {
     assert_eq!(tokens[0].text(), "Hello");
     assert_eq!(tokens[1].text(), "world");
 
-    let mut state = ReadingState::new_with_default_config(tokens, 300);
+    let mut state = ReadingState::new(tokens, 300, TimingConfig::default());
     assert!(state.current_token().is_some());
     assert_eq!(state.current_token().unwrap().text(), "Hello");
 

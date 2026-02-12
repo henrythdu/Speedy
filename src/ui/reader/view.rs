@@ -31,7 +31,7 @@ pub fn render_command_deck(
     // Left accent bar - full height of command section
     let accent_text = "▌\n▌\n▌\n▌\n▌"; // One per row for full 5-cell height
     let accent_bar = Paragraph::new(accent_text)
-        .style(Style::default().fg(colors::anchor()).bg(colors::surface()));
+        .style(Style::default().fg(colors::accent()).bg(colors::surface()));
     frame.render_widget(accent_bar, layout[0]);
 
     let content_area = layout[1];
@@ -72,7 +72,7 @@ pub fn render_command_deck(
     };
 
     let label_widget = Paragraph::new(mode_label)
-        .style(Style::default().fg(colors::anchor()).bg(colors::surface()));
+        .style(Style::default().fg(colors::accent()).bg(colors::surface()));
     frame.render_widget(label_widget, label_area);
 
     // Render input above label with blinking cursor
@@ -86,7 +86,7 @@ pub fn render_command_deck(
     };
 
     let text_color = if error_message.is_some() {
-        colors::anchor() // Use anchor color (red) for errors
+        colors::accent() // Use accent color (red) for errors
     } else {
         colors::text()
     };

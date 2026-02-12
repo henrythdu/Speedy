@@ -6,10 +6,7 @@ pub struct Theme {
     pub background: Color,
     pub surface: Color,
     pub text: Color,
-    pub anchor: Color,
-    /// Currently unused but reserved for future UI elements (e.g., dimmed text)
-    #[allow(dead_code)]
-    pub dimmed: Color,
+    pub accent: Color,
 }
 
 impl Default for Theme {
@@ -25,8 +22,7 @@ impl Theme {
             background: Color::Rgb(26, 27, 38), // #1A1B26 Stormy Dark
             surface: Color::Rgb(36, 40, 59),    // #24283B Dark Slate (command deck)
             text: Color::Rgb(169, 177, 214),    // #A9B1D6 Light Blue
-            anchor: Color::Rgb(247, 118, 142),  // #F7768E Coral Red
-            dimmed: Color::Rgb(100, 110, 150),  // #646E96 Dimmed Blue
+            accent: Color::Rgb(247, 118, 142),  // #F7768E Coral Red
         }
     }
 
@@ -44,13 +40,8 @@ pub mod colors {
     pub fn text() -> Color {
         Theme::current().text
     }
-    pub fn anchor() -> Color {
-        Theme::current().anchor
-    }
-    /// Currently unused but reserved for future UI elements
-    #[allow(dead_code)]
-    pub fn dimmed() -> Color {
-        Theme::current().dimmed
+    pub fn accent() -> Color {
+        Theme::current().accent
     }
     pub fn surface() -> Color {
         Theme::current().surface

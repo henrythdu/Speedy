@@ -1,10 +1,12 @@
 use crate::app::mode::AppMode;
+use crate::config::Config;
 use crate::reading::{tokenize_text, ReadingState};
 
 pub struct App {
     mode: AppMode,
     reading_state: Option<ReadingState>,
     error_message: Option<String>,
+    config: Config,
 }
 
 impl Default for App {
@@ -19,6 +21,17 @@ impl App {
             mode: AppMode::default(),
             reading_state: None,
             error_message: None,
+            config: Config::default(),
+        }
+    }
+
+    /// Create App with a specific configuration
+    pub fn with_config(config: Config) -> Self {
+        Self {
+            mode: AppMode::default(),
+            reading_state: None,
+            error_message: None,
+            config,
         }
     }
 
@@ -34,7 +47,9 @@ impl App {
 
     pub fn start_reading(&mut self, text: &str, wpm: u32) {
         let tokens = tokenize_text(text);
-        self.reading_state = Some(ReadingState::new_with_default_config(tokens, wpm));
+        // Use config's TimingConfig for reading state
+        let timing_config = self.config.timing().clone();
+        self.reading_state = Some(ReadingState::new(tokens, wpm, timing_config));
         self.mode = AppMode::Reading;
     }
 

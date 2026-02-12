@@ -5,7 +5,7 @@
 
 use super::cache::PerDirectoryCache;
 use super::{is_supported_file, MAX_FILES, MAX_SCAN_DEPTH};
-use crate::ui::UIError;
+
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -26,13 +26,10 @@ pub struct DiscoveryHandle {
 ///
 /// # Returns
 /// A DiscoveryHandle containing the receiver and thread handle
-///
-/// # Errors
-/// Returns `UIError::LockPoisoned` if the cache mutex is poisoned
 pub fn spawn_discovery_thread(
     root: PathBuf,
     cache: Arc<Mutex<PerDirectoryCache>>,
-) -> Result<DiscoveryHandle, UIError> {
+) -> DiscoveryHandle {
     let (sender, receiver) = channel();
 
     thread::spawn(move || {
@@ -73,7 +70,7 @@ pub fn spawn_discovery_thread(
         }
     });
 
-    Ok(DiscoveryHandle { receiver })
+    DiscoveryHandle { receiver }
 }
 
 /// Scan directories for supported files
@@ -227,7 +224,7 @@ mod tests {
         File::create(root.join("test.pdf")).unwrap();
 
         let cache = Arc::new(Mutex::new(PerDirectoryCache::new()));
-        let handle = spawn_discovery_thread(root, cache).expect("Failed to spawn discovery thread");
+        let handle = spawn_discovery_thread(root, cache);
 
         // Collect all files from receiver
         // Thread will exit when receiver is dropped or channel closes
@@ -252,7 +249,7 @@ mod tests {
             cache_guard.put(root.clone(), vec![PathBuf::from("/cached/file.pdf")]);
         }
 
-        let handle = spawn_discovery_thread(root, cache).expect("Failed to spawn discovery thread");
+        let handle = spawn_discovery_thread(root, cache);
 
         // Should receive cached file immediately
         let file = handle.receiver.recv().unwrap();

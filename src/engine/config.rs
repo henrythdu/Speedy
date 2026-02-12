@@ -1,6 +1,6 @@
 // Configuration for Speedy engine and UI components
 // All values derived from PRD specifications with defaults as documented
-use std::ops::RangeInclusive;
+use serde::Deserialize;
 
 /// Timing Constants per PRD Section 3.2
 pub const DEFAULT_WPM: u32 = 300;
@@ -38,47 +38,83 @@ pub const PROGRESS_COLOR_B: u8 = 214;
 pub const PROGRESS_BRIGHT_ALPHA: u8 = 255; // Full opacity for read portion
 pub const PROGRESS_DIM_ALPHA: u8 = 50; // 20% opacity for unread portion
 
+/// Default functions for serde deserialization
+fn default_wpm() -> u32 {
+    DEFAULT_WPM
+}
+
+fn default_long_word_threshold() -> usize {
+    LONG_WORD_THRESHOLD
+}
+
+fn default_long_word_penalty() -> f64 {
+    LONG_WORD_PENALTY
+}
+
+fn default_period_multiplier() -> f64 {
+    PERIOD_MULTIPLIER
+}
+
+fn default_comma_multiplier() -> f64 {
+    COMMA_MULTIPLIER
+}
+
+fn default_question_multiplier() -> f64 {
+    QUESTION_MULTIPLIER
+}
+
+fn default_exclamation_multiplier() -> f64 {
+    EXCLAMATION_MULTIPLIER
+}
+
+fn default_newline_multiplier() -> f64 {
+    NEWLINE_MULTIPLIER
+}
+
 /// Timing configuration per PRD Section 3.2
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct TimingConfig {
     /// Words per minute reading speed (default 300)
-    wpm: u32,
-
-    /// Minimum and maximum allowed WPM
-    wpm_range: RangeInclusive<u32>,
+    #[serde(default = "default_wpm")]
+    pub wpm: u32,
 
     /// Word length threshold for penalty (default 10 chars)
-    long_word_threshold: usize,
+    #[serde(default = "default_long_word_threshold")]
+    pub long_word_threshold: usize,
 
     /// Word length penalty multiplier for words > threshold (default 1.15x)
-    long_word_penalty: f64,
+    #[serde(default = "default_long_word_penalty")]
+    pub long_word_penalty: f64,
 
     /// Punctuation multipliers per PRD Section 3.2
-    period_multiplier: f64,
-    comma_multiplier: f64,
-    question_multiplier: f64,
-    exclamation_multiplier: f64,
-    newline_multiplier: f64,
+    #[serde(default = "default_period_multiplier")]
+    pub period_multiplier: f64,
+
+    #[serde(default = "default_comma_multiplier")]
+    pub comma_multiplier: f64,
+
+    #[serde(default = "default_question_multiplier")]
+    pub question_multiplier: f64,
+
+    #[serde(default = "default_exclamation_multiplier")]
+    pub exclamation_multiplier: f64,
+
+    #[serde(default = "default_newline_multiplier")]
+    pub newline_multiplier: f64,
 }
 
 impl TimingConfig {
-    /// Returns the current WPM setting.
-    /// Currently unused but reserved for future WPM control UI.
-    #[allow(dead_code)]
-    pub fn wpm(&self) -> u32 {
-        self.wpm
-    }
-
-    /// Sets the WPM, clamped to the valid range.
-    /// Currently unused but reserved for future WPM control UI.
-    #[allow(dead_code)]
-    pub fn set_wpm(&mut self, wpm: u32) {
-        self.wpm = wpm.clamp(*self.wpm_range.start(), *self.wpm_range.end());
+    /// Validates and normalizes configuration values.
+    /// Clamps wpm to valid range [MIN_WPM, MAX_WPM].
+    pub fn validate(&mut self) {
+        self.wpm = self.wpm.clamp(MIN_WPM, MAX_WPM);
     }
 
     /// Returns the valid WPM range.
-    pub fn wpm_range(&self) -> &RangeInclusive<u32> {
-        &self.wpm_range
+    /// Note: RangeInclusive is not stored in the struct (serde incompatible),
+    /// but can be derived from constants for API compatibility.
+    pub fn wpm_range(&self) -> std::ops::RangeInclusive<u32> {
+        MIN_WPM..=MAX_WPM
     }
 
     /// Returns the word length threshold for penalty.
@@ -121,7 +157,6 @@ impl Default for TimingConfig {
     fn default() -> Self {
         Self {
             wpm: DEFAULT_WPM,
-            wpm_range: MIN_WPM..=MAX_WPM,
             long_word_threshold: LONG_WORD_THRESHOLD,
             long_word_penalty: LONG_WORD_PENALTY,
             period_multiplier: PERIOD_MULTIPLIER,
@@ -130,5 +165,52 @@ impl Default for TimingConfig {
             exclamation_multiplier: EXCLAMATION_MULTIPLIER,
             newline_multiplier: NEWLINE_MULTIPLIER,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_timing_config() {
+        let config = TimingConfig::default();
+        assert_eq!(config.wpm, DEFAULT_WPM);
+        assert_eq!(config.long_word_threshold(), LONG_WORD_THRESHOLD);
+    }
+
+    #[test]
+    fn test_validate_clamps_wpm() {
+        let mut config = TimingConfig {
+            wpm: 0, // Below minimum
+            ..Default::default()
+        };
+        config.validate();
+        assert_eq!(config.wpm, MIN_WPM);
+
+        config.wpm = 5000; // Above maximum
+        config.validate();
+        assert_eq!(config.wpm, MAX_WPM);
+    }
+
+    #[test]
+    fn test_deserialize_from_toml() {
+        let toml_str = r#"
+            wpm = 500
+            long_word_threshold = 8
+        "#;
+        let config: TimingConfig = toml::from_str(toml_str).expect("Failed to deserialize");
+        assert_eq!(config.wpm, 500);
+        assert_eq!(config.long_word_threshold, 8);
+        // Defaults should apply for missing fields
+        assert_eq!(config.long_word_penalty, LONG_WORD_PENALTY);
+    }
+
+    #[test]
+    fn test_deserialize_with_defaults() {
+        let toml_str = "";
+        let config: TimingConfig = toml::from_str(toml_str).expect("Failed to deserialize");
+        assert_eq!(config.wpm, DEFAULT_WPM);
+        assert_eq!(config.long_word_threshold, LONG_WORD_THRESHOLD);
     }
 }

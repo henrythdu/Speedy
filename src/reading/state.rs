@@ -18,10 +18,6 @@ impl ReadingState {
         }
     }
 
-    pub fn new_with_default_config(tokens: Vec<Token>, wpm: u32) -> Self {
-        Self::new(tokens, wpm, TimingConfig::default())
-    }
-
     /// Get the current reading position index
     pub fn current_index(&self) -> usize {
         self.current_index
@@ -172,7 +168,7 @@ mod tests {
             create_test_token("Second", true),
             create_test_token("sentence", false),
         ];
-        let state = ReadingState::new_with_default_config(tokens, 300);
+        let state = ReadingState::new(tokens, 300, TimingConfig::default());
         assert_eq!(state.find_next_sentence_start(), Some(2));
     }
 
@@ -182,7 +178,7 @@ mod tests {
             create_test_token("Only", true),
             create_test_token("sentence", false),
         ];
-        let mut state = ReadingState::new_with_default_config(tokens, 300);
+        let mut state = ReadingState::new(tokens, 300, TimingConfig::default());
         state.current_index = 1; // At "sentence"
         assert_eq!(state.find_next_sentence_start(), None);
     }
@@ -195,7 +191,7 @@ mod tests {
             create_test_token("Second", true),
             create_test_token("sentence", false),
         ];
-        let mut state = ReadingState::new_with_default_config(tokens, 300);
+        let mut state = ReadingState::new(tokens, 300, TimingConfig::default());
         assert!(state.jump_to_next_sentence());
         assert_eq!(state.current_index, 2);
     }
@@ -208,7 +204,7 @@ mod tests {
             create_test_token("Second", true),
             create_test_token("here", false),
         ];
-        let mut state = ReadingState::new_with_default_config(tokens, 300);
+        let mut state = ReadingState::new(tokens, 300, TimingConfig::default());
         state.current_index = 3; // At "here"
         assert_eq!(state.find_previous_sentence_start(), Some(2));
     }
@@ -219,7 +215,7 @@ mod tests {
             create_test_token("First", true),
             create_test_token("sentence", false),
         ];
-        let mut state = ReadingState::new_with_default_config(tokens, 300);
+        let mut state = ReadingState::new(tokens, 300, TimingConfig::default());
         state.current_index = 0; // At start
         assert_eq!(state.find_previous_sentence_start(), None);
     }
@@ -232,7 +228,7 @@ mod tests {
             create_test_token("Second", true),
             create_test_token("here", false),
         ];
-        let mut state = ReadingState::new_with_default_config(tokens, 300);
+        let mut state = ReadingState::new(tokens, 300, TimingConfig::default());
         state.current_index = 3; // At "here"
         assert!(state.jump_to_previous_sentence());
         assert_eq!(state.current_index, 2);
@@ -244,14 +240,14 @@ mod tests {
             create_test_token("hello", true),
             create_test_token("world", false),
         ];
-        let state = ReadingState::new_with_default_config(tokens, 300);
+        let state = ReadingState::new(tokens, 300, TimingConfig::default());
         assert_eq!(state.current_token().unwrap().text(), "hello");
     }
 
     #[test]
     fn test_current_token_duration() {
         let tokens = vec![create_test_token("hello", true)];
-        let state = ReadingState::new_with_default_config(tokens, 300);
+        let state = ReadingState::new(tokens, 300, TimingConfig::default());
         // 300 WPM = 200ms per word
         assert_eq!(state.current_token_duration(), 200);
     }
@@ -268,7 +264,7 @@ mod tests {
             0,
             1,
         )];
-        let state = ReadingState::new_with_default_config(tokens, 300);
+        let state = ReadingState::new(tokens, 300, TimingConfig::default());
         // 300 WPM = 200ms per word * max(1.0, 1.15) = 230ms
         // PRD: Apply MAX of punctuation (1.0) and length penalty (1.15)
         assert_eq!(state.current_token_duration(), 230);
@@ -285,7 +281,7 @@ mod tests {
             0,
             1,
         )];
-        let state = ReadingState::new_with_default_config(tokens, 300);
+        let state = ReadingState::new(tokens, 300, TimingConfig::default());
         // 300 WPM = 200ms per word * max(3.0, 1.0) = 600ms
         // PRD: Apply MAX of punctuation (3.0) and length penalty (1.0)
         assert_eq!(state.current_token_duration(), 600);
@@ -294,7 +290,7 @@ mod tests {
     #[test]
     fn test_adjust_wpm() {
         let tokens = vec![create_test_token("test", true)];
-        let mut state = ReadingState::new_with_default_config(tokens, 300);
+        let mut state = ReadingState::new(tokens, 300, TimingConfig::default());
         state.adjust_wpm(50);
         assert_eq!(state.wpm, 350);
     }
@@ -302,7 +298,7 @@ mod tests {
     #[test]
     fn test_adjust_wpm_clamp_min() {
         let tokens = vec![create_test_token("test", true)];
-        let mut state = ReadingState::new_with_default_config(tokens, 100);
+        let mut state = ReadingState::new(tokens, 100, TimingConfig::default());
         state.adjust_wpm(-200);
         assert_eq!(state.wpm, 50); // Should clamp to minimum 50
     }
@@ -310,7 +306,7 @@ mod tests {
     #[test]
     fn test_adjust_wpm_clamp_max() {
         let tokens = vec![create_test_token("test", true)];
-        let mut state = ReadingState::new_with_default_config(tokens, 1000);
+        let mut state = ReadingState::new(tokens, 1000, TimingConfig::default());
         state.adjust_wpm(500);
         assert_eq!(state.wpm, 1000); // Should clamp to maximum 1000
     }
@@ -321,7 +317,7 @@ mod tests {
             create_test_token("hello", true),
             create_test_token("world", false),
         ];
-        let mut state = ReadingState::new_with_default_config(tokens, 300);
+        let mut state = ReadingState::new(tokens, 300, TimingConfig::default());
         assert_eq!(state.current_index, 0);
         state.advance();
         assert_eq!(state.current_index, 1);
@@ -330,16 +326,16 @@ mod tests {
     #[test]
     fn test_advance_at_end() {
         let tokens = vec![create_test_token("hello", true)];
-        let mut state = ReadingState::new_with_default_config(tokens, 300);
+        let mut state = ReadingState::new(tokens, 300, TimingConfig::default());
         state.advance();
         // At end, should stay at 0 (can't go past end)
         assert_eq!(state.current_index, 0);
     }
 
     #[test]
-    fn test_new_with_default_config() {
+    fn test_new() {
         let tokens = vec![create_test_token("test", true)];
-        let state = ReadingState::new_with_default_config(tokens, 300);
+        let state = ReadingState::new(tokens, 300, TimingConfig::default());
         assert_eq!(state.wpm, 300);
         assert_eq!(state.current_index, 0);
     }

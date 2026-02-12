@@ -1,5 +1,7 @@
 pub mod app;
 pub mod audio;
+pub mod cli;
+pub mod config;
 pub mod engine;
 pub mod input;
 pub mod reading;

@@ -64,21 +64,9 @@ impl AutocompleteState {
         &self.query
     }
 
-    /// Get the anchor index for replacement
-    #[allow(dead_code)]
-    pub fn anchor_idx(&self) -> usize {
-        self.anchor_idx
-    }
-
     /// Get the list of discovered files
     pub fn files(&self) -> &Vec<PathBuf> {
         &self.files
-    }
-
-    /// Get the filtered indices
-    #[allow(dead_code)]
-    pub fn filtered_indices(&self) -> &Vec<usize> {
-        &self.filtered_indices
     }
 
     /// Get the currently selected index
@@ -94,12 +82,6 @@ impl AutocompleteState {
     /// Check if discovery is currently running
     pub fn is_scanning(&self) -> bool {
         self.is_scanning
-    }
-
-    /// Get the root directory being scanned
-    #[allow(dead_code)]
-    pub fn scan_root(&self) -> &PathBuf {
-        &self.scan_root
     }
 
     /// Activate autocomplete when @ is typed

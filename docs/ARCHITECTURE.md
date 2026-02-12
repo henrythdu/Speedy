@@ -1,8 +1,8 @@
 # Speedy Architecture Document
 
-**Last Updated:** 2026-02-11 (Code Review Fixes Complete - Production-Grade Quality Achieved)
+**Last Updated:** 2026-02-12 (Config File Support Complete)
 **Purpose:** Document actual codebase structure, methods, structs, and architecture to prevent duplication and confusion.
-**Status:** ✅ Production-ready with 337 tests passing, 0 clippy warnings
+**Status:** ✅ Production-ready with 181 tests passing, 0 clippy warnings
 
 ## ⚠️ Important Notes
 
@@ -23,8 +23,21 @@ src/
 │   ├── mode.rs         # AppMode enum (Command, Reading, Paused, Quit)
 │   └── mod.rs          # App module exports
 ├── engine/             # Shared logic (config only)
-│   ├── config.rs       # TimingConfig with WPM and punctuation constants
+│   ├── config.rs       # TimingConfig with WPM and punctuation constants (serde-enabled)
 │   └── mod.rs          # Engine module exports
+├── config/             # Configuration file support
+│   ├── mod.rs          # Config struct, re-exports TimingConfig
+│   ├── file.rs         # XDG-compliant config file loading
+│   ├── theme.rs        # ThemeColors struct with RGBA colors
+│   └── themes/         # Theme preset implementations
+│       ├── mod.rs      # get_theme(), available_themes()
+│       ├── tokyo_night.rs  # Tokyo Night (default)
+│       ├── dracula.rs  # Dracula
+│       ├── gruvbox.rs  # Gruvbox
+│       ├── catppuccin.rs   # Catppuccin Mocha
+│       ├── nord.rs     # Nord
+│       └── light.rs    # Light
+├── cli.rs              # CLI argument parsing (clap)
 ├── reading/            # Core RSVP reading logic domain
 │   ├── token.rs        # Token struct (word + punctuation + sentence metadata)
 │   ├── timing.rs       # Tokenization, WPM calculations, sentence boundaries
@@ -98,7 +111,7 @@ UI color scheme configuration.
 pub struct Theme {
     pub background: Color,  // #1A1B26 - Midnight background
     pub text: Color,        // #A9B1D6 - Light blue text
-    pub anchor: Color,      // #F7768E - Coral red anchor
+    pub accent: Color,      // #F7768E - Coral red accent (renamed from anchor)
     pub dimmed: Color,      // #646E96 - Dimmed blue
 }
 ```
@@ -108,6 +121,53 @@ pub struct Theme {
 **Key Methods:**
 - `midnight() -> Self` - Returns midnight theme colors (src/ui/theme.rs:18)
 - `default() -> Self` - Returns midnight theme (src/ui/theme.rs:27)
+
+### `Config` (`src/config/mod.rs:18`)
+Application configuration from TOML file.
+```rust
+pub struct Config {
+    pub timing: TimingConfig,   // WPM and delay settings
+    pub theme: ThemeColors,     // Color scheme
+}
+```
+
+**Purpose:** Holds user configuration loaded from XDG-compliant config file.
+
+**Key Methods:**
+- `default() -> Self` - Creates config with Tokyo Night theme, 300 WPM (src/config/mod.rs:30)
+- `load() -> Result<Self, ConfigError>` - Load from XDG config path (src/config/mod.rs:42)
+
+### `ThemeColors` (`src/config/theme.rs:6`)
+RGBA color configuration for themes.
+```rust
+pub struct ThemeColors {
+    pub name: String,           // Theme name for display
+    pub background: [u8; 4],    // RGBA background
+    pub text: [u8; 4],          // RGBA text color
+    pub accent: [u8; 4],        // RGBA accent color
+    pub dimmed: [u8; 4],        // RGBA dimmed color
+}
+```
+
+**Purpose:** Cross-platform theme colors in RGBA format.
+
+**Key Methods:**
+- `to_theme(&self) -> Theme` - Convert to ratatui Color format (src/config/theme.rs:38)
+
+### `Args` (`src/cli.rs:6`)
+CLI argument parsing with clap.
+```rust
+pub struct Args {
+    pub config: Option<PathBuf>,  // --config <PATH>
+    pub list_themes: bool,        // --list-themes
+    pub file: Option<PathBuf>,    // Positional file argument
+}
+```
+
+**Purpose:** Parse command-line arguments.
+
+**Key Methods:**
+- `parse() -> Self` - Parse from std::env::args() (src/cli.rs:15)
 
 ### `ReadingState` (`src/reading/state.rs:14`)
 Pure reading state with tokens and timing.
@@ -544,7 +604,7 @@ All user input is validated at the boundaries:
 
 ## 5. Current Implementation Status
 
-### ✅ Implemented (As of 2026-02-11 - Production-Grade Refactoring Complete)
+### ✅ Implemented (As of 2026-02-12 - Config File Support Complete)
 
 **Core Features:**
 - ✅ PDF/EPUB/clipboard parsing (`src/input/`)
@@ -559,6 +619,14 @@ All user input is validated at the boundaries:
 - ✅ **Zero unwrap/expect in production paths** - All errors properly handled
 - ✅ Auto-advancement timing loop (src/ui/terminal.rs:39)
 - ✅ Sentence-aware navigation (j/k keys) (src/app/app_impl.rs:93)
+
+**Configuration File Support:**
+- ✅ TOML config file parsing (src/config/mod.rs)
+- ✅ XDG-compliant config paths (src/config/file.rs)
+- ✅ 6 theme presets: tokyo-night, dracula, gruvbox, catppuccin-mocha, nord, light (src/config/themes/)
+- ✅ CLI flags: `--config <PATH>`, `--list-themes` (src/cli.rs)
+- ✅ ThemeColors struct for RGBA color config (src/config/theme.rs)
+- ✅ Renamed `anchor` → `accent` across UI for consistency
 
 **Word-Level LRU Cache:**
 - ✅ WordCache struct with LRU storage (src/rendering/cache.rs)
@@ -639,6 +707,10 @@ All user input is validated at the boundaries:
 - `image = "0.25"` - Image buffer types ✅
 - `imageproc = "0.25"` - Image manipulation ✅
 - `base64 = "0.22"` - Base64 encoding for KGP ✅
+- `serde = "1.0"` - Serialization (config file support) ✅
+- `toml = "0.8"` - TOML parsing (config file support) ✅
+- `directories = "6.0"` - XDG paths (config file support) ✅
+- `clap = "4.5"` - CLI argument parsing ✅
 
 ### Development
 - `cargo test` - Unit and integration tests (337 passing)
@@ -681,6 +753,34 @@ All user input is validated at the boundaries:
 ---
 
 ## 9. Recent Cleanup
+
+### 2026-02-12 - Config File Support Added
+
+**New Modules:**
+- `src/cli.rs` - CLI argument parsing with clap
+- `src/config/mod.rs` - Config struct with serde support
+- `src/config/file.rs` - XDG-compliant config file loading
+- `src/config/theme.rs` - ThemeColors struct (RGBA format)
+- `src/config/themes/` - 6 theme preset implementations
+
+**Dependencies Added:**
+- `serde = "1.0"` - Serialization
+- `toml = "0.8"` - TOML parsing
+- `directories = "6.0"` - XDG paths
+- `clap = "4.5"` - CLI argument parsing
+
+**Breaking Changes:**
+- Renamed `anchor` → `accent` in Theme struct and all UI consumers
+
+**New Features:**
+- `--config <PATH>` CLI flag for custom config file
+- `--list-themes` CLI flag to list available themes
+- XDG config path: `~/.config/speedy/config.toml`
+- Example config file: `example_config.toml`
+
+**Validation Results:**
+- 181 tests passing
+- 0 clippy warnings
 
 ### 2026-02-11 - Code Review Issues Resolved
 

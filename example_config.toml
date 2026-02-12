@@ -1,0 +1,135 @@
+# Speedy Configuration Example
+# ============================
+# Copy this file to your config directory:
+#   Linux:   ~/.config/speedy/config.toml
+#   macOS:   ~/Library/Application Support/speedy/config.toml
+#   Windows: %APPDATA%\speedy\config.toml
+#
+# All settings are optional - Speedy uses sensible defaults if not specified.
+
+# -----------------------------------------------------------------------------
+# Theme Selection
+# -----------------------------------------------------------------------------
+# Choose from: tokyo-night, dracula, gruvbox, catppuccin-mocha, nord, light
+#
+# Descriptions:
+#   tokyo-night      - Dark theme with blue-purple hues (default)
+#   dracula          - Classic purple-accented dark theme
+#   gruvbox          - Retro warm color palette
+#   catppuccin-mocha - Soothing pastel dark theme
+#   nord             - Arctic, bluish color scheme
+#   light            - Light background theme for daytime use
+#
+# Use `speedy --list-themes` to see all available themes.
+
+theme = "tokyo-night"
+
+# -----------------------------------------------------------------------------
+# Timing Configuration
+# -----------------------------------------------------------------------------
+# Controls reading speed and pause durations for natural reading rhythm.
+# All multipliers are relative to the base word display time.
+
+[timing]
+
+# Words Per Minute
+# ----------------
+# Base reading speed. Each word is displayed for (60 / wpm) seconds.
+# Range: 50-1000 (values outside this range are clamped)
+# Default: 300
+wpm = 300
+
+# Punctuation Multipliers
+# -----------------------
+# These values multiply the base display time for words followed by punctuation.
+# Higher values = longer pauses, which can improve comprehension.
+#
+# Example: At 300 WPM, base time = 200ms
+#   period_multiplier = 3.0 → words ending with '.' get 600ms
+
+# Period/Full Stop (.)
+# Default: 3.0
+# Recommended: 2.5-4.0 for comfortable sentence endings
+period_multiplier = 3.0
+
+# Comma (,)
+# Default: 1.5
+# Recommended: 1.2-2.0 for brief clause pauses
+comma_multiplier = 1.5
+
+# Question Mark (?)
+# Default: 3.0
+# Same as period - allows time to process questions
+question_multiplier = 3.0
+
+# Exclamation Mark (!)
+# Default: 3.0
+# Same as period - allows time to process emphasis
+exclamation_multiplier = 3.0
+
+# Newline
+# --------
+# Pause multiplier for line breaks / paragraph boundaries.
+# Default: 4.0
+# Recommended: 3.0-5.0 for clear paragraph separation
+newline_multiplier = 4.0
+
+# Long Word Handling
+# ------------------
+# Words longer than the threshold get extra display time.
+# This helps with longer words that need more processing time.
+
+# Long Word Threshold
+# Number of characters before a word is considered "long".
+# Default: 10
+long_word_threshold = 10
+
+# Long Word Penalty
+# Time multiplier for words exceeding the threshold.
+# A word with 15 characters at 300 WPM with penalty 1.15:
+#   base_time = 200ms
+#   actual_time = 200ms * 1.15 = 230ms
+# Default: 1.15
+long_word_penalty = 1.15
+
+# -----------------------------------------------------------------------------
+# Quick Presets
+# -----------------------------------------------------------------------------
+# Uncomment ONE of these sections to use a preset configuration.
+# Comment out or remove the individual settings above when using presets.
+
+# FAST READER (500 WPM, minimal pauses)
+# -------------------------------------
+# [timing]
+# wpm = 500
+# period_multiplier = 2.0
+# comma_multiplier = 1.2
+# question_multiplier = 2.0
+# exclamation_multiplier = 2.0
+# newline_multiplier = 2.5
+# long_word_threshold = 12
+# long_word_penalty = 1.1
+
+# COMFORTABLE (250 WPM, generous pauses)
+# --------------------------------------
+# [timing]
+# wpm = 250
+# period_multiplier = 4.0
+# comma_multiplier = 2.0
+# question_multiplier = 4.0
+# exclamation_multiplier = 4.0
+# newline_multiplier = 5.0
+# long_word_threshold = 8
+# long_word_penalty = 1.2
+
+# COMPREHENSION FOCUS (200 WPM, extra pauses)
+# -------------------------------------------
+# [timing]
+# wpm = 200
+# period_multiplier = 5.0
+# comma_multiplier = 2.5
+# question_multiplier = 5.0
+# exclamation_multiplier = 5.0
+# newline_multiplier = 6.0
+# long_word_threshold = 8
+# long_word_penalty = 1.3

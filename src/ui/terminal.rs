@@ -555,15 +555,8 @@ impl TuiManager {
 
         // Spawn discovery thread
         let cache = Arc::clone(&self.discovery_cache);
-        match spawn_discovery_thread(current_dir, cache) {
-            Ok(handle) => {
-                self.discovery_receiver = Some(handle.receiver);
-            }
-            Err(e) => {
-                tracing::warn!("Failed to spawn file discovery: {}", e);
-                // Discovery failed, but UI can continue without autocomplete
-            }
-        }
+        let handle = spawn_discovery_thread(current_dir, cache);
+        self.discovery_receiver = Some(handle.receiver);
     }
 
     /// Handle terminal resize events
