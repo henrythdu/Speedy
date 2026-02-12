@@ -171,11 +171,6 @@ impl App {
                 self.toggle_pause();
                 true
             }
-            // Quit to REPL (PRD Section 7.2)
-            'q' | 'Q' => {
-                self.mode = AppMode::Command;
-                true
-            }
             _ => false,
         }
     }
@@ -264,18 +259,6 @@ mod tests {
         let result = app.handle_keypress(' ');
         assert!(result);
         assert_eq!(app.mode, AppMode::Reading);
-    }
-
-    #[test]
-    fn test_keypress_q_quit_to_repl() {
-        let mut app = App::new();
-        app.start_reading("test", 300);
-
-        assert_eq!(app.mode, AppMode::Reading);
-
-        let result = app.handle_keypress('q');
-        assert!(result);
-        assert_eq!(app.mode, AppMode::Command);
     }
 
     #[test]

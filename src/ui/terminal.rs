@@ -285,26 +285,31 @@ impl TuiManager {
                                     }
                                 }
                                 KeyCode::Tab => {
-                                    if app.mode() == AppMode::Command
-                                        && self.autocomplete_state.is_active()
+                                    if app.mode() == AppMode::Command {
+                                        if self.autocomplete_state.is_active() {
+                                            // Apply selection with trailing space
+                                            self.autocomplete_state
+                                                .apply_selection(&mut self.command_buffer);
+                                            self.command_buffer.push(' ');
+                                            // Keep autocomplete open for chaining
+                                        } else if app.reading_state().is_some() {
+                                            // Toggle to Reading mode
+                                            app.set_mode(AppMode::Reading);
+                                        }
+                                    } else if app.mode() == AppMode::Reading
+                                        || app.mode() == AppMode::Paused
                                     {
-                                        // Apply selection with trailing space
-                                        self.autocomplete_state
-                                            .apply_selection(&mut self.command_buffer);
-                                        self.command_buffer.push(' ');
-                                        // Keep autocomplete open for chaining
+                                        // Toggle to Command mode
+                                        app.set_mode(AppMode::Command);
+                                        self.command_buffer.clear();
                                     }
                                 }
                                 KeyCode::Esc => {
                                     if self.autocomplete_state.is_active() {
                                         // Close autocomplete but keep typed text
                                         self.autocomplete_state.deactivate();
-                                    } else if app.mode() == AppMode::Reading
-                                        || app.mode() == AppMode::Paused
-                                    {
-                                        app.set_mode(AppMode::Command);
-                                        self.command_buffer.clear();
                                     }
+                                    // Tab is now used for mode switching
                                 }
                                 _ => {}
                             }
