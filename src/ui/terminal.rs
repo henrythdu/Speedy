@@ -1,6 +1,6 @@
 use crate::app::{mode::AppMode, App};
 use crate::rendering::kitty::KittyGraphicsRenderer;
-use crate::rendering::renderer::RsvpRenderer;
+use crate::rendering::renderer::{RenderFrame, RsvpRenderer};
 use crate::ui::autocomplete::cache::PerDirectoryCache;
 use crate::ui::autocomplete::discovery::spawn_discovery_thread;
 use crate::ui::autocomplete::render::render_autocomplete_popup;
@@ -480,20 +480,25 @@ impl TuiManager {
             if !trimmed.is_empty() && trimmed != "\n" && trimmed != "\r\n" {
                 // Use precomputed char_count from token for O(1) anchor calculation
                 // instead of O(n) chars().count() on the word string
-                let anchor_pos = if let Some(reading_state) = app.reading_state() {
-                    if let Some(token) = reading_state.current_token() {
-                        crate::reading::calculate_anchor_position_from_len(token.char_count())
+                let (anchor_pos, ghost_prev, ghost_next) =
+                    if let Some(reading_state) = app.reading_state() {
+                        let anchor = if let Some(token) = reading_state.current_token() {
+                            crate::reading::calculate_anchor_position_from_len(token.char_count())
+                        } else {
+                            crate::reading::calculate_anchor_position(&word)
+                        };
+                        // Get ghost context (prev word, next word) for eye tracking continuity
+                        let (prev, next) = reading_state.ghost_context();
+                        (anchor, prev, next)
                     } else {
-                        crate::reading::calculate_anchor_position(&word)
-                    }
-                } else {
-                    crate::reading::calculate_anchor_position(&word)
-                };
+                        (crate::reading::calculate_anchor_position(&word), None, None)
+                    };
 
-                // Render word
-                if let Err(e) =
-                    RsvpRenderer::render_word(&mut self.kitty_renderer, &word, anchor_pos)
-                {
+                // Create render frame with ghost context
+                let frame = RenderFrame::with_ghosts(&word, anchor_pos, ghost_prev, ghost_next);
+
+                // Render frame (current word + optional ghost words)
+                if let Err(e) = RsvpRenderer::render_frame(&mut self.kitty_renderer, &frame) {
                     app.set_error(format!("Render error: {}", e));
                 }
 

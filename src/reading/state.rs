@@ -1,11 +1,17 @@
 use crate::engine::config::TimingConfig;
-use crate::reading::{wpm_to_milliseconds, Token};
+use crate::reading::{calculate_anchor_position_from_len, wpm_to_milliseconds, Token};
+
+/// Ghost context for rendering: (prev_word, next_word)
+/// Each is Option<(&str, anchor_index)>
+pub type GhostContext<'a> = (Option<(&'a str, usize)>, Option<(&'a str, usize)>);
 
 pub struct ReadingState {
     tokens: Vec<Token>,
     current_index: usize,
     wpm: u32,
     config: TimingConfig,
+    /// Previous word for ghost display: (text, anchor_index)
+    prev_word: Option<(String, usize)>,
 }
 
 impl ReadingState {
@@ -15,6 +21,7 @@ impl ReadingState {
             current_index: 0,
             wpm,
             config,
+            prev_word: None,
         }
     }
 
@@ -42,6 +49,29 @@ impl ReadingState {
             Some(token) => self.calculate_token_duration(token),
             None => 0,
         }
+    }
+
+    /// Peek at the next token without advancing the iterator.
+    /// Returns None if at the end of tokens.
+    pub fn peek_next(&self) -> Option<&Token> {
+        let next_index = self.current_index.saturating_add(1);
+        self.tokens.get(next_index)
+    }
+
+    /// Get ghost context for rendering: (prev_word, next_word)
+    /// Each is Option<(&str, anchor_index)>
+    /// - prev_word: the word before current (from stored prev_word field)
+    /// - next_word: the word after current (from peek_next)
+    pub fn ghost_context(&self) -> GhostContext<'_> {
+        let prev = self
+            .prev_word
+            .as_ref()
+            .map(|(text, anchor)| (text.as_str(), *anchor));
+        let next = self.peek_next().map(|token| {
+            let anchor = calculate_anchor_position_from_len(token.char_count());
+            (token.text(), anchor)
+        });
+        (prev, next)
     }
 
     pub fn adjust_wpm(&mut self, delta: i32) {
@@ -91,6 +121,12 @@ impl ReadingState {
     }
 
     pub fn advance(&mut self) {
+        // Store current token as prev_word before advancing
+        if let Some(token) = self.current_token() {
+            let anchor = calculate_anchor_position_from_len(token.char_count());
+            self.prev_word = Some((token.text().to_string(), anchor));
+        }
+
         if self.current_index < self.tokens.len().saturating_sub(1) {
             self.current_index += 1;
         }

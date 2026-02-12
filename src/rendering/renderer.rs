@@ -1,9 +1,56 @@
 //! RsvpRenderer trait definition for Kitty Graphics Protocol rendering
 //!
-//! This trait provides pixel-perfect word rendering with sub-pixel OVP anchoring.
+//! This trait provides pixel-perfect word rendering with sub-pixel OVP anchoring
+//! with optional vertical ghost words for eye tracking continuity.
 
 use std::error::Error;
 use std::fmt;
+
+/// A single frame to render with optional ghost context
+///
+/// Ghost words (previous and next) provide eye tracking continuity and
+/// comprehension preview during speed reading. All three words' anchor
+/// letters share the same X coordinate (ORP center).
+///
+/// # Example
+/// ```
+/// use speedy_rendering::renderer::RenderFrame;
+///
+/// let frame = RenderFrame {
+///     word: "hello",
+///     anchor: 2,
+///     ghost_prev: Some(("world", 2)),
+///     ghost_next: Some(("rust", 1)),
+/// };
+/// ```
+#[derive(Debug, Clone, PartialEq)]
+pub struct RenderFrame<'a> {
+    /// Current word being displayed
+    pub word: &'a str,
+    /// Anchor index in current word (character position at ORP center)
+    pub anchor: usize,
+    /// Previous word ghost (word text, anchor position)
+    pub ghost_prev: Option<(&'a str, usize)>,
+    /// Next word ghost (word text, anchor position)
+    pub ghost_next: Option<(&'a str, usize)>,
+}
+
+impl<'a> RenderFrame<'a> {
+    /// Create a frame with ghost context
+    pub fn with_ghosts(
+        word: &'a str,
+        anchor: usize,
+        ghost_prev: Option<(&'a str, usize)>,
+        ghost_next: Option<(&'a str, usize)>,
+    ) -> Self {
+        Self {
+            word,
+            anchor,
+            ghost_prev,
+            ghost_next,
+        }
+    }
+}
 
 /// Errors that can occur during renderer operations
 #[derive(Debug, Clone, PartialEq)]
@@ -41,20 +88,29 @@ pub trait RsvpRenderer {
     /// Called once at app startup. May fail if resources unavailable.
     fn initialize(&mut self) -> Result<(), RendererError>;
 
-    /// Render a single word at the current position
+    /// Render a complete frame with optional ghost words
     ///
-    /// The word is positioned according to OVP (Optimal Viewing Position) anchoring.
-    /// In graphics mode: sub-pixel accurate positioning
-    /// In TUI mode: snaps to nearest character cell
+    /// Ghost words provide eye tracking continuity:
+    /// - `ghost_prev`: Previous word displayed above current (faded)
+    /// - `ghost_next`: Next word displayed below current (faded)
+    ///
+    /// All three words' anchor letters share the same X coordinate (ORP center),
+    /// keeping the eye fixed horizontally.
+    ///
+    /// # Render Order (Critical for Partial-Render UX)
+    /// 1. Previous ghost (above) - transmitted first, non-fatal if fails
+    /// 2. Next ghost (below) - transmitted second, non-fatal if fails
+    /// 3. Current word (center) - transmitted last, MUST succeed
+    ///
+    /// This order prioritizes the current word if transmission is incomplete.
     ///
     /// # Arguments
-    /// * `word` - The word to render
-    /// * `anchor_position` - Character index within word that should be at OVP (0-based)
+    /// * `frame` - The frame to render containing current word and optional ghosts
     ///
     /// # Errors
-    /// Returns `RendererError::InvalidArguments` if `anchor_position` is out of bounds
-    /// for the given word.
-    fn render_word(&mut self, word: &str, anchor_position: usize) -> Result<(), RendererError>;
+    /// Returns `RendererError::InvalidArguments` if anchor positions are out of bounds.
+    /// Ghost render failures should be logged but NOT propagated (non-fatal).
+    fn render_frame(&mut self, frame: &RenderFrame) -> Result<(), RendererError>;
 
     /// Clear the current word from the display
     ///
@@ -79,12 +135,30 @@ mod tests {
             Ok(())
         }
 
-        fn render_word(&mut self, word: &str, anchor_position: usize) -> Result<(), RendererError> {
-            if anchor_position >= word.chars().count() {
+        fn render_frame(&mut self, frame: &RenderFrame) -> Result<(), RendererError> {
+            // Validate current word anchor
+            if frame.anchor >= frame.word.chars().count() {
                 return Err(RendererError::InvalidArguments(format!(
-                    "anchor_position {} out of bounds for word '{}'",
-                    anchor_position, word
+                    "anchor {} out of bounds for word '{}'",
+                    frame.anchor, frame.word
                 )));
+            }
+            // Validate ghost anchors (non-fatal in real impl, but validate for tests)
+            if let Some((word, anchor)) = frame.ghost_prev {
+                if anchor >= word.chars().count() {
+                    return Err(RendererError::InvalidArguments(format!(
+                        "ghost_prev anchor {} out of bounds for word '{}'",
+                        anchor, word
+                    )));
+                }
+            }
+            if let Some((word, anchor)) = frame.ghost_next {
+                if anchor >= word.chars().count() {
+                    return Err(RendererError::InvalidArguments(format!(
+                        "ghost_next anchor {} out of bounds for word '{}'",
+                        anchor, word
+                    )));
+                }
             }
             Ok(())
         }
@@ -106,30 +180,26 @@ mod tests {
 
     #[test]
     fn test_stub_implementation_compiles() {
-        // Verify stub implementation exists and methods are callable
         let mut renderer = TestRenderer;
 
         assert!(renderer.initialize().is_ok());
-        assert!(renderer.render_word("hello", 1).is_ok());
+        let frame = RenderFrame::with_ghosts("hello", 1, None, None);
+        assert!(renderer.render_frame(&frame).is_ok());
         assert!(renderer.clear().is_ok());
         assert!(renderer.cleanup().is_ok());
     }
 
     #[test]
-    fn test_render_word_validates_anchor_position() {
+    fn test_render_frame_validates_anchor_position() {
         let mut renderer = TestRenderer;
 
-        // Valid anchor positions should work
-        assert!(renderer.render_word("hello", 0).is_ok());
-        assert!(renderer.render_word("hello", 4).is_ok());
+        let frame = RenderFrame::with_ghosts("hello", 0, None, None);
+        assert!(renderer.render_frame(&frame).is_ok());
+        let frame = RenderFrame::with_ghosts("hello", 4, None, None);
+        assert!(renderer.render_frame(&frame).is_ok());
 
-        // Out of bounds should return error
-        let result = renderer.render_word("hi", 5);
-        assert!(result.is_err());
-        match result {
-            Err(RendererError::InvalidArguments(_)) => (), // Expected
-            _ => panic!("Expected InvalidArguments error"),
-        }
+        let frame = RenderFrame::with_ghosts("hi", 5, None, None);
+        assert!(renderer.render_frame(&frame).is_err());
     }
 
     #[test]
@@ -142,5 +212,44 @@ mod tests {
 
         let err = RendererError::InvalidArguments("test".to_string());
         assert!(err.to_string().contains("Invalid arguments"));
+    }
+
+    #[test]
+    fn test_render_frame_with_ghosts() {
+        let frame =
+            RenderFrame::with_ghosts("current", 3, Some(("previous", 4)), Some(("next", 1)));
+        assert_eq!(frame.word, "current");
+        assert_eq!(frame.anchor, 3);
+        assert_eq!(frame.ghost_prev, Some(("previous", 4)));
+        assert_eq!(frame.ghost_next, Some(("next", 1)));
+    }
+
+    #[test]
+    fn test_render_frame_validates_anchors() {
+        let mut renderer = TestRenderer;
+
+        // Valid frame with ghosts
+        let frame = RenderFrame::with_ghosts("hello", 2, Some(("prev", 1)), Some(("next", 2)));
+        assert!(renderer.render_frame(&frame).is_ok());
+
+        // Invalid current word anchor
+        let frame = RenderFrame::with_ghosts("hi", 5, None, None);
+        assert!(renderer.render_frame(&frame).is_err());
+
+        // Invalid ghost_prev anchor
+        let frame = RenderFrame::with_ghosts("word", 1, Some(("a", 5)), None);
+        assert!(renderer.render_frame(&frame).is_err());
+
+        // Invalid ghost_next anchor
+        let frame = RenderFrame::with_ghosts("word", 1, None, Some(("abc", 10)));
+        assert!(renderer.render_frame(&frame).is_err());
+    }
+
+    #[test]
+    fn test_render_frame_trait_object() {
+        // Verify render_frame works through trait object
+        let mut renderer: Box<dyn RsvpRenderer> = Box::new(TestRenderer);
+        let frame = RenderFrame::with_ghosts("test", 1, None, None);
+        assert!(renderer.render_frame(&frame).is_ok());
     }
 }
