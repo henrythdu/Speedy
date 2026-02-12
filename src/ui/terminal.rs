@@ -487,8 +487,12 @@ impl TuiManager {
                         } else {
                             crate::reading::calculate_anchor_position(&word)
                         };
-                        // Get ghost context (prev word, next word) for eye tracking continuity
-                        let (prev, next) = reading_state.ghost_context();
+                        // Get ghost context only if enabled in config
+                        let (prev, next) = if app.ghost_words_enabled() {
+                            reading_state.ghost_context()
+                        } else {
+                            (None, None)
+                        };
                         (anchor, prev, next)
                     } else {
                         (crate::reading::calculate_anchor_position(&word), None, None)

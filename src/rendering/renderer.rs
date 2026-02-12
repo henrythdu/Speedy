@@ -14,7 +14,7 @@ use std::fmt;
 ///
 /// # Example
 /// ```
-/// use speedy_rendering::renderer::RenderFrame;
+/// use speedy::rendering::renderer::RenderFrame;
 ///
 /// let frame = RenderFrame {
 ///     word: "hello",

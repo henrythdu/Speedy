@@ -36,6 +36,11 @@ pub struct Config {
     /// Timing configuration for reading speed and punctuation pauses.
     #[serde(default)]
     pub timing: TimingConfig,
+
+    /// Enable vertical ghost words (previous word above, next word below).
+    /// Provides eye tracking continuity and comprehension preview.
+    #[serde(default)]
+    pub ghost_words: bool,
 }
 
 // Default value functions for serde
@@ -48,6 +53,7 @@ impl Default for Config {
         Self {
             theme: DEFAULT_THEME.to_string(),
             timing: TimingConfig::default(),
+            ghost_words: false,
         }
     }
 }
@@ -62,6 +68,11 @@ impl Config {
     /// Get a reference to the timing configuration
     pub fn timing(&self) -> &TimingConfig {
         &self.timing
+    }
+
+    /// Check if ghost words are enabled
+    pub fn ghost_words(&self) -> bool {
+        self.ghost_words
     }
 }
 

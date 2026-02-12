@@ -116,6 +116,11 @@ impl App {
         self.reading_state.as_ref().map(|s| s.wpm()).unwrap_or(0)
     }
 
+    /// Check if ghost words are enabled
+    pub fn ghost_words_enabled(&self) -> bool {
+        self.config.ghost_words()
+    }
+
     /// Get the duration for the current token in milliseconds
     ///
     /// Returns the calculated duration for the current token, including
