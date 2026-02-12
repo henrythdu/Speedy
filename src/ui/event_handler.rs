@@ -91,7 +91,7 @@ impl Default for HandlerContext {
 /// - Character input for command building
 /// - Enter key for command execution
 /// - Backspace for character deletion
-/// - Esc to exit to Reading mode (if reading state exists)
+/// - Tab to toggle to Reading mode (if reading state exists)
 #[derive(Debug, Clone)]
 pub struct CommandModeHandler {
     /// Shared context for command handling
@@ -134,8 +134,8 @@ impl CommandModeHandler {
                 context.command_buffer.pop();
                 Ok(CommandAction::Continue)
             }
-            KeyCode::Esc => {
-                // Exit to Reading mode if we have reading state
+            KeyCode::Tab => {
+                // Toggle to Reading mode if we have reading state
                 if app.reading_state.is_some() {
                     app.set_mode(AppMode::Reading);
                 }
@@ -172,7 +172,7 @@ pub enum CommandAction {
 /// - Navigation keys (j/k for sentence navigation)
 /// - WPM adjustment ([/])
 /// - Space for pause/resume
-/// - q to return to Command mode
+/// - Tab to toggle to Command mode
 /// - Character keys passed to app's handle_keypress
 #[derive(Debug, Clone, Copy)]
 pub struct ReadingModeHandler;
@@ -198,7 +198,7 @@ impl ReadingModeHandler {
                 app.handle_keypress(c);
                 Ok(())
             }
-            KeyCode::Esc => {
+            KeyCode::Tab => {
                 app.set_mode(AppMode::Command);
                 Ok(())
             }
