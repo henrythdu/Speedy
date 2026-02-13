@@ -95,7 +95,7 @@ fn render_scanning_indicator(frame: &mut Frame, area: Rect) {
     let block = Block::default()
         .title("FILES")
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(colors::text()))
+        .border_style(Style::default().fg(colors::accent()))
         .style(Style::default().bg(colors::surface()));
 
     let paragraph = Paragraph::new("Scanning...")
@@ -120,7 +120,7 @@ fn render_file_list(frame: &mut Frame, state: &AutocompleteState, area: Rect) {
     let block = Block::default()
         .title(title)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(colors::text()))
+        .border_style(Style::default().fg(colors::accent()))
         .style(Style::default().bg(colors::surface()));
 
     if match_count == 0 {

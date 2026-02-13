@@ -1,4 +1,16 @@
 use ratatui::style::Color;
+use std::cell::RefCell;
+
+thread_local! {
+    static CURRENT_THEME_NAME: RefCell<String> = RefCell::new(String::from("midnight"));
+}
+
+/// Set the current theme name (called from terminal.rs draw loop)
+pub fn set_current_theme(name: &str) {
+    CURRENT_THEME_NAME.with(|n| {
+        *n.borrow_mut() = name.to_string();
+    });
+}
 
 /// Midnight theme colors (PRD Section 4.1)
 #[derive(Debug, Clone, Copy)]
@@ -94,9 +106,9 @@ impl Theme {
         }
     }
 
-    /// Default theme is midnight
+    /// Get current theme from thread-local storage
     pub fn current() -> Self {
-        Self::midnight()
+        CURRENT_THEME_NAME.with(|name| Self::get_by_name(&name.borrow()))
     }
 }
 

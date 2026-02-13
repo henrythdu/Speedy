@@ -7,7 +7,7 @@ use crate::ui::autocomplete::render::render_autocomplete_popup;
 use crate::ui::autocomplete::state::AutocompleteState;
 use crate::ui::config_popup::{render_config_popup, PopupAction};
 use crate::ui::reader::view::{render_command_deck, render_wpm};
-use crate::ui::theme::Theme;
+use crate::ui::theme::{set_current_theme, Theme};
 use anyhow::Result;
 
 use crossterm::{
@@ -426,6 +426,7 @@ impl TuiManager {
         // Render background via Ratatui
         self.terminal.draw(|frame| {
             let area = frame.area();
+            set_current_theme(app.theme_name());
             let theme = Theme::get_by_name(app.theme_name());
 
             // Fill entire viewport with background color first
