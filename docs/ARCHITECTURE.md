@@ -1,8 +1,8 @@
 # Speedy Architecture Document
 
-**Last Updated:** 2026-02-12 (Config File Support Complete)
+**Last Updated:** 2026-02-12 (Ghost Words + Tab Mode Toggle)
 **Purpose:** Document actual codebase structure, methods, structs, and architecture to prevent duplication and confusion.
-**Status:** ✅ Production-ready with 181 tests passing, 0 clippy warnings
+**Status:** ✅ Production-ready with 165 tests passing, 0 clippy warnings
 
 ## ⚠️ Important Notes
 
@@ -128,14 +128,16 @@ Application configuration from TOML file.
 pub struct Config {
     pub timing: TimingConfig,   // WPM and delay settings
     pub theme: ThemeColors,     // Color scheme
+    pub ghost_words: bool,      // Enable ghost words (default: false)
 }
 ```
 
 **Purpose:** Holds user configuration loaded from XDG-compliant config file.
 
 **Key Methods:**
-- `default() -> Self` - Creates config with Tokyo Night theme, 300 WPM (src/config/mod.rs:30)
-- `load() -> Result<Self, ConfigError>` - Load from XDG config path (src/config/mod.rs:42)
+- `default() -> Self` - Creates config with Tokyo Night theme, 300 WPM, ghost_words=false (src/config/mod.rs:50)
+- `load() -> Result<Self, ConfigError>` - Load from XDG config path (src/config/mod.rs:62)
+- `ghost_words() -> bool` - Returns ghost words setting (src/config/mod.rs:74)
 
 ### `ThemeColors` (`src/config/theme.rs:6`)
 RGBA color configuration for themes.
@@ -177,6 +179,7 @@ pub struct ReadingState {
     current_index: usize,              // Current reading position
     wpm: u32,                          // Words per minute setting
     config: ReadingConfig,             // Timing configuration
+    prev_word: Option<String>,         // Previous word for ghost context
 }
 ```
 
@@ -184,7 +187,7 @@ pub struct ReadingState {
 
 **Key Methods:**
 - `new_with_default_config(tokens: Vec<Token>, wpm: u32) -> Self` - Creates with default config (src/reading/state.rs:27)
-- `advance(&mut self)` - Moves to next token (src/reading/state.rs:41)
+- `advance(&mut self)` - Moves to next token, updates prev_word (src/reading/state.rs:41)
 - `jump_to_next_sentence(&mut self)` - Jumps to next sentence start (src/reading/state.rs:50)
 - `jump_to_previous_sentence(&mut self)` - Jumps to previous sentence start (src/reading/state.rs:66)
 - `current_token(&self) -> Option<&Token>` - Returns current token (src/reading/state.rs:82)
@@ -193,6 +196,8 @@ pub struct ReadingState {
 - `current_token_duration(&self) -> Duration` - Calculates display duration with punctuation/length penalties (src/reading/state.rs:107)
 - `get_wpm(&self) -> u32` - Returns current WPM (src/reading/state.rs:117)
 - `adjust_wpm(&mut self, delta: i32)` - Adjusts WPM with clamping (src/reading/state.rs:121)
+- `ghost_context(&self) -> GhostContext<'_>` - Returns (prev, next) words with anchors for ghost rendering (src/reading/state.rs:65)
+- `peek_next(&self) -> Option<(&str, usize)>` - Returns next word with anchor position (src/reading/state.rs:79)
 
 ### `Token` (`src/reading/token.rs:1`)
 A word with punctuation and precomputed metadata for O(1) timing calculations.
@@ -225,6 +230,7 @@ Pluggable trait for RSVP rendering backends.
 pub trait RsvpRenderer {
     fn initialize(&mut self) -> Result<(), RendererError>;
     fn render_word(&mut self, word: &str, anchor_position: usize) -> Result<(), RendererError>;
+    fn render_frame(&mut self, frame: &RenderFrame) -> Result<(), RendererError>;
     fn clear(&mut self) -> Result<(), RendererError>;
     fn cleanup(&mut self) -> Result<(), RendererError>;
 }
@@ -232,7 +238,33 @@ pub trait RsvpRenderer {
 
 **Purpose:** Abstracts rendering implementations (Kitty Graphics, future Sixel/iTerm2). Enables backend switching without changing reading logic. Object-safe trait supporting `Box<dyn RsvpRenderer>`.
 
-**Note:** Removed `supports_subpixel_ovp()` method (no longer needed - all renderers support sub-pixel OVP).
+**Note:** `render_frame()` is the preferred method for ghost word support. `render_word()` retained for backward compatibility.
+
+### `RenderFrame` (`src/rendering/renderer.rs:27`)
+Frame data for rendering current word with optional ghost word context.
+```rust
+pub struct RenderFrame<'a> {
+    pub word: &'a str,           // Current word to display
+    pub anchor: usize,           // Anchor position (OVP index)
+    pub prev_ghost: Option<(&'a str, usize)>, // Previous word with anchor
+    pub next_ghost: Option<(&'a str, usize)>, // Next word with anchor
+}
+```
+
+**Purpose:** Bundles all rendering data for a single frame. Used with `render_frame()` for ghost word support.
+
+**Key Methods:**
+- `new(word, anchor) -> Self` - Create frame without ghosts (src/rendering/renderer.rs:46)
+- `with_ghosts(word, anchor, prev, next) -> Self` - Create frame with optional ghosts (src/rendering/renderer.rs:60)
+- `validate(&self) -> Result<(), RendererError>` - Validate anchor positions (src/rendering/renderer.rs:78)
+
+### `GhostContext` (`src/reading/state.rs:6`)
+Type alias for ghost word context (previous and next words with their anchor positions).
+```rust
+pub type GhostContext<'a> = (Option<(&'a str, usize)>, Option<(&'a str, usize)>);
+```
+
+**Purpose:** Reduces type complexity when passing ghost word context.
 
 ### `WordCache` (`src/rendering/cache.rs:34`)
 Word-Level LRU Cache for rendered word buffers to enable consistent 1000+ WPM performance.
@@ -291,8 +323,14 @@ pub struct KittyGraphicsRenderer {
 **Implements RsvpRenderer trait:**
 - `initialize()` - Load font, get metrics, query viewport, init word cache (src/rendering/kitty/mod.rs:108)
 - `render_word(word, anchor_position)` - Use word cache for rasterization, transmit via KGP (src/rendering/kitty/mod.rs:139)
-- `clear()` - Delete previous image (src/rendering/kitty/mod.rs:211)
+- `render_frame(frame)` - Render current word with optional ghost words (prev above, next below) (src/rendering/kitty/mod.rs:423)
+- `clear()` - Delete previous image and ghost images (src/rendering/kitty/mod.rs:211)
 - `cleanup()` - Clear word cache, delete all graphics on exit (src/rendering/kitty/mod.rs:218)
+
+**Ghost Word Features:**
+- `render_at_position(word, anchor, y_offset, opacity)` - Render word at vertical offset with opacity (src/rendering/kitty/mod.rs:139)
+- Ghost words rendered at 10% opacity above/below current word
+- Image ID tracking for ghost cleanup between frames
 
 **Key Behaviors:**
 - Uses embedded JetBrains Mono font via ab_glyph for text rasterization
@@ -528,13 +566,13 @@ Renders file picker popup above/below command deck.
 
 ### Key Binding Reference (`src/app/app_impl.rs:89`)
 
-Reading mode key bindings (j=left, k=right for VIM-like navigation):
-- `'j'` - jump to previous sentence (j is left on keyboard)
-- `'k'` - jump to next sentence (k is right on keyboard)
+Reading mode key bindings:
+- `'j'` - jump to previous sentence
+- `'k'` - jump to next sentence
 - `'['` - decrease WPM by 50
 - `']'` - increase WPM by 50
 - `' '` - toggle pause
-- `'q'` - quit to Command mode
+- `Tab` - toggle between Reading/Paused and Command mode (src/ui/terminal.rs:320)
 
 ---
 
@@ -662,6 +700,18 @@ All user input is validated at the boundaries:
 - ✅ WPM display in reading zone (top-left corner)
 - ✅ Real-time WPM adjustment with [ / ] keys
 - ✅ Pause/Resume with Space
+- ✅ Tab to toggle between Reading/Paused and Command mode
+- ✅ Ghost words (optional, off by default) - previous/next word context above/below current word
+
+**Ghost Words:**
+- ✅ GhostContext type alias for prev/next word with anchors (src/reading/state.rs:6)
+- ✅ ghost_context() method on ReadingState (src/reading/state.rs:65)
+- ✅ peek_next() method on ReadingState (src/reading/state.rs:79)
+- ✅ RenderFrame struct for frame data (src/rendering/renderer.rs:27)
+- ✅ render_frame() on RsvpRenderer trait (src/rendering/renderer.rs:113)
+- ✅ Vertical ghost positioning (prev above, next below current word)
+- ✅ 10% opacity for ghost words
+- ✅ ghost_words config option (default: false) (src/config/mod.rs:43)
 
 **Cleanup Completed (Phase 6.5 - Production-Grade Refactoring):**
 - ✅ Removed dead code (~1,700 lines)
@@ -753,6 +803,28 @@ All user input is validated at the boundaries:
 ---
 
 ## 9. Recent Cleanup
+
+### 2026-02-12 - Ghost Words & Tab Mode Toggle
+
+**New Features:**
+- Ghost words (optional, off by default) - previous/next word context
+- `ghost_words` config option in TOML
+- Tab key toggles between Reading/Paused ↔ Command mode
+- RenderFrame struct for bundled frame rendering data
+- GhostContext type alias for ghost word context
+
+**Architecture Changes:**
+- Added `render_frame()` to RsvpRenderer trait
+- Added `render_at_position()` to KittyGraphicsRenderer
+- Added `ghost_context()` and `peek_next()` to ReadingState
+- Added `prev_word` field to ReadingState
+
+**Breaking Changes:**
+- Mode toggle changed from `q`/`Esc` to `Tab`
+
+**Validation Results:**
+- 165 tests passing
+- 0 clippy warnings
 
 ### 2026-02-12 - Config File Support Added
 

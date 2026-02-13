@@ -2,18 +2,9 @@
 //!
 //! This module provides command-line argument parsing using clap.
 
+use crate::config::themes::THEME_NAMES;
 use clap::Parser;
 use std::path::PathBuf;
-
-/// Available theme names for the TUI.
-const THEME_NAMES: &[&str] = &[
-    "tokyo-night",
-    "dracula",
-    "gruvbox",
-    "catppuccin-mocha",
-    "nord",
-    "light",
-];
 
 /// Speedy - A speed reader TUI application.
 #[derive(Parser, Debug)]

@@ -36,6 +36,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("✓ Kitty Graphics Protocol detected - pixel-perfect mode enabled");
 
+    // Save config path for later (needed for save)
+    let config_path = args.config.clone();
+    
     // Load configuration (from file or use defaults)
     let config = match crate::config::load(args.config) {
         Ok(mut cfg) => {
@@ -61,7 +64,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let mut app = App::with_config(config);
+    let mut app = App::with_config(config, config_path);
     let mut tui = TuiManager::new()?;
 
     // Run the main TUI event loop

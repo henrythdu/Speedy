@@ -25,6 +25,18 @@ pub enum ConfigLoadError {
     ParseError(#[from] toml::de::Error),
 }
 
+/// Errors that can occur during configuration saving.
+#[derive(Debug, Error)]
+pub enum ConfigSaveError {
+    /// Failed to serialize the config to TOML.
+    #[error("Failed to serialize config to TOML: {0}")]
+    SerializeError(#[from] toml::ser::Error),
+
+    /// Failed to write the config file.
+    #[error("Failed to write config file: {0}")]
+    IoError(#[from] io::Error),
+}
+
 /// Returns the XDG-compliant path to the config file.
 ///
 /// Falls back to `./config.toml` in the current directory if
@@ -81,13 +93,65 @@ pub fn load(path: Option<PathBuf>) -> Result<Config, ConfigLoadError> {
     // Validate and clamp values
     config.validate();
 
-    tracing::info!(
-        "Loaded config: theme={}, wpm={}",
+    tracing::debug!(
+        "Loaded config from {:?}: theme={}, wpm={}",
+        config_path,
         config.theme,
         config.timing.wpm
     );
 
     Ok(config)
+}
+
+/// Saves configuration to a TOML file.
+///
+/// If `path` is `None`, uses the default XDG-compliant path.
+/// Creates the config directory if it doesn't exist.
+///
+/// # Arguments
+/// * `config` - The configuration to save.
+/// * `path` - Optional custom path to config file. Uses default if None.
+///
+/// # Returns
+/// * `Ok(())` - Configuration saved successfully
+/// * `Err(ConfigSaveError)` - Serialization or write error
+///
+/// # Example
+/// ```no_run
+/// use speedy::config::{load, save};
+/// use std::path::PathBuf;
+///
+/// // Load, modify, and save
+/// let mut config = load(None).expect("Failed to load config");
+/// config.theme = "dracula".to_string();
+/// save(&config, None).expect("Failed to save config");
+/// ```
+pub fn save(config: &Config, path: Option<PathBuf>) -> Result<(), ConfigSaveError> {
+    let config_path = path.unwrap_or_else(config_path);
+
+    // Ensure parent directory exists
+    if let Some(parent) = config_path.parent() {
+        if !parent.exists() {
+            fs::create_dir_all(parent)?;
+            tracing::debug!("Created config directory: {:?}", parent);
+        }
+    }
+
+    tracing::debug!("Saving config to {:?}", config_path);
+
+    let toml_content = toml::to_string_pretty(config)?;
+
+    fs::write(&config_path, toml_content)?;
+
+    tracing::debug!(
+        "Saved config to {:?}: theme={}, default_wpm={}, ghost_words={}",
+        config_path,
+        config.theme,
+        config.default_wpm,
+        config.ghost_words
+    );
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -177,5 +241,82 @@ wpm = 5000
         let path = config_path();
         // Should return a path ending in config.toml
         assert!(path.ends_with("config.toml"));
+    }
+
+    #[test]
+    fn test_save_and_load_roundtrip_default_wpm() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path().to_path_buf();
+
+        // Create config with custom default_wpm
+        let config = Config {
+            default_wpm: 450,
+            ..Default::default()
+        };
+
+        // Save
+        save(&config, Some(path.clone())).expect("Failed to save config");
+
+        // Load and verify
+        let loaded = load(Some(path)).expect("Failed to load config");
+        assert_eq!(loaded.default_wpm, 450);
+    }
+
+    #[test]
+    fn test_save_and_load_roundtrip_theme() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path().to_path_buf();
+
+        // Create config with custom theme
+        let config = Config {
+            theme: "dracula".to_string(),
+            ..Default::default()
+        };
+
+        // Save
+        save(&config, Some(path.clone())).expect("Failed to save config");
+
+        // Load and verify
+        let loaded = load(Some(path)).expect("Failed to load config");
+        assert_eq!(loaded.theme, "dracula");
+    }
+
+    #[test]
+    fn test_save_and_load_roundtrip_ghost_words() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path().to_path_buf();
+
+        // Create config with ghost_words enabled
+        let config = Config {
+            ghost_words: true,
+            ..Default::default()
+        };
+
+        // Save
+        save(&config, Some(path.clone())).expect("Failed to save config");
+
+        // Load and verify
+        let loaded = load(Some(path)).expect("Failed to load config");
+        assert!(loaded.ghost_words);
+    }
+
+    #[test]
+    fn test_save_creates_parent_directory() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let nested_path = temp_dir
+            .path()
+            .join("nested")
+            .join("dir")
+            .join("config.toml");
+
+        // Parent directory doesn't exist yet
+        assert!(!nested_path.parent().unwrap().exists());
+
+        let config = Config::default();
+        save(&config, Some(nested_path.clone())).expect("Failed to save config");
+
+        // Parent directory should now exist
+        assert!(nested_path.parent().unwrap().exists());
+        assert!(nested_path.exists());
     }
 }

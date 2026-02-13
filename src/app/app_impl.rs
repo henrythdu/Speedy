@@ -1,12 +1,17 @@
 use crate::app::mode::AppMode;
-use crate::config::Config;
+use crate::config::{save, Config};
 use crate::reading::{tokenize_text, ReadingState};
+use crate::ui::config_popup::{handle_popup_key, ConfigPopupState, PopupAction};
+use crossterm::event::KeyEvent;
+use std::path::PathBuf;
 
 pub struct App {
     mode: AppMode,
     reading_state: Option<ReadingState>,
     error_message: Option<String>,
     config: Config,
+    config_path: Option<PathBuf>,
+    pub config_popup: ConfigPopupState,
 }
 
 impl Default for App {
@@ -22,16 +27,20 @@ impl App {
             reading_state: None,
             error_message: None,
             config: Config::default(),
+            config_path: None,
+            config_popup: ConfigPopupState::new(),
         }
     }
 
-    /// Create App with a specific configuration
-    pub fn with_config(config: Config) -> Self {
+    /// Create App with a specific configuration and optional path
+    pub fn with_config(config: Config, config_path: Option<PathBuf>) -> Self {
         Self {
             mode: AppMode::default(),
             reading_state: None,
             error_message: None,
             config,
+            config_path,
+            config_popup: ConfigPopupState::new(),
         }
     }
 
@@ -118,7 +127,17 @@ impl App {
 
     /// Check if ghost words are enabled
     pub fn ghost_words_enabled(&self) -> bool {
-        self.config.ghost_words()
+        self.config.ghost_words
+    }
+
+    /// Get the default WPM for new reading sessions
+    pub fn default_wpm(&self) -> u32 {
+        self.config.default_wpm
+    }
+
+    /// Get the current theme name
+    pub fn theme_name(&self) -> &str {
+        &self.config.theme
     }
 
     /// Get the duration for the current token in milliseconds
@@ -173,6 +192,29 @@ impl App {
             }
             _ => false,
         }
+    }
+
+    /// Save the current configuration to disk.
+    ///
+    /// Persists the current config state (theme, default_wpm, ghost_words, etc.)
+    /// to the XDG-compliant config file location.
+    ///
+    /// # Errors
+    /// Returns an error if the config cannot be serialized or written to disk.
+    pub fn save_config(&self) -> Result<(), Box<dyn std::error::Error>> {
+        save(&self.config, self.config_path.clone())?;
+        Ok(())
+    }
+
+    /// Handle popup key events for the config picker.
+    ///
+    /// Delegates to `handle_popup_key` from the config_popup module.
+    /// Returns the action to take (Handled, SaveAndClose, CancelAndClose, or None).
+    ///
+    /// This method exists on App to provide access to the private config field
+    /// for live theme preview updates.
+    pub fn handle_popup_key(&mut self, key: KeyEvent) -> PopupAction {
+        handle_popup_key(key, &mut self.config_popup, &mut self.config)
     }
 }
 

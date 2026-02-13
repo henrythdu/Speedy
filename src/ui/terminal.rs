@@ -5,6 +5,7 @@ use crate::ui::autocomplete::cache::PerDirectoryCache;
 use crate::ui::autocomplete::discovery::spawn_discovery_thread;
 use crate::ui::autocomplete::render::render_autocomplete_popup;
 use crate::ui::autocomplete::state::AutocompleteState;
+use crate::ui::config_popup::{render_config_popup, PopupAction};
 use crate::ui::reader::view::{render_command_deck, render_wpm};
 use crate::ui::theme::Theme;
 use anyhow::Result;
@@ -177,6 +178,29 @@ impl TuiManager {
                             {
                                 app.set_mode(AppMode::Quit);
                                 return Ok(AppMode::Quit);
+                            }
+
+                            // Handle config popup keys FIRST (before other handlers)
+                            // This allows popup to intercept keys like Ctrl+P, Esc, arrows
+                            match app.handle_popup_key(key) {
+                                PopupAction::Handled => {
+                                    // Popup handled the key, continue to next iteration
+                                    continue;
+                                }
+                                PopupAction::SaveAndClose => {
+                                    // Config was saved to memory, now persist to disk
+                                    if let Err(e) = app.save_config() {
+                                        app.set_error(format!("Failed to save config: {}", e));
+                                    }
+                                    continue;
+                                }
+                                PopupAction::CancelAndClose => {
+                                    // Popup cancelled, continue
+                                    continue;
+                                }
+                                PopupAction::None => {
+                                    // Key not for popup, let other handlers process
+                                }
                             }
 
                             // Handle Ctrl+R to refresh autocomplete cache
@@ -402,7 +426,7 @@ impl TuiManager {
         // Render background via Ratatui
         self.terminal.draw(|frame| {
             let area = frame.area();
-            let theme = Theme::midnight();
+            let theme = Theme::get_by_name(app.theme_name());
 
             // Fill entire viewport with background color first
             let full_bg = Block::default().style(Style::default().bg(theme.background));
@@ -468,6 +492,9 @@ impl TuiManager {
                 command_area,
                 terminal_height,
             );
+
+            // Render config popup if open
+            render_config_popup(frame, &app.config_popup, command_area, terminal_height);
         })?;
 
         // Flush stdout to ensure ratatui output appears immediately

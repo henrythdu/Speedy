@@ -4,7 +4,6 @@
 
 use crate::app::mode::AppMode;
 use crate::app::App;
-use crate::engine::config::DEFAULT_WPM;
 use crate::ui::command::{parse_command, tokens_to_text, Command};
 use anyhow::{Context, Result};
 
@@ -32,7 +31,7 @@ pub fn execute_command(app: &mut App, command_str: &str) -> Result<CommandResult
             .with_context(|| format!("Failed to load file: {}", path))?;
 
             let text = tokens_to_text(&doc);
-            app.start_reading(&text, DEFAULT_WPM);
+            app.start_reading(&text, app.default_wpm());
             Ok(CommandResult::Continue)
         }
         Command::LoadClipboard => {
@@ -40,7 +39,7 @@ pub fn execute_command(app: &mut App, command_str: &str) -> Result<CommandResult
             let doc = clipboard::load().with_context(|| "Failed to load clipboard")?;
 
             let text = tokens_to_text(&doc);
-            app.start_reading(&text, DEFAULT_WPM);
+            app.start_reading(&text, app.default_wpm());
             Ok(CommandResult::Continue)
         }
         Command::Quit => {

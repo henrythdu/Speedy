@@ -1,6 +1,6 @@
 // Configuration for Speedy engine and UI components
 // All values derived from PRD specifications with defaults as documented
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// Timing Constants per PRD Section 3.2
 pub const DEFAULT_WPM: u32 = 300;
@@ -72,7 +72,7 @@ fn default_newline_multiplier() -> f64 {
 }
 
 /// Timing configuration per PRD Section 3.2
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct TimingConfig {
     /// Words per minute reading speed (default 300)
     #[serde(default = "default_wpm")]

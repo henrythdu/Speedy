@@ -274,7 +274,7 @@ pub fn render_frame(
     * `Space`: Toggle Play/Pause
     * `j` / `k`: Forward/Backward by **Full Sentence**
     * `[` / `]`: Adjust WPM (Variable Tick Rate)
-    * `q`: Return to Command Mode
+    * `Tab`: Toggle between Reading/Paused and Command Mode
 
 ---
 
@@ -363,10 +363,10 @@ base64 = "0.22"                 # Kitty protocol encoding
 - [ ] Cache hit/miss profiling
 - [ ] Memory usage optimization
 
-### Phase 4: Polish 🔄 IN PROGRESS
+### Phase 4: Polish ✅ COMPLETE
 - [x] Anti-aliased font rendering (ab_glyph outline_glyph with coverage-based AA)
-- [ ] Cursor hiding in Reading Mode
-- [ ] User documentation (terminal requirements, config options)
+- [x] Cursor hiding in Reading Mode
+- [x] User documentation (terminal requirements, config options)
 
 ### Phase 5: Future Expansion (Post-MVP)
 - [ ] Sixel protocol backend
@@ -377,9 +377,11 @@ base64 = "0.22"                 # Kitty protocol encoding
 
 ### Removed from Scope
 - ❌ Capability detection system (Kitty is hard requirement)
-- ❌ CPU compositing with ghost words (complexity vs benefit)
 - ❌ TUI fallback mode (CellRenderer)
 - ❌ Smooth sentence transitions (ghost word bridges)
+
+### Added After MVP
+- ✅ Ghost words (previous/next word context) - Optional, off by default, enabled via `ghost_words = true` in config
 
 ---
 
