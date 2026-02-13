@@ -69,6 +69,8 @@ pub fn handle_popup_key(
         KeyCode::Esc => {
             // Revert theme to original before closing
             config.theme = popup.original_theme().to_string();
+            // Revert ghost_words to original before closing
+            config.ghost_words = popup.original_ghost_words();
             popup.close();
             PopupAction::CancelAndClose
         }
@@ -92,6 +94,10 @@ pub fn handle_popup_key(
             if popup.selected_row == 1 {
                 config.theme = popup.current_theme().to_string();
             }
+            // Live preview: apply ghost words immediately if on ghost words row
+            if popup.selected_row == 2 {
+                config.ghost_words = popup.temp_ghost_words;
+            }
             PopupAction::Handled
         }
         KeyCode::Right => {
@@ -99,6 +105,10 @@ pub fn handle_popup_key(
             // Live preview: apply theme immediately if on theme row
             if popup.selected_row == 1 {
                 config.theme = popup.current_theme().to_string();
+            }
+            // Live preview: apply ghost words immediately if on ghost words row
+            if popup.selected_row == 2 {
+                config.ghost_words = popup.temp_ghost_words;
             }
             PopupAction::Handled
         }
@@ -377,5 +387,53 @@ mod tests {
         // Esc should revert to original
         handle_popup_key(esc(), &mut popup, &mut config);
         assert_eq!(config.theme, "tokyo-night");
+    }
+
+    #[test]
+    fn test_esc_reverts_ghost_words_to_original() {
+        let mut popup = ConfigPopupState::new();
+        let mut config = create_test_config();
+        popup.open(&config);
+
+        // Original ghost_words is false
+        assert!(!config.ghost_words);
+        assert!(!popup.original_ghost_words());
+
+        // Use live preview to change ghost_words
+        popup.selected_row = 2;
+        handle_popup_key(right(), &mut popup, &mut config);
+
+        // Config.ghost_words was updated for live preview
+        assert!(config.ghost_words);
+
+        // Esc should revert to original
+        handle_popup_key(esc(), &mut popup, &mut config);
+        assert!(!config.ghost_words);
+    }
+
+    #[test]
+    fn test_esc_reverts_ghost_words_when_originally_true() {
+        let mut popup = ConfigPopupState::new();
+        let mut config = Config {
+            theme: "tokyo-night".to_string(),
+            default_wpm: 300,
+            timing: Default::default(),
+            ghost_words: true, // Start with ghost_words enabled
+        };
+        popup.open(&config);
+
+        // Original ghost_words is true
+        assert!(popup.original_ghost_words());
+
+        // Use live preview to change ghost_words
+        popup.selected_row = 2;
+        handle_popup_key(right(), &mut popup, &mut config);
+
+        // Config.ghost_words was updated for live preview (toggled to false)
+        assert!(!config.ghost_words);
+
+        // Esc should revert to original (true)
+        handle_popup_key(esc(), &mut popup, &mut config);
+        assert!(config.ghost_words);
     }
 }

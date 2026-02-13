@@ -10,6 +10,7 @@ pub struct ConfigPopupState {
     pub temp_theme_index: usize,
     pub temp_ghost_words: bool,
     original_theme_index: usize,
+    original_ghost_words: bool,
 }
 
 impl ConfigPopupState {
@@ -22,6 +23,7 @@ impl ConfigPopupState {
             temp_theme_index: 0,
             temp_ghost_words: false,
             original_theme_index: 0,
+            original_ghost_words: false,
         }
     }
 
@@ -33,6 +35,7 @@ impl ConfigPopupState {
         self.temp_theme_index = theme_index(&config.theme);
         self.temp_ghost_words = config.ghost_words;
         self.original_theme_index = self.temp_theme_index;
+        self.original_ghost_words = config.ghost_words;
     }
 
     /// Close popup
@@ -90,6 +93,11 @@ impl ConfigPopupState {
     /// Revert theme to original (for Esc flow)
     pub fn original_theme(&self) -> &'static str {
         THEME_NAMES[self.original_theme_index]
+    }
+
+    /// Revert ghost_words to original (for Esc flow)
+    pub fn original_ghost_words(&self) -> bool {
+        self.original_ghost_words
     }
 
     /// Get current temp theme name
