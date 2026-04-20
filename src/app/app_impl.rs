@@ -118,6 +118,11 @@ impl App {
         self.reading_state.as_ref()
     }
 
+    /// Get a mutable reference to the reading state
+    pub fn reading_state_mut(&mut self) -> Option<&mut ReadingState> {
+        self.reading_state.as_mut()
+    }
+
     /// Get current WPM from reading state
     ///
     /// Returns the current words-per-minute setting, or 0 if no reading state.
