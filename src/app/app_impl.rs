@@ -156,49 +156,6 @@ impl App {
             .unwrap_or(0)
     }
 
-    /// Handle keyboard input in Reading mode.
-    /// PRD Section 7.2: j/k for sentence navigation, [ / ] for WPM, Space for pause.
-    pub fn handle_keypress(&mut self, key: char) -> bool {
-        // Only handle keys in Reading or Paused mode
-        if !matches!(self.mode, AppMode::Reading | AppMode::Paused) {
-            return false;
-        }
-
-        let reading_state = match self.reading_state.as_mut() {
-            Some(state) => state,
-            None => return false,
-        };
-
-        match key {
-            // Navigation: j is LEFT on keyboard → go BACKWARD to previous sentence
-            'j' | 'J' => {
-                reading_state.jump_to_previous_sentence();
-                true
-            }
-            // Navigation: k is RIGHT on keyboard → go FORWARD to next sentence
-            'k' | 'K' => {
-                reading_state.jump_to_next_sentence();
-                true
-            }
-            // WPM: Decrease (PRD Section 7.2)
-            '[' => {
-                reading_state.adjust_wpm(-50);
-                true
-            }
-            // WPM: Increase (PRD Section 7.2)
-            ']' => {
-                reading_state.adjust_wpm(50);
-                true
-            }
-            // Pause/Resume (PRD Section 7.2)
-            ' ' => {
-                self.toggle_pause();
-                true
-            }
-            _ => false,
-        }
-    }
-
     /// Save the current configuration to disk.
     ///
     /// Persists the current config state (theme, default_wpm, ghost_words, etc.)
@@ -238,89 +195,6 @@ mod tests {
         let mut app = App::new();
         app.start_reading("hello world", 300);
         assert_eq!(app.get_current_word(), Some("hello".to_string()));
-    }
-
-    #[test]
-    fn test_keypress_j_backward_sentence() {
-        let mut app = App::new();
-        app.start_reading("First sentence. Second sentence.", 300);
-
-        assert_eq!(app.reading_state().unwrap().current_index(), 0);
-
-        let result = app.handle_keypress('k');
-        assert!(result);
-        assert_eq!(app.reading_state().unwrap().current_index(), 2);
-
-        let result = app.handle_keypress('j');
-        assert!(result);
-        assert_eq!(app.reading_state().unwrap().current_index(), 0);
-    }
-
-    #[test]
-    fn test_keypress_k_forward_sentence() {
-        let mut app = App::new();
-        app.start_reading("First sentence. Second sentence.", 300);
-
-        assert_eq!(app.reading_state().unwrap().current_index(), 0);
-
-        let result = app.handle_keypress('k');
-        assert!(result);
-        assert_eq!(app.reading_state().unwrap().current_index(), 2);
-    }
-
-    #[test]
-    fn test_keypress_bracket_increase_wpm() {
-        let mut app = App::new();
-        app.start_reading("test", 300);
-
-        let initial_wpm = app.reading_state().unwrap().wpm();
-
-        let result = app.handle_keypress(']');
-        assert!(result);
-        assert_eq!(app.reading_state().unwrap().wpm(), initial_wpm + 50);
-    }
-
-    #[test]
-    fn test_keypress_bracket_decrease_wpm() {
-        let mut app = App::new();
-        app.start_reading("test", 300);
-
-        let initial_wpm = app.reading_state().unwrap().wpm();
-
-        let result = app.handle_keypress('[');
-        assert!(result);
-        assert_eq!(app.reading_state().unwrap().wpm(), initial_wpm - 50);
-    }
-
-    #[test]
-    fn test_keypress_space_toggle_pause() {
-        let mut app = App::new();
-        app.start_reading("test", 300);
-
-        assert_eq!(app.mode, AppMode::Reading);
-
-        let result = app.handle_keypress(' ');
-        assert!(result);
-        assert_eq!(app.mode, AppMode::Paused);
-
-        let result = app.handle_keypress(' ');
-        assert!(result);
-        assert_eq!(app.mode, AppMode::Reading);
-    }
-
-    #[test]
-    fn test_keypress_no_reading_state() {
-        let mut app = App::new();
-
-        let result = app.handle_keypress('j');
-        assert!(!result);
-    }
-
-    #[test]
-    fn test_keypress_repl_mode_ignored() {
-        let mut app = App::new();
-        let result = app.handle_keypress('j');
-        assert!(!result);
     }
 
     #[test]
