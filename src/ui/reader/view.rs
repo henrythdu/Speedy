@@ -68,6 +68,7 @@ pub fn render_command_deck(
         AppMode::Command => "COMMAND",
         AppMode::Reading => "READING",
         AppMode::Paused => "PAUSED",
+        AppMode::Popup => "CONFIG",
         AppMode::Quit => "QUIT",
     };
 

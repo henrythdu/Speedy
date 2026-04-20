@@ -256,6 +256,182 @@ pub fn create_reading_handlers(registry: &mut crate::ui::key_handler::KeyHandler
     registry.register(PauseToggleHandler);
 }
 
+// ============================================================================
+// Popup Mode Handlers
+// ============================================================================
+
+/// Handler for Enter in Popup mode - confirms changes and closes popup
+pub struct PopupConfirmHandler;
+
+impl KeyHandler for PopupConfirmHandler {
+    fn mode(&self) -> AppMode {
+        AppMode::Popup
+    }
+
+    fn keys(&self) -> Vec<KeyCode> {
+        vec![KeyCode::Enter]
+    }
+
+    fn handle(&self, app: &mut App) -> Result<KeyResult> {
+        // Save popup changes to config
+        app.config_popup.apply_to_config(&mut app.config);
+        app.config_popup.close();
+        // Save config to disk
+        if let Err(e) = app.save_config() {
+            app.set_error(format!("Failed to save config: {}", e));
+        }
+        // Return to previous mode (Reading or Paused)
+        app.set_mode(AppMode::Reading);
+        Ok(KeyResult::Consumed)
+    }
+
+    fn help_text(&self) -> &str {
+        "Confirm and save (Enter)"
+    }
+}
+
+/// Handler for Esc in Popup mode - dismisses popup without saving
+pub struct PopupDismissHandler;
+
+impl KeyHandler for PopupDismissHandler {
+    fn mode(&self) -> AppMode {
+        AppMode::Popup
+    }
+
+    fn keys(&self) -> Vec<KeyCode> {
+        vec![KeyCode::Esc]
+    }
+
+    fn handle(&self, app: &mut App) -> Result<KeyResult> {
+        // Revert theme to original
+        app.config.theme = app.config_popup.original_theme().to_string();
+        // Revert ghost_words to original
+        app.config.ghost_words = app.config_popup.original_ghost_words();
+        app.config_popup.close();
+        // Return to previous mode (Reading or Paused)
+        app.set_mode(AppMode::Reading);
+        Ok(KeyResult::Consumed)
+    }
+
+    fn help_text(&self) -> &str {
+        "Cancel and close (Esc)"
+    }
+}
+
+/// Handler for Down arrow or 'j' in Popup mode - navigate to next option
+pub struct PopupNavigateDownHandler;
+
+impl KeyHandler for PopupNavigateDownHandler {
+    fn mode(&self) -> AppMode {
+        AppMode::Popup
+    }
+
+    fn keys(&self) -> Vec<KeyCode> {
+        vec![KeyCode::Down, KeyCode::Char('j')]
+    }
+
+    fn handle(&self, app: &mut App) -> Result<KeyResult> {
+        app.config_popup.move_down();
+        Ok(KeyResult::Consumed)
+    }
+
+    fn help_text(&self) -> &str {
+        "Next option (j, Down)"
+    }
+}
+
+/// Handler for Up arrow or 'k' in Popup mode - navigate to previous option
+pub struct PopupNavigateUpHandler;
+
+impl KeyHandler for PopupNavigateUpHandler {
+    fn mode(&self) -> AppMode {
+        AppMode::Popup
+    }
+
+    fn keys(&self) -> Vec<KeyCode> {
+        vec![KeyCode::Up, KeyCode::Char('k')]
+    }
+
+    fn handle(&self, app: &mut App) -> Result<KeyResult> {
+        app.config_popup.move_up();
+        Ok(KeyResult::Consumed)
+    }
+
+    fn help_text(&self) -> &str {
+        "Previous option (k, Up)"
+    }
+}
+
+/// Handler for Left arrow or 'h' in Popup mode - cycle value left/decrease
+pub struct PopupCycleLeftHandler;
+
+impl KeyHandler for PopupCycleLeftHandler {
+    fn mode(&self) -> AppMode {
+        AppMode::Popup
+    }
+
+    fn keys(&self) -> Vec<KeyCode> {
+        vec![KeyCode::Left, KeyCode::Char('h')]
+    }
+
+    fn handle(&self, app: &mut App) -> Result<KeyResult> {
+        app.config_popup.cycle_left();
+        // Live preview: apply theme immediately if on theme row
+        if app.config_popup.selected_row == 1 {
+            app.config.theme = app.config_popup.current_theme().to_string();
+        }
+        // Live preview: apply ghost words immediately if on ghost words row
+        if app.config_popup.selected_row == 2 {
+            app.config.ghost_words = app.config_popup.temp_ghost_words;
+        }
+        Ok(KeyResult::Consumed)
+    }
+
+    fn help_text(&self) -> &str {
+        "Cycle left/decrease (h, Left)"
+    }
+}
+
+/// Handler for Right arrow or 'l' in Popup mode - cycle value right/increase
+pub struct PopupCycleRightHandler;
+
+impl KeyHandler for PopupCycleRightHandler {
+    fn mode(&self) -> AppMode {
+        AppMode::Popup
+    }
+
+    fn keys(&self) -> Vec<KeyCode> {
+        vec![KeyCode::Right, KeyCode::Char('l')]
+    }
+
+    fn handle(&self, app: &mut App) -> Result<KeyResult> {
+        app.config_popup.cycle_right();
+        // Live preview: apply theme immediately if on theme row
+        if app.config_popup.selected_row == 1 {
+            app.config.theme = app.config_popup.current_theme().to_string();
+        }
+        // Live preview: apply ghost words immediately if on ghost words row
+        if app.config_popup.selected_row == 2 {
+            app.config.ghost_words = app.config_popup.temp_ghost_words;
+        }
+        Ok(KeyResult::Consumed)
+    }
+
+    fn help_text(&self) -> &str {
+        "Cycle right/increase (l, Right)"
+    }
+}
+
+/// Create registry with all popup mode handlers
+pub fn create_popup_handlers(registry: &mut crate::ui::key_handler::KeyHandlerRegistry) {
+    registry.register(PopupConfirmHandler);
+    registry.register(PopupDismissHandler);
+    registry.register(PopupNavigateDownHandler);
+    registry.register(PopupNavigateUpHandler);
+    registry.register(PopupCycleLeftHandler);
+    registry.register(PopupCycleRightHandler);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -268,6 +444,61 @@ mod tests {
 
         let handlers = registry.handlers_for_mode(AppMode::Reading);
         assert_eq!(handlers.len(), 5);
+    }
+
+    #[test]
+    fn test_create_popup_handlers_registers_all() {
+        let mut registry = KeyHandlerRegistry::new();
+        create_popup_handlers(&mut registry);
+
+        let handlers = registry.handlers_for_mode(AppMode::Popup);
+        assert_eq!(handlers.len(), 6);
+    }
+
+    #[test]
+    fn test_popup_confirm_handler_keys() {
+        let handler = PopupConfirmHandler;
+        let keys = handler.keys();
+        assert!(keys.contains(&KeyCode::Enter));
+    }
+
+    #[test]
+    fn test_popup_dismiss_handler_keys() {
+        let handler = PopupDismissHandler;
+        let keys = handler.keys();
+        assert!(keys.contains(&KeyCode::Esc));
+    }
+
+    #[test]
+    fn test_popup_navigate_down_handler_keys() {
+        let handler = PopupNavigateDownHandler;
+        let keys = handler.keys();
+        assert!(keys.contains(&KeyCode::Down));
+        assert!(keys.contains(&KeyCode::Char('j')));
+    }
+
+    #[test]
+    fn test_popup_navigate_up_handler_keys() {
+        let handler = PopupNavigateUpHandler;
+        let keys = handler.keys();
+        assert!(keys.contains(&KeyCode::Up));
+        assert!(keys.contains(&KeyCode::Char('k')));
+    }
+
+    #[test]
+    fn test_popup_cycle_left_handler_keys() {
+        let handler = PopupCycleLeftHandler;
+        let keys = handler.keys();
+        assert!(keys.contains(&KeyCode::Left));
+        assert!(keys.contains(&KeyCode::Char('h')));
+    }
+
+    #[test]
+    fn test_popup_cycle_right_handler_keys() {
+        let handler = PopupCycleRightHandler;
+        let keys = handler.keys();
+        assert!(keys.contains(&KeyCode::Right));
+        assert!(keys.contains(&KeyCode::Char('l')));
     }
 
     #[test]

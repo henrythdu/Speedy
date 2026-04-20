@@ -1,15 +1,14 @@
 use crate::app::mode::AppMode;
 use crate::config::{save, Config};
 use crate::reading::{tokenize_text, ReadingState};
-use crate::ui::config_popup::{handle_popup_key, ConfigPopupState, PopupAction};
-use crossterm::event::KeyEvent;
+use crate::ui::config_popup::ConfigPopupState;
 use std::path::PathBuf;
 
 pub struct App {
     mode: AppMode,
     reading_state: Option<ReadingState>,
     error_message: Option<String>,
-    config: Config,
+    pub config: Config,
     config_path: Option<PathBuf>,
     pub config_popup: ConfigPopupState,
     command_buffer: String,
@@ -171,15 +170,14 @@ impl App {
         Ok(())
     }
 
-    /// Handle popup key events for the config picker.
-    ///
-    /// Delegates to `handle_popup_key` from the config_popup module.
-    /// Returns the action to take (Handled, SaveAndClose, CancelAndClose, or None).
-    ///
-    /// This method exists on App to provide access to the private config field
-    /// for live theme preview updates.
-    pub fn handle_popup_key(&mut self, key: KeyEvent) -> PopupAction {
-        handle_popup_key(key, &mut self.config_popup, &mut self.config)
+    /// Get a mutable reference to the config (for popup handlers)
+    pub fn config_mut(&mut self) -> &mut Config {
+        &mut self.config
+    }
+
+    /// Get a mutable reference to the config popup state (for popup handlers)
+    pub fn config_popup_mut(&mut self) -> &mut ConfigPopupState {
+        &mut self.config_popup
     }
 
     // Command buffer methods for Command mode

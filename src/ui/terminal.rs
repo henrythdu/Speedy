@@ -5,9 +5,9 @@ use crate::ui::autocomplete::cache::PerDirectoryCache;
 use crate::ui::autocomplete::discovery::spawn_discovery_thread;
 use crate::ui::autocomplete::render::render_autocomplete_popup;
 use crate::ui::autocomplete::state::AutocompleteState;
-use crate::ui::config_popup::{render_config_popup, PopupAction};
+use crate::ui::config_popup::render_config_popup;
 use crate::ui::key_handler::KeyHandlerRegistry;
-use crate::ui::key_handlers::{create_command_handlers, create_reading_handlers};
+use crate::ui::key_handlers::{create_command_handlers, create_popup_handlers, create_reading_handlers};
 use crate::ui::reader::view::{render_command_deck, render_wpm};
 use crate::ui::theme::{set_current_theme, Theme};
 use anyhow::Result;
@@ -107,10 +107,11 @@ impl TuiManager {
         // Hide terminal cursor - we use software cursor (█) instead
         execute!(io::stdout(), Hide)?;
 
-        // Initialize key handler registry with reading mode handlers
+        // Initialize key handler registry with all mode handlers
         let mut key_registry = KeyHandlerRegistry::new();
         create_reading_handlers(&mut key_registry);
         create_command_handlers(&mut key_registry);
+        create_popup_handlers(&mut key_registry);
 
         Ok(TuiManager {
             terminal,
@@ -189,27 +190,22 @@ impl TuiManager {
                                 return Ok(AppMode::Quit);
                             }
 
-                            // Handle config popup keys FIRST (before other handlers)
-                            // This allows popup to intercept keys like Ctrl+P, Esc, arrows
-                            match app.handle_popup_key(key) {
-                                PopupAction::Handled => {
-                                    // Popup handled the key, continue to next iteration
-                                    continue;
+                            // Handle Ctrl+P to toggle popup mode
+                            if key.code == KeyCode::Char('p')
+                                && key.modifiers.contains(event::KeyModifiers::CONTROL)
+                            {
+                                if app.mode() == AppMode::Popup {
+                                    // Close popup and return to Reading mode
+                                    app.config_popup.close();
+                                    app.set_mode(AppMode::Reading);
+                                } else if app.mode() == AppMode::Reading
+                                    || app.mode() == AppMode::Paused
+                                {
+                                    // Open popup and switch to Popup mode
+                                    app.config_popup.open(&app.config);
+                                    app.set_mode(AppMode::Popup);
                                 }
-                                PopupAction::SaveAndClose => {
-                                    // Config was saved to memory, now persist to disk
-                                    if let Err(e) = app.save_config() {
-                                        app.set_error(format!("Failed to save config: {}", e));
-                                    }
-                                    continue;
-                                }
-                                PopupAction::CancelAndClose => {
-                                    // Popup cancelled, continue
-                                    continue;
-                                }
-                                PopupAction::None => {
-                                    // Key not for popup, let other handlers process
-                                }
+                                continue;
                             }
 
                             // Handle Ctrl+R to refresh autocomplete cache
@@ -262,6 +258,27 @@ impl TuiManager {
                                             && !should_activate_autocomplete
                                         {
                                             self.autocomplete_state.handle_input(c);
+                                        }
+                                    } else if app.mode() == AppMode::Popup {
+                                        // In popup mode, use registry dispatch
+                                        let current_mode = app.mode();
+                                        match self.key_registry.dispatch(
+                                            key.code,
+                                            current_mode,
+                                            app,
+                                        ) {
+                                            Some(Ok(crate::ui::key_handler::KeyResult::Consumed)) => {
+                                                // Key was handled, nothing more to do
+                                            }
+                                            Some(Ok(crate::ui::key_handler::KeyResult::Ignored)) => {
+                                                // Key was ignored
+                                            }
+                                            Some(Err(e)) => {
+                                                app.set_error(format!("Key handler error: {}", e));
+                                            }
+                                            None => {
+                                                // No handler registered for this key, ignore it
+                                            }
                                         }
                                     } else {
                                         // In reading/paused mode, use registry dispatch
@@ -396,10 +413,11 @@ impl TuiManager {
                                         }
                                     }
                                 }
-                                // For non-Char keys in Reading/Paused modes, use registry dispatch
+                                // For non-Char keys in Reading/Paused/Popup modes, use registry dispatch
                                 _ => {
                                     if app.mode() == AppMode::Reading
                                         || app.mode() == AppMode::Paused
+                                        || app.mode() == AppMode::Popup
                                     {
                                         let current_mode = app.mode();
                                         match self.key_registry.dispatch(
