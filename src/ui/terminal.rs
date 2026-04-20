@@ -6,6 +6,8 @@ use crate::ui::autocomplete::discovery::spawn_discovery_thread;
 use crate::ui::autocomplete::render::render_autocomplete_popup;
 use crate::ui::autocomplete::state::AutocompleteState;
 use crate::ui::config_popup::{render_config_popup, PopupAction};
+use crate::ui::key_handler::KeyHandlerRegistry;
+use crate::ui::key_handlers::create_reading_handlers;
 use crate::ui::reader::view::{render_command_deck, render_wpm};
 use crate::ui::theme::{set_current_theme, Theme};
 use anyhow::Result;
@@ -68,6 +70,9 @@ pub struct TuiManager {
     autocomplete_state: AutocompleteState,
     discovery_receiver: Option<Receiver<PathBuf>>,
     discovery_cache: Arc<Mutex<PerDirectoryCache>>,
+
+    // Key handler registry for OCP-compliant key handling
+    key_registry: KeyHandlerRegistry,
 }
 
 impl TuiManager {
@@ -103,6 +108,10 @@ impl TuiManager {
         // Hide terminal cursor - we use software cursor (█) instead
         execute!(io::stdout(), Hide)?;
 
+        // Initialize key handler registry with reading mode handlers
+        let mut key_registry = KeyHandlerRegistry::new();
+        create_reading_handlers(&mut key_registry);
+
         Ok(TuiManager {
             terminal,
             command_buffer: String::new(),
@@ -113,6 +122,7 @@ impl TuiManager {
             autocomplete_state: AutocompleteState::new(),
             discovery_receiver: None,
             discovery_cache: Arc::new(Mutex::new(PerDirectoryCache::new())),
+            key_registry,
         })
     }
 
@@ -255,8 +265,26 @@ impl TuiManager {
                                             self.autocomplete_state.handle_input(c);
                                         }
                                     } else {
-                                        // In reading/paused mode, use app key handling
-                                        app.handle_keypress(c);
+                                        // In reading/paused mode, use registry dispatch
+                                        let current_mode = app.mode();
+                                        match self.key_registry.dispatch(
+                                            key.code,
+                                            current_mode,
+                                            app,
+                                        ) {
+                                            Some(Ok(crate::ui::key_handler::KeyResult::Consumed)) => {
+                                                // Key was handled, nothing more to do
+                                            }
+                                            Some(Ok(crate::ui::key_handler::KeyResult::Ignored)) => {
+                                                // Key was ignored, could fall back to legacy handling if needed
+                                            }
+                                            Some(Err(e)) => {
+                                                app.set_error(format!("Key handler error: {}", e));
+                                            }
+                                            None => {
+                                                // No handler registered for this key, ignore it
+                                            }
+                                        }
                                     }
                                 }
                                 KeyCode::Enter => {
@@ -335,7 +363,32 @@ impl TuiManager {
                                     }
                                     // Tab is now used for mode switching
                                 }
-                                _ => {}
+                                // For non-Char keys in Reading/Paused modes, use registry dispatch
+                                _ => {
+                                    if app.mode() == AppMode::Reading
+                                        || app.mode() == AppMode::Paused
+                                    {
+                                        let current_mode = app.mode();
+                                        match self.key_registry.dispatch(
+                                            key.code,
+                                            current_mode,
+                                            app,
+                                        ) {
+                                            Some(Ok(crate::ui::key_handler::KeyResult::Consumed)) => {
+                                                // Key was handled, nothing more to do
+                                            }
+                                            Some(Ok(crate::ui::key_handler::KeyResult::Ignored)) => {
+                                                // Key was ignored, could fall back to legacy handling if needed
+                                            }
+                                            Some(Err(e)) => {
+                                                app.set_error(format!("Key handler error: {}", e));
+                                            }
+                                            None => {
+                                                // No handler registered for this key, ignore it
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                         Event::Resize(cols, rows) => {
