@@ -9,3 +9,13 @@ target/
 
 # bd/beads issue tracker data
 .beads/
+
+# Agent tool data
+.cupcake/
+.opencode/
+.hive/
+
+# Node.js dependencies
+node_modules/
+package-lock.json
+package.json
