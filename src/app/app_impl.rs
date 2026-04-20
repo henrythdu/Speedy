@@ -12,6 +12,7 @@ pub struct App {
     config: Config,
     config_path: Option<PathBuf>,
     pub config_popup: ConfigPopupState,
+    command_buffer: String,
 }
 
 impl Default for App {
@@ -29,6 +30,7 @@ impl App {
             config: Config::default(),
             config_path: None,
             config_popup: ConfigPopupState::new(),
+            command_buffer: String::new(),
         }
     }
 
@@ -41,6 +43,7 @@ impl App {
             config,
             config_path,
             config_popup: ConfigPopupState::new(),
+            command_buffer: String::new(),
         }
     }
 
@@ -177,6 +180,38 @@ impl App {
     /// for live theme preview updates.
     pub fn handle_popup_key(&mut self, key: KeyEvent) -> PopupAction {
         handle_popup_key(key, &mut self.config_popup, &mut self.config)
+    }
+
+    // Command buffer methods for Command mode
+
+    /// Get a reference to the command buffer
+    pub fn command_buffer(&self) -> &str {
+        &self.command_buffer
+    }
+
+    /// Get a mutable reference to the command buffer
+    pub fn command_buffer_mut(&mut self) -> &mut String {
+        &mut self.command_buffer
+    }
+
+    /// Clear the command buffer
+    pub fn clear_command_buffer(&mut self) {
+        self.command_buffer.clear();
+    }
+
+    /// Push a character to the command buffer
+    pub fn push_command_char(&mut self, c: char) {
+        self.command_buffer.push(c);
+    }
+
+    /// Pop a character from the command buffer (backspace)
+    pub fn pop_command_char(&mut self) -> Option<char> {
+        self.command_buffer.pop()
+    }
+
+    /// Take the command buffer content, clearing it
+    pub fn take_command_buffer(&mut self) -> String {
+        std::mem::take(&mut self.command_buffer)
     }
 }
 

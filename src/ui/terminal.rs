@@ -7,7 +7,7 @@ use crate::ui::autocomplete::render::render_autocomplete_popup;
 use crate::ui::autocomplete::state::AutocompleteState;
 use crate::ui::config_popup::{render_config_popup, PopupAction};
 use crate::ui::key_handler::KeyHandlerRegistry;
-use crate::ui::key_handlers::create_reading_handlers;
+use crate::ui::key_handlers::{create_command_handlers, create_reading_handlers};
 use crate::ui::reader::view::{render_command_deck, render_wpm};
 use crate::ui::theme::{set_current_theme, Theme};
 use anyhow::Result;
@@ -60,7 +60,6 @@ use std::time::{Duration, Instant};
 
 pub struct TuiManager {
     terminal: Terminal<CrosstermBackend<Stdout>>,
-    command_buffer: String,
     kitty_renderer: KittyGraphicsRenderer,
     cursor_visible: bool,        // Blink state
     last_cursor_toggle: Instant, // Last toggle time
@@ -111,10 +110,10 @@ impl TuiManager {
         // Initialize key handler registry with reading mode handlers
         let mut key_registry = KeyHandlerRegistry::new();
         create_reading_handlers(&mut key_registry);
+        create_command_handlers(&mut key_registry);
 
         Ok(TuiManager {
             terminal,
-            command_buffer: String::new(),
             kitty_renderer: renderer,
             cursor_visible: true, // Start visible
             last_cursor_toggle: Instant::now(),
@@ -236,16 +235,16 @@ impl TuiManager {
                                         // Check if @ should trigger autocomplete
                                         let should_activate_autocomplete = c == '@'
                                             && AutocompleteState::should_activate(
-                                                &self.command_buffer,
-                                                self.command_buffer.len(),
+                                                app.command_buffer(),
+                                                app.command_buffer().len(),
                                             );
                                         if should_activate_autocomplete {
                                             // Activate autocomplete
-                                            let cursor_pos = self.command_buffer.len();
+                                            let cursor_pos = app.command_buffer().len();
                                             let current_dir = std::env::current_dir()
                                                 .unwrap_or_else(|_| PathBuf::from("."));
                                             self.autocomplete_state.activate(
-                                                &self.command_buffer,
+                                                app.command_buffer(),
                                                 cursor_pos,
                                                 &current_dir,
                                             );
@@ -253,7 +252,7 @@ impl TuiManager {
                                         }
 
                                         // In command mode, collect input
-                                        self.command_buffer.push(c);
+                                        app.push_command_char(c);
                                         self.last_keypress = Instant::now(); // Reset blink pause
                                         self.cursor_visible = true; // Show cursor immediately
 
@@ -292,20 +291,27 @@ impl TuiManager {
                                         if self.autocomplete_state.is_active() {
                                             // Apply selection and close autocomplete
                                             self.autocomplete_state
-                                                .apply_selection(&mut self.command_buffer);
+                                                .apply_selection(app.command_buffer_mut());
                                             self.autocomplete_state.deactivate();
-                                        } else if !self.command_buffer.is_empty() {
-                                            // Execute the command
-                                            let command = self.command_buffer.clone();
-                                            self.command_buffer.clear();
-
-                                            // Parse and execute
-                                            use crate::ui::command_executor::{
-                                                execute_command, CommandResult,
-                                            };
-                                            match execute_command(app, &command)? {
-                                                CommandResult::Continue => {}
-                                                CommandResult::Exit(mode) => return Ok(mode),
+                                        } else {
+                                            // Dispatch to registry handler
+                                            let current_mode = app.mode();
+                                            match self.key_registry.dispatch(
+                                                key.code,
+                                                current_mode,
+                                                app,
+                                            ) {
+                                                Some(Ok(crate::ui::key_handler::KeyResult::Consumed)) => {
+                                                    // Check if mode changed to Quit
+                                                    if app.mode() == AppMode::Quit {
+                                                        return Ok(AppMode::Quit);
+                                                    }
+                                                }
+                                                Some(Ok(crate::ui::key_handler::KeyResult::Ignored)) => {}
+                                                Some(Err(e)) => {
+                                                    app.set_error(format!("Key handler error: {}", e));
+                                                }
+                                                None => {}
                                             }
                                         }
                                     }
@@ -319,7 +325,20 @@ impl TuiManager {
                                                 self.autocomplete_state.deactivate();
                                             }
                                         }
-                                        self.command_buffer.pop();
+                                        // Dispatch to registry handler
+                                        let current_mode = app.mode();
+                                        match self.key_registry.dispatch(
+                                            key.code,
+                                            current_mode,
+                                            app,
+                                        ) {
+                                            Some(Ok(crate::ui::key_handler::KeyResult::Consumed)) => {}
+                                            Some(Ok(crate::ui::key_handler::KeyResult::Ignored)) => {}
+                                            Some(Err(e)) => {
+                                                app.set_error(format!("Key handler error: {}", e));
+                                            }
+                                            None => {}
+                                        }
                                     }
                                 }
                                 KeyCode::Up => {
@@ -340,9 +359,9 @@ impl TuiManager {
                                     if app.mode() == AppMode::Command {
                                         if self.autocomplete_state.is_active() {
                                             // Apply selection with trailing space
-                                            self.autocomplete_state
-                                                .apply_selection(&mut self.command_buffer);
-                                            self.command_buffer.push(' ');
+                                        self.autocomplete_state
+                                            .apply_selection(app.command_buffer_mut());
+                                        app.command_buffer_mut().push(' ');
                                             // Keep autocomplete open for chaining
                                         } else if app.reading_state().is_some() {
                                             // Toggle to Reading mode
@@ -353,15 +372,29 @@ impl TuiManager {
                                     {
                                         // Toggle to Command mode
                                         app.set_mode(AppMode::Command);
-                                        self.command_buffer.clear();
+                                        app.clear_command_buffer();
                                     }
                                 }
                                 KeyCode::Esc => {
                                     if self.autocomplete_state.is_active() {
                                         // Close autocomplete but keep typed text
                                         self.autocomplete_state.deactivate();
+                                    } else if app.mode() == AppMode::Command {
+                                        // Dispatch to registry handler
+                                        let current_mode = app.mode();
+                                        match self.key_registry.dispatch(
+                                            key.code,
+                                            current_mode,
+                                            app,
+                                        ) {
+                                            Some(Ok(crate::ui::key_handler::KeyResult::Consumed)) => {}
+                                            Some(Ok(crate::ui::key_handler::KeyResult::Ignored)) => {}
+                                            Some(Err(e)) => {
+                                                app.set_error(format!("Key handler error: {}", e));
+                                            }
+                                            None => {}
+                                        }
                                     }
-                                    // Tab is now used for mode switching
                                 }
                                 // For non-Char keys in Reading/Paused modes, use registry dispatch
                                 _ => {
@@ -533,7 +566,7 @@ impl TuiManager {
                 frame,
                 command_area,
                 app.mode(),
-                &self.command_buffer,
+                app.command_buffer(),
                 app.get_error(),
                 self.cursor_visible && app.mode() == AppMode::Command, // Only blink cursor in Command mode
             );
