@@ -10,31 +10,6 @@ use crossterm::event::KeyCode;
 // Command Mode Handlers
 // ============================================================================
 
-/// Handler for any character input in Command mode - buffers to command_buffer
-pub struct CommandCharHandler;
-
-impl KeyHandler for CommandCharHandler {
-    fn mode(&self) -> AppMode {
-        AppMode::Command
-    }
-
-    fn keys(&self) -> Vec<KeyCode> {
-        // Match all printable characters
-        // This is handled specially by checking if it's a Char without Ctrl modifier
-        vec![]
-    }
-
-    fn handle(&self, _app: &mut App) -> Result<KeyResult> {
-        // This handler is dispatched directly from the event loop for Char keys
-        // The actual character is passed via a custom dispatch mechanism
-        Ok(KeyResult::Ignored)
-    }
-
-    fn help_text(&self) -> &str {
-        "Type command character"
-    }
-}
-
 /// Handler for Backspace in Command mode
 pub struct CommandBackspaceHandler;
 
@@ -118,7 +93,6 @@ pub fn create_command_handlers(registry: &mut crate::ui::key_handler::KeyHandler
     registry.register(CommandBackspaceHandler);
     registry.register(CommandEnterHandler);
     registry.register(CommandEscapeHandler);
-    // Note: CommandCharHandler is handled specially since it needs the character
 }
 
 // ============================================================================
@@ -442,8 +416,20 @@ mod tests {
         let mut registry = KeyHandlerRegistry::new();
         create_reading_handlers(&mut registry);
 
-        let handlers = registry.handlers_for_mode(AppMode::Reading);
-        assert_eq!(handlers.len(), 5);
+        // Verify handlers are registered by checking they can be dispatched
+        let mut app = App::default();
+        app.start_reading("test", 300);
+
+        // Test j key (next sentence)
+        assert!(registry.dispatch(KeyCode::Char('j'), AppMode::Reading, &mut app).is_some());
+        // Test k key (previous sentence)
+        assert!(registry.dispatch(KeyCode::Char('k'), AppMode::Reading, &mut app).is_some());
+        // Test p key (pause toggle)
+        assert!(registry.dispatch(KeyCode::Char('p'), AppMode::Reading, &mut app).is_some());
+        // Test [ key (speed down)
+        assert!(registry.dispatch(KeyCode::Char('['), AppMode::Reading, &mut app).is_some());
+        // Test ] key (speed up)
+        assert!(registry.dispatch(KeyCode::Char(']'), AppMode::Reading, &mut app).is_some());
     }
 
     #[test]
@@ -451,8 +437,21 @@ mod tests {
         let mut registry = KeyHandlerRegistry::new();
         create_popup_handlers(&mut registry);
 
-        let handlers = registry.handlers_for_mode(AppMode::Popup);
-        assert_eq!(handlers.len(), 6);
+        // Verify handlers are registered by checking they can be dispatched
+        let mut app = App::default();
+
+        // Test Enter key (confirm)
+        assert!(registry.dispatch(KeyCode::Enter, AppMode::Popup, &mut app).is_some());
+        // Test Esc key (dismiss)
+        assert!(registry.dispatch(KeyCode::Esc, AppMode::Popup, &mut app).is_some());
+        // Test j key (navigate down)
+        assert!(registry.dispatch(KeyCode::Char('j'), AppMode::Popup, &mut app).is_some());
+        // Test k key (navigate up)
+        assert!(registry.dispatch(KeyCode::Char('k'), AppMode::Popup, &mut app).is_some());
+        // Test h key (cycle left)
+        assert!(registry.dispatch(KeyCode::Char('h'), AppMode::Popup, &mut app).is_some());
+        // Test l key (cycle right)
+        assert!(registry.dispatch(KeyCode::Char('l'), AppMode::Popup, &mut app).is_some());
     }
 
     #[test]

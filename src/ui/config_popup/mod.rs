@@ -7,7 +7,7 @@ mod handler;
 mod render;
 mod state;
 
-pub use handler::{handle_popup_key, PopupAction};
+// Note: handler module is used for popup key handling
 pub use render::render_config_popup;
 pub use state::ConfigPopupState;
 

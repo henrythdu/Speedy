@@ -13,6 +13,8 @@ pub enum KeyResult {
     /// Key was consumed, stop processing
     Consumed,
     /// Key was ignored, continue to next handler
+    /// (Reserved for future handler chain extensions)
+    #[allow(dead_code)]
     Ignored,
 }
 
@@ -20,14 +22,15 @@ pub enum KeyResult {
 pub trait KeyHandler: Send + Sync {
     /// Which mode this handler applies to
     fn mode(&self) -> AppMode;
-    
+
     /// Which keys this handler responds to
     fn keys(&self) -> Vec<KeyCode>;
-    
+
     /// Handle the key press
     fn handle(&self, app: &mut App) -> Result<KeyResult>;
-    
+
     /// Get help text for this key binding
+    #[allow(dead_code)]
     fn help_text(&self) -> &str {
         ""
     }
@@ -60,8 +63,9 @@ impl KeyHandlerRegistry {
         }
         None
     }
-    
-    /// Get all handlers for a specific mode
+
+    /// Get all handlers for a specific mode (used in tests)
+    #[allow(dead_code)]
     pub fn handlers_for_mode(&self, mode: AppMode) -> Vec<&dyn KeyHandler> {
         self.handlers
             .iter()
@@ -104,7 +108,9 @@ mod tests {
         let mut app = App::default();
         let result = registry.dispatch(KeyCode::Char('x'), AppMode::Reading, &mut app);
         assert!(result.is_some());
-        assert_eq!(result.unwrap().unwrap(), KeyResult::Consumed);
+        let result = result.unwrap();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), KeyResult::Consumed);
         
         let result = registry.dispatch(KeyCode::Char('y'), AppMode::Reading, &mut app);
         assert!(result.is_none());

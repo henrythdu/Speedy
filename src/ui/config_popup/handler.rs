@@ -1,13 +1,17 @@
 //! Key event handling for config popup
 //!
-//! Provides `handle_popup_key` for processing keyboard input when the config popup is active.
-//! Supports live theme preview via immediate config updates.
+//! Provides test helpers for popup handling. The actual popup key handling
+//! is now done via the key handler registry in key_handlers.rs.
 
+#[cfg(test)]
 use super::ConfigPopupState;
+#[cfg(test)]
 use crate::config::Config;
+#[cfg(test)]
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// Result of handling a popup key event
+#[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PopupAction {
     /// No action taken, let other handlers process this key
@@ -20,7 +24,7 @@ pub enum PopupAction {
     CancelAndClose,
 }
 
-/// Handle key events for the config popup
+/// Handle key events for the config popup (test helper)
 ///
 /// # Arguments
 /// * `key` - The key event to process
@@ -41,6 +45,7 @@ pub enum PopupAction {
 ///   - Up/Down: Navigate between rows
 ///   - Left/Right: Cycle values and apply live theme preview
 ///   - Ctrl+P: Toggle close
+#[cfg(test)]
 pub fn handle_popup_key(
     key: KeyEvent,
     popup: &mut ConfigPopupState,

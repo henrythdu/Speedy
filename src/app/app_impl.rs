@@ -170,16 +170,6 @@ impl App {
         Ok(())
     }
 
-    /// Get a mutable reference to the config (for popup handlers)
-    pub fn config_mut(&mut self) -> &mut Config {
-        &mut self.config
-    }
-
-    /// Get a mutable reference to the config popup state (for popup handlers)
-    pub fn config_popup_mut(&mut self) -> &mut ConfigPopupState {
-        &mut self.config_popup
-    }
-
     // Command buffer methods for Command mode
 
     /// Get a reference to the command buffer
@@ -205,11 +195,6 @@ impl App {
     /// Pop a character from the command buffer (backspace)
     pub fn pop_command_char(&mut self) -> Option<char> {
         self.command_buffer.pop()
-    }
-
-    /// Take the command buffer content, clearing it
-    pub fn take_command_buffer(&mut self) -> String {
-        std::mem::take(&mut self.command_buffer)
     }
 }
 
