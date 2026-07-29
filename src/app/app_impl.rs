@@ -91,6 +91,27 @@ impl App {
         }
     }
 
+    /// Quit the application (Ctrl+C).
+    pub fn quit(&mut self) {
+        self.mode = AppMode::Quit;
+    }
+
+    /// Toggle the config popup (Ctrl+P).
+    /// Opens from Reading/Paused; closes (discarding changes) from Popup.
+    pub fn toggle_popup(&mut self) {
+        match self.mode {
+            AppMode::Popup => {
+                self.config_popup.close();
+                self.mode = AppMode::Reading;
+            }
+            AppMode::Reading | AppMode::Paused => {
+                self.config_popup.open(&self.config);
+                self.mode = AppMode::Popup;
+            }
+            _ => {}
+        }
+    }
+
     /// Get current word for rendering
     ///
     /// Returns the word at current reading position with punctuation attached, or None if no reading state.

@@ -11,7 +11,7 @@ files = ["src/reading/duration.rs", "src/reading/mod.rs", "src/reading/ovp.rs", 
 files = ["src/rendering/font.rs", "src/rendering/mod.rs", "src/rendering/renderer.rs", "src/rendering/viewport.rs"]
 
 [kitty]
-files = ["src/rendering/kitty/mod.rs", "src/rendering/kitty/positioning.rs", "src/rendering/kitty/protocol.rs", "src/rendering/kitty/rasterizer.rs"]
+files = ["src/rendering/kitty/mod.rs", "src/rendering/kitty/positioning.rs", "src/rendering/kitty/protocol.rs", "src/rendering/kitty/rasterizer.rs", "src/rendering/kitty/progress.rs"]
 
 [input]
 files = ["src/input/clipboard.rs", "src/input/epub.rs", "src/input/mod.rs", "src/input/pdf.rs"]
@@ -32,7 +32,7 @@ files = ["src/ui/terminal.rs", "src/ui/mod.rs"]
 files = ["src/ui/command.rs", "src/ui/command_executor.rs"]
 
 [autocomplete]
-files = ["src/ui/autocomplete/cache.rs", "src/ui/autocomplete/discovery.rs", "src/ui/autocomplete/mod.rs", "src/ui/autocomplete/render.rs", "src/ui/autocomplete/state.rs"]
+files = ["src/ui/autocomplete/cache.rs", "src/ui/autocomplete/discovery.rs", "src/ui/autocomplete/mod.rs", "src/ui/autocomplete/render.rs", "src/ui/autocomplete/state.rs", "src/ui/autocomplete/controller.rs"]
 
 [config-popup]
 files = ["src/ui/config_popup/handler.rs", "src/ui/config_popup/mod.rs", "src/ui/config_popup/render.rs"]

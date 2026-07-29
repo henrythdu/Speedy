@@ -1,12 +1,10 @@
 use crate::app::{mode::AppMode, App};
 use crate::rendering::kitty::KittyGraphicsRenderer;
 use crate::rendering::renderer::{RenderFrame, RsvpRenderer};
-use crate::ui::autocomplete::cache::PerDirectoryCache;
-use crate::ui::autocomplete::discovery::spawn_discovery_thread;
+use crate::ui::autocomplete::controller::AutocompleteController;
 use crate::ui::autocomplete::render::render_autocomplete_popup;
-use crate::ui::autocomplete::state::AutocompleteState;
 use crate::ui::config_popup::render_config_popup;
-use crate::ui::key_handler::KeyHandlerRegistry;
+use crate::ui::key_handler::{KeyHandlerRegistry, KeyResult};
 use crate::ui::key_handlers::{
     create_command_handlers, create_popup_handlers, create_reading_handlers,
 };
@@ -54,23 +52,68 @@ fn calculate_margins(area: Rect) -> (u16, u16, u16, u16) {
     }
 }
 use std::io::{self, Stdout, Write};
-use std::path::PathBuf;
-use std::sync::mpsc::Receiver;
-use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
+
+/// Cursor blink state machine.
+///
+/// Stays solid for `PAUSE_AFTER_TYPING` after the last keypress, then blinks on
+/// `BLINK_INTERVAL`. Extracted from TuiManager so the terminal layer doesn't own
+/// a UI-timing concern inline.
+struct CursorBlinker {
+    visible: bool,
+    last_toggle: Instant,
+    last_keypress: Instant,
+}
+
+impl CursorBlinker {
+    const BLINK_INTERVAL: Duration = Duration::from_millis(500);
+    const PAUSE_AFTER_TYPING: Duration = Duration::from_millis(500);
+
+    fn new() -> Self {
+        Self {
+            visible: true,
+            last_toggle: Instant::now(),
+            last_keypress: Instant::now(),
+        }
+    }
+
+    /// Record a keypress: show the cursor immediately and hold off blinking.
+    fn on_key(&mut self) {
+        self.last_keypress = Instant::now();
+        self.visible = true;
+    }
+
+    /// Advance blink state. Returns true if visibility changed (caller should redraw).
+    fn tick(&mut self) -> bool {
+        if self.last_keypress.elapsed() < Self::PAUSE_AFTER_TYPING {
+            if !self.visible {
+                self.visible = true;
+                return true;
+            }
+            return false;
+        }
+        if self.last_toggle.elapsed() >= Self::BLINK_INTERVAL {
+            self.visible = !self.visible;
+            self.last_toggle = Instant::now();
+            true
+        } else {
+            false
+        }
+    }
+
+    fn visible(&self) -> bool {
+        self.visible
+    }
+}
 
 pub struct TuiManager {
     terminal: Terminal<CrosstermBackend<Stdout>>,
     kitty_renderer: KittyGraphicsRenderer,
-    cursor_visible: bool,        // Blink state
-    last_cursor_toggle: Instant, // Last toggle time
-    last_keypress: Instant,      // For pause-on-type
+    cursor: CursorBlinker,
 
-    // Autocomplete state
-    autocomplete_state: AutocompleteState,
-    discovery_receiver: Option<Receiver<PathBuf>>,
-    discovery_cache: Arc<Mutex<PerDirectoryCache>>,
+    // Autocomplete subsystem (state + discovery + cache)
+    autocomplete: AutocompleteController,
 
     // Key handler registry for OCP-compliant key handling
     key_registry: KeyHandlerRegistry,
@@ -118,12 +161,8 @@ impl TuiManager {
         Ok(TuiManager {
             terminal,
             kitty_renderer: renderer,
-            cursor_visible: true, // Start visible
-            last_cursor_toggle: Instant::now(),
-            last_keypress: Instant::now(),
-            autocomplete_state: AutocompleteState::new(),
-            discovery_receiver: None,
-            discovery_cache: Arc::new(Mutex::new(PerDirectoryCache::new())),
+            cursor: CursorBlinker::new(),
+            autocomplete: AutocompleteController::new(),
             key_registry,
         })
     }
@@ -132,385 +171,149 @@ impl TuiManager {
         let mut last_tick = Instant::now();
         let render_tick = Duration::from_millis(1000 / 60);
 
-        // Cursor blink timing constants
-        const CURSOR_BLINK_INTERVAL: Duration = Duration::from_millis(500);
-        const CURSOR_PAUSE_AFTER_TYPING: Duration = Duration::from_millis(500);
-
         // Force initial render before entering loop
         self.terminal.clear()?;
         self.terminal.flush()?;
         self.render_frame(app)?;
 
         loop {
-            let current_mode = app.mode();
-            if current_mode == AppMode::Quit {
-                return Ok(current_mode);
+            if app.mode() == AppMode::Quit {
+                return Ok(AppMode::Quit);
             }
-            // Command, Reading, and Paused all stay in TUI
-            // Command mode shows the command deck for input
-            // Reading and Paused modes show the RSVP display
 
-            // Cursor blink management (only in Command mode)
+            // Cursor blink — only in Command mode
             let mut needs_redraw = false;
             if app.mode() == AppMode::Command {
-                let time_since_keypress = self.last_keypress.elapsed();
-
-                if time_since_keypress >= CURSOR_PAUSE_AFTER_TYPING {
-                    // Time to resume blinking
-                    if self.last_cursor_toggle.elapsed() >= CURSOR_BLINK_INTERVAL {
-                        self.cursor_visible = !self.cursor_visible;
-                        self.last_cursor_toggle = Instant::now();
-                        needs_redraw = true;
-                    }
-                } else {
-                    // Recently typed - keep cursor visible
-                    if !self.cursor_visible {
-                        self.cursor_visible = true;
-                        needs_redraw = true;
-                    }
-                }
+                needs_redraw = self.cursor.tick();
             }
 
-            // Use fixed short timeout in Command mode for responsive input
-            // Use token duration in Reading/Paused modes for word timing
+            // Short timeout in Command mode for responsive input/cursor;
+            // token duration in Reading/Paused drives word auto-advance.
             let poll_timeout = if app.mode() == AppMode::Command {
-                Duration::from_millis(50) // 50ms for responsive cursor blink and input
+                Duration::from_millis(50)
             } else {
-                let timeout_ms = app.get_current_token_duration();
-                Duration::from_millis(timeout_ms.max(16))
+                Duration::from_millis(app.get_current_token_duration().max(16))
             };
 
             match event::poll(poll_timeout) {
-                Ok(true) => {
-                    match event::read()? {
-                        Event::Key(key) => {
-                            // Handle Ctrl+C to quit
-                            if key.code == KeyCode::Char('c')
-                                && key.modifiers.contains(event::KeyModifiers::CONTROL)
-                            {
-                                app.set_mode(AppMode::Quit);
-                                return Ok(AppMode::Quit);
-                            }
-
-                            // Handle Ctrl+P to toggle popup mode
-                            if key.code == KeyCode::Char('p')
-                                && key.modifiers.contains(event::KeyModifiers::CONTROL)
-                            {
-                                if app.mode() == AppMode::Popup {
-                                    // Close popup and return to Reading mode
-                                    app.config_popup.close();
-                                    app.set_mode(AppMode::Reading);
-                                } else if app.mode() == AppMode::Reading
-                                    || app.mode() == AppMode::Paused
-                                {
-                                    // Open popup and switch to Popup mode
-                                    app.config_popup.open(&app.config);
-                                    app.set_mode(AppMode::Popup);
-                                }
-                                continue;
-                            }
-
-                            // Handle Ctrl+R to refresh autocomplete cache
-                            if key.code == KeyCode::Char('r')
-                                && key.modifiers.contains(event::KeyModifiers::CONTROL)
-                                && self.autocomplete_state.is_active()
-                            {
-                                // Invalidate cache for current directory
-                                // Handle lock poisoning gracefully - skip invalidation but continue
-                                let current_dir =
-                                    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-                                if let Ok(mut cache) = self.discovery_cache.lock() {
-                                    cache.invalidate(&current_dir);
-                                }
-                                // Restart discovery
-                                self.autocomplete_state.clear_files();
-                                self.spawn_file_discovery();
-                            }
-
+                Ok(true) => match event::read()? {
+                    Event::Key(key) => {
+                        // Global shortcuts (every mode)
+                        if key.modifiers.contains(event::KeyModifiers::CONTROL) {
                             match key.code {
-                                KeyCode::Char(c) => {
-                                    if app.mode() == AppMode::Command {
-                                        // Check if @ should trigger autocomplete
-                                        let should_activate_autocomplete = c == '@'
-                                            && AutocompleteState::should_activate(
-                                                app.command_buffer(),
-                                                app.command_buffer().len(),
-                                            );
-                                        if should_activate_autocomplete {
-                                            // Activate autocomplete
-                                            let cursor_pos = app.command_buffer().len();
-                                            let current_dir = std::env::current_dir()
-                                                .unwrap_or_else(|_| PathBuf::from("."));
-                                            self.autocomplete_state.activate(
-                                                app.command_buffer(),
-                                                cursor_pos,
-                                                &current_dir,
-                                            );
-                                            self.spawn_file_discovery();
-                                        }
-
-                                        // In command mode, collect input
-                                        app.push_command_char(c);
-                                        self.last_keypress = Instant::now(); // Reset blink pause
-                                        self.cursor_visible = true; // Show cursor immediately
-
-                                        // Handle input for autocomplete if active
-                                        // Skip handle_input for @ when we just activated - query should be empty after @
-                                        if self.autocomplete_state.is_active()
-                                            && !should_activate_autocomplete
-                                        {
-                                            self.autocomplete_state.handle_input(c);
-                                        }
-                                    } else if app.mode() == AppMode::Popup {
-                                        // In popup mode, use registry dispatch
-                                        let current_mode = app.mode();
-                                        match self.key_registry.dispatch(
-                                            key.code,
-                                            current_mode,
-                                            app,
-                                        ) {
-                                            Some(Ok(
-                                                crate::ui::key_handler::KeyResult::Consumed,
-                                            )) => {
-                                                // Key was handled, nothing more to do
-                                            }
-                                            Some(Ok(
-                                                crate::ui::key_handler::KeyResult::Ignored,
-                                            )) => {
-                                                // Key was ignored
-                                            }
-                                            Some(Err(e)) => {
-                                                app.set_error(format!("Key handler error: {}", e));
-                                            }
-                                            None => {
-                                                // No handler registered for this key, ignore it
-                                            }
-                                        }
-                                    } else {
-                                        // In reading/paused mode, use registry dispatch
-                                        let current_mode = app.mode();
-                                        match self.key_registry.dispatch(
-                                            key.code,
-                                            current_mode,
-                                            app,
-                                        ) {
-                                            Some(Ok(
-                                                crate::ui::key_handler::KeyResult::Consumed,
-                                            )) => {
-                                                // Key was handled, nothing more to do
-                                            }
-                                            Some(Ok(
-                                                crate::ui::key_handler::KeyResult::Ignored,
-                                            )) => {
-                                                // Key was ignored, could fall back to legacy handling if needed
-                                            }
-                                            Some(Err(e)) => {
-                                                app.set_error(format!("Key handler error: {}", e));
-                                            }
-                                            None => {
-                                                // No handler registered for this key, ignore it
-                                            }
-                                        }
-                                    }
+                                KeyCode::Char('c') => {
+                                    app.quit();
+                                    return Ok(AppMode::Quit);
                                 }
-                                KeyCode::Enter => {
-                                    if app.mode() == AppMode::Command {
-                                        if self.autocomplete_state.is_active() {
-                                            // Apply selection and close autocomplete
-                                            self.autocomplete_state
-                                                .apply_selection(app.command_buffer_mut());
-                                            self.autocomplete_state.deactivate();
-                                        } else {
-                                            // Dispatch to registry handler
-                                            let current_mode = app.mode();
-                                            match self.key_registry.dispatch(
-                                                key.code,
-                                                current_mode,
-                                                app,
-                                            ) {
-                                                Some(Ok(
-                                                    crate::ui::key_handler::KeyResult::Consumed,
-                                                )) => {
-                                                    // Check if mode changed to Quit
-                                                    if app.mode() == AppMode::Quit {
-                                                        return Ok(AppMode::Quit);
-                                                    }
-                                                }
-                                                Some(Ok(
-                                                    crate::ui::key_handler::KeyResult::Ignored,
-                                                )) => {}
-                                                Some(Err(e)) => {
-                                                    app.set_error(format!(
-                                                        "Key handler error: {}",
-                                                        e
-                                                    ));
-                                                }
-                                                None => {}
-                                            }
-                                        }
-                                    }
+                                KeyCode::Char('p') => {
+                                    app.toggle_popup();
+                                    continue;
                                 }
-                                KeyCode::Backspace => {
-                                    if app.mode() == AppMode::Command {
-                                        if self.autocomplete_state.is_active() {
-                                            self.autocomplete_state.backspace();
-                                            if self.autocomplete_state.query().is_empty() {
-                                                // User deleted the @, close autocomplete
-                                                self.autocomplete_state.deactivate();
-                                            }
-                                        }
-                                        // Dispatch to registry handler
-                                        let current_mode = app.mode();
-                                        match self.key_registry.dispatch(
-                                            key.code,
-                                            current_mode,
-                                            app,
-                                        ) {
-                                            Some(Ok(
-                                                crate::ui::key_handler::KeyResult::Consumed,
-                                            )) => {}
-                                            Some(Ok(
-                                                crate::ui::key_handler::KeyResult::Ignored,
-                                            )) => {}
-                                            Some(Err(e)) => {
-                                                app.set_error(format!("Key handler error: {}", e));
-                                            }
-                                            None => {}
-                                        }
-                                    }
+                                // Ctrl+R refreshes the autocomplete file cache (active session only)
+                                KeyCode::Char('r') if self.autocomplete.is_active() => {
+                                    self.autocomplete.refresh();
+                                    continue;
                                 }
-                                KeyCode::Up => {
-                                    if app.mode() == AppMode::Command
-                                        && self.autocomplete_state.is_active()
-                                    {
-                                        self.autocomplete_state.select_previous();
-                                    }
-                                }
-                                KeyCode::Down => {
-                                    if app.mode() == AppMode::Command
-                                        && self.autocomplete_state.is_active()
-                                    {
-                                        self.autocomplete_state.select_next();
-                                    }
-                                }
-                                KeyCode::Tab => {
-                                    if app.mode() == AppMode::Command {
-                                        if self.autocomplete_state.is_active() {
-                                            // Apply selection with trailing space
-                                            self.autocomplete_state
-                                                .apply_selection(app.command_buffer_mut());
-                                            app.command_buffer_mut().push(' ');
-                                            // Keep autocomplete open for chaining
-                                        } else if app.reading_state().is_some() {
-                                            // Toggle to Reading mode
-                                            app.set_mode(AppMode::Reading);
-                                        }
-                                    } else if app.mode() == AppMode::Reading
-                                        || app.mode() == AppMode::Paused
-                                    {
-                                        // Toggle to Command mode
-                                        app.set_mode(AppMode::Command);
-                                        app.clear_command_buffer();
-                                    }
-                                }
-                                KeyCode::Esc => {
-                                    if self.autocomplete_state.is_active() {
-                                        // Close autocomplete but keep typed text
-                                        self.autocomplete_state.deactivate();
-                                    } else if app.mode() == AppMode::Command {
-                                        // Dispatch to registry handler
-                                        let current_mode = app.mode();
-                                        match self.key_registry.dispatch(
-                                            key.code,
-                                            current_mode,
-                                            app,
-                                        ) {
-                                            Some(Ok(
-                                                crate::ui::key_handler::KeyResult::Consumed,
-                                            )) => {}
-                                            Some(Ok(
-                                                crate::ui::key_handler::KeyResult::Ignored,
-                                            )) => {}
-                                            Some(Err(e)) => {
-                                                app.set_error(format!("Key handler error: {}", e));
-                                            }
-                                            None => {}
-                                        }
-                                    }
-                                }
-                                // For non-Char keys in Reading/Paused/Popup modes, use registry dispatch
-                                _ => {
-                                    if app.mode() == AppMode::Reading
-                                        || app.mode() == AppMode::Paused
-                                        || app.mode() == AppMode::Popup
-                                    {
-                                        let current_mode = app.mode();
-                                        match self.key_registry.dispatch(
-                                            key.code,
-                                            current_mode,
-                                            app,
-                                        ) {
-                                            Some(Ok(
-                                                crate::ui::key_handler::KeyResult::Consumed,
-                                            )) => {
-                                                // Key was handled, nothing more to do
-                                            }
-                                            Some(Ok(
-                                                crate::ui::key_handler::KeyResult::Ignored,
-                                            )) => {
-                                                // Key was ignored, could fall back to legacy handling if needed
-                                            }
-                                            Some(Err(e)) => {
-                                                app.set_error(format!("Key handler error: {}", e));
-                                            }
-                                            None => {
-                                                // No handler registered for this key, ignore it
-                                            }
-                                        }
-                                    }
-                                }
+                                _ => {}
                             }
                         }
-                        Event::Resize(cols, rows) => {
-                            // Handle terminal resize - always update viewport
-                            let _ = self.handle_resize(cols, rows, app);
+
+                        match (key.code, app.mode()) {
+                            // Command mode: drive autocomplete inline + forward chars to the buffer
+                            (KeyCode::Char(c), AppMode::Command) => {
+                                let activated = {
+                                    let buf = app.command_buffer();
+                                    self.autocomplete.try_activate(c, buf, buf.len())
+                                };
+
+                                app.push_command_char(c);
+                                self.cursor.on_key();
+
+                                // Feed the autocomplete query, except right after @-activation
+                                // (the query should stay empty until the next char).
+                                if !activated {
+                                    self.autocomplete.feed_char(c);
+                                }
+                            }
+                            // Popup / Reading / Paused: route every char through the registry
+                            (KeyCode::Char(_), _) => {
+                                self.dispatch_key(key.code, app);
+                            }
+                            (KeyCode::Enter, AppMode::Command) => {
+                                if self.autocomplete.is_active() {
+                                    self.autocomplete.apply_and_close(app.command_buffer_mut());
+                                } else if self.dispatch_key(KeyCode::Enter, app)
+                                    && app.mode() == AppMode::Quit
+                                {
+                                    return Ok(AppMode::Quit);
+                                }
+                            }
+                            (KeyCode::Backspace, AppMode::Command) => {
+                                if self.autocomplete.is_active() {
+                                    self.autocomplete.backspace();
+                                }
+                                self.dispatch_key(KeyCode::Backspace, app);
+                            }
+                            (KeyCode::Up, AppMode::Command) => {
+                                if self.autocomplete.is_active() {
+                                    self.autocomplete.select_previous();
+                                }
+                            }
+                            (KeyCode::Down, AppMode::Command) => {
+                                if self.autocomplete.is_active() {
+                                    self.autocomplete.select_next();
+                                }
+                            }
+                            (KeyCode::Tab, AppMode::Command) => {
+                                if self.autocomplete.is_active() {
+                                    self.autocomplete.apply_and_chain(app.command_buffer_mut());
+                                } else if app.reading_state().is_some() {
+                                    app.set_mode(AppMode::Reading);
+                                }
+                            }
+                            (KeyCode::Tab, AppMode::Reading | AppMode::Paused) => {
+                                app.set_mode(AppMode::Command);
+                                app.clear_command_buffer();
+                            }
+                            (KeyCode::Esc, _) => {
+                                if self.autocomplete.is_active() {
+                                    self.autocomplete.deactivate();
+                                } else {
+                                    self.dispatch_key(KeyCode::Esc, app);
+                                }
+                            }
+                            // Keys whose effect is Command-only: no-op elsewhere (preserves prior behavior)
+                            (
+                                KeyCode::Enter
+                                | KeyCode::Backspace
+                                | KeyCode::Up
+                                | KeyCode::Down
+                                | KeyCode::Tab,
+                                _,
+                            ) => {}
+                            // Any other key in Reading/Paused/Popup goes through the registry
+                            (_, AppMode::Reading | AppMode::Paused | AppMode::Popup) => {
+                                self.dispatch_key(key.code, app);
+                            }
+                            _ => {}
                         }
-                        _ => {}
                     }
-                }
+                    Event::Resize(cols, rows) => {
+                        let _ = self.handle_resize(cols, rows, app);
+                    }
+                    _ => {}
+                },
                 Ok(false) => {
-                    // Only auto-advance in Reading mode, not Paused
+                    // Auto-advance only while actively Reading
                     if app.mode() == AppMode::Reading && !app.advance_reading() {
                         app.set_mode(AppMode::Paused);
                     }
                 }
-                Err(e) => {
-                    // Propagate I/O errors instead of ignoring them
-                    return Err(e.into());
-                }
+                Err(e) => return Err(e.into()),
             }
 
-            // Check for incoming files from discovery thread
-            if let Some(ref receiver) = self.discovery_receiver {
-                // Process all available files without blocking
-                loop {
-                    match receiver.try_recv() {
-                        Ok(file) => {
-                            self.autocomplete_state.add_file(file);
-                        }
-                        Err(std::sync::mpsc::TryRecvError::Empty) => {
-                            // No more files available right now, but thread is still running
-                            break;
-                        }
-                        Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                            // Thread has finished and sender dropped
-                            self.autocomplete_state.mark_scanning_complete();
-                            self.discovery_receiver = None;
-                            break;
-                        }
-                    }
-                }
-            }
+            // Drain any file-discovery results into the autocomplete state
+            self.autocomplete.poll();
 
             if last_tick.elapsed() >= render_tick || needs_redraw {
                 self.render_frame(app)?;
@@ -519,6 +322,20 @@ impl TuiManager {
         }
     }
 
+    /// Forward a key to the registry; log handler errors to `app`. Returns true if consumed.
+    fn dispatch_key(&mut self, code: KeyCode, app: &mut App) -> bool {
+        let mode = app.mode();
+        match self.key_registry.dispatch(code, mode, app) {
+            Some(Ok(KeyResult::Consumed)) => true,
+            Some(Ok(KeyResult::Ignored)) | None => false,
+            Some(Err(e)) => {
+                app.set_error(format!("Key handler error: {}", e));
+                false
+            }
+        }
+    }
+
+    /// Non-blocking drain of the file-discovery channel into autocomplete state.
     /// Calculate the reader area (terminal minus command section and margins)
     fn calculate_reader_area(&mut self) -> Rect {
         if let Some(dims) = self.kitty_renderer.viewport().get_dimensions() {
@@ -553,10 +370,16 @@ impl TuiManager {
     }
 
     pub fn render_frame(&mut self, app: &mut App) -> Result<()> {
-        // Calculate reader area once at the beginning (for all rendering steps)
+        // Reader area (pixel rect) is shared with the KGP layer for the macro gutter.
         let reader_area = self.calculate_reader_area();
+        self.render_tui_layer(app)?;
+        self.render_kitty_layer(app, reader_area)?;
+        Ok(())
+    }
 
-        // Render background via Ratatui
+    /// Ratatui widget tree: background, margins, WPM, command deck, autocomplete
+    /// and config popups. Pure cell-based rendering via the crossterm backend.
+    fn render_tui_layer(&mut self, app: &mut App) -> Result<()> {
         self.terminal.draw(|frame| {
             let area = frame.area();
             set_current_theme(app.theme_name());
@@ -602,9 +425,6 @@ impl TuiManager {
             let reading_area = main_layout[0];
             let command_area = main_layout[1];
 
-            // Content areas use same background as margins for seamless look
-            // (Background already filled entire viewport above)
-
             // Render WPM display in top-left of reading area
             let wpm = app.get_wpm();
             render_wpm(frame, reading_area, wpm, &theme);
@@ -615,14 +435,14 @@ impl TuiManager {
                 app.mode(),
                 app.command_buffer(),
                 app.get_error(),
-                self.cursor_visible && app.mode() == AppMode::Command, // Only blink cursor in Command mode
+                self.cursor.visible() && app.mode() == AppMode::Command, // Only blink cursor in Command mode
             );
 
             // Render autocomplete popup if active
             let terminal_height = frame.area().height;
             render_autocomplete_popup(
                 frame,
-                &self.autocomplete_state,
+                self.autocomplete.state(),
                 command_area,
                 terminal_height,
             );
@@ -633,8 +453,13 @@ impl TuiManager {
 
         // Flush stdout to ensure ratatui output appears immediately
         io::stdout().flush()?;
+        Ok(())
+    }
 
-        // Render word via Kitty Graphics Protocol
+    /// Kitty Graphics Protocol layer: clear previous graphics, render the current
+    /// word (with ghost context) via ab_glyph rasterization, and draw the sentence
+    /// progress micro-bar plus the document-progress macro gutter.
+    fn render_kitty_layer(&mut self, app: &mut App, reader_area: Rect) -> Result<()> {
         // Always clear previous graphics first to prevent artifacts when switching modes
         if let Err(e) = RsvpRenderer::clear(&mut self.kitty_renderer) {
             app.set_error(format!("Failed to clear previous word: {}", e));
@@ -674,11 +499,9 @@ impl TuiManager {
 
                 // Render progress bar and macro gutter
                 if let Some(reading_state) = app.reading_state() {
-                    // Extract values we need to avoid borrow issues
                     let current_index = reading_state.current_index();
                     let total_tokens = reading_state.tokens().len();
-                    let app_mode = app.mode();
-                    let paused = matches!(app_mode, AppMode::Paused);
+                    let paused = matches!(app.mode(), AppMode::Paused);
 
                     let progress = crate::reading::calculate_sentence_progress(
                         current_index,
@@ -722,17 +545,6 @@ impl TuiManager {
         }
 
         Ok(())
-    }
-
-    /// Spawn file discovery thread for autocomplete
-    fn spawn_file_discovery(&mut self) {
-        // Get current directory
-        let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-
-        // Spawn discovery thread
-        let cache = Arc::clone(&self.discovery_cache);
-        let handle = spawn_discovery_thread(current_dir, cache);
-        self.discovery_receiver = Some(handle.receiver);
     }
 
     /// Handle terminal resize events

@@ -1,7 +1,8 @@
 name = "autocomplete"
 layer = 4
-purpose = "File autocomplete for the command deck (@-trigger): threaded background discovery, per-directory cache (TTL), popup state, and ratatui rendering of matching PDF/EPUB files."
+purpose = "File autocomplete subsystem (@-trigger): a controller owning popup state + threaded background discovery + per-directory cache (TTL), plus ratatui rendering of matching PDF/EPUB files. The controller exposes the high-level actions the command-deck key loop needs."
 provides = [
+  "AutocompleteController",
   "AutocompleteState",
   "DiscoveryHandle",
   "spawn_discovery_thread",

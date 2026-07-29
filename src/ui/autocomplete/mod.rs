@@ -24,6 +24,7 @@
 //! thread via mpsc channels. The cache uses Arc<Mutex<>> for thread-safe access.
 
 pub mod cache;
+pub mod controller;
 pub mod discovery;
 pub mod render;
 pub mod state;

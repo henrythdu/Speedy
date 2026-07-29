@@ -4,14 +4,11 @@
 //! using the Kitty Graphics Protocol.
 
 pub mod positioning;
+pub mod progress;
 pub mod protocol;
 pub mod rasterizer;
 
-use crate::engine::config::{
-    DEFAULT_CACHE_CAPACITY, DEFAULT_FONT_SIZE, PROGRESS_BAR_HEIGHT, PROGRESS_BAR_MARGIN_PX,
-    PROGRESS_BAR_WIDTH_PCT, PROGRESS_BRIGHT_ALPHA, PROGRESS_COLOR_B, PROGRESS_COLOR_G,
-    PROGRESS_COLOR_R, PROGRESS_DIM_ALPHA,
-};
+use crate::engine::config::{DEFAULT_CACHE_CAPACITY, DEFAULT_FONT_SIZE};
 use crate::rendering::cache::WordCache;
 use crate::rendering::font::{get_font, get_font_metrics, FontMetrics};
 use crate::rendering::kitty::positioning::{calculate_start_x, calculate_vertical_center};
@@ -24,7 +21,6 @@ use crate::rendering::renderer::{RenderFrame, RendererError, RsvpRenderer};
 use crate::rendering::viewport::Viewport;
 use ab_glyph::FontRef;
 use imageproc::image::{ImageBuffer, Rgba};
-use ratatui::layout::Rect;
 use std::io::{self, Write};
 
 /// Kitty Graphics Protocol renderer for pixel-perfect RSVP
@@ -211,182 +207,6 @@ impl KittyGraphicsRenderer {
 
         Ok(())
     }
-
-    /// Render sentence progress bar below word
-    ///
-    /// # Arguments
-    /// * `word_y` - Y position of word (from calculate_vertical_center)
-    /// * `word_height` - Height of rendered word in pixels
-    /// * `progress` - Fill percentage (0.0 to 1.0)
-    /// * `mode` - Current app mode (Reading or Paused)
-    /// * `image_id` - Image ID for this bar
-    pub fn render_bar(
-        &mut self,
-        word_y: u32,
-        word_height: u32,
-        progress: f64,
-        paused: bool,
-        image_id: u32,
-    ) -> Result<(), RendererError> {
-        use imageproc::image::ImageBuffer;
-
-        // Simple: bar Y = word Y + word height + 10px margin
-        let bar_y = word_y + word_height + PROGRESS_BAR_MARGIN_PX;
-
-        // Get viewport width for bar sizing
-        let container_width = self
-            .viewport
-            .get_dimensions()
-            .map(|d| d.pixel_size.0)
-            .unwrap_or(800);
-
-        // Calculate bar dimensions (same as SentenceProgressBar)
-        let bar_width = (container_width as f64 * PROGRESS_BAR_WIDTH_PCT) as u32;
-        let bar_height = PROGRESS_BAR_HEIGHT;
-
-        // Determine alpha multiplier based on mode (same as macro gutter)
-        let alpha_mult: f32 = if paused { 1.0 } else { 0.3 };
-
-        // Calculate mode-aware alpha values
-        let bright_alpha = (PROGRESS_BRIGHT_ALPHA as f32 * alpha_mult) as u8;
-        let dim_alpha = (PROGRESS_DIM_ALPHA as f32 * alpha_mult) as u8;
-
-        let fill_color = Rgba([
-            PROGRESS_COLOR_R,
-            PROGRESS_COLOR_G,
-            PROGRESS_COLOR_B,
-            bright_alpha,
-        ]);
-        let bg_color = Rgba([
-            PROGRESS_COLOR_R,
-            PROGRESS_COLOR_G,
-            PROGRESS_COLOR_B,
-            dim_alpha,
-        ]);
-
-        // Create bar buffer manually with mode-aware colors
-        let fill_width = (bar_width as f64 * progress.clamp(0.0, 1.0)) as u32;
-        let mut buffer: ImageBuffer<Rgba<u8>, Vec<u8>> = ImageBuffer::new(bar_width, bar_height);
-
-        for x in 0..bar_width {
-            let color = if x < fill_width { fill_color } else { bg_color };
-            buffer.put_pixel(x, 0, color);
-            buffer.put_pixel(x, 1, color);
-        }
-
-        // Center bar horizontally in viewport
-        let bar_x = (container_width - bar_width) / 2;
-
-        // Move cursor to bar position
-        if let Some((col, row)) = self.viewport.pixel_to_cell(bar_x, bar_y) {
-            print!("\x1b[{};{}H", row + 1, col + 1);
-            if let Err(e) = io::stdout().flush() {
-                return Err(RendererError::RenderFailed(format!(
-                    "Cursor flush failed: {}",
-                    e
-                )));
-            }
-        }
-
-        // Transmit bar image
-        let base64_data = encode_image_base64(&buffer);
-        transmit_graphics(image_id, bar_width, bar_height, &base64_data, 0, 0)
-            .map_err(|e| RendererError::RenderFailed(format!("Bar render failed: {}", e)))
-    }
-
-    /// Render document progress macro gutter
-    ///
-    /// Displays a 4px vertical bar on the right edge of the reader zone
-    /// showing overall document progress. Alpha varies by mode:
-    /// - Reading: 30% opacity (dimmed)
-    /// - Paused: 100% opacity (bright)
-    ///
-    /// # Arguments
-    /// * `current_word` - Current word index (0-based)
-    /// * `total_words` - Total number of words in document
-    /// * `reader_area` - Pixel dimensions of reader zone (x, y, width, height)
-    /// * `mode` - Current app mode (Reading or Paused)
-    /// * `image_id` - Unique image ID for this gutter instance
-    pub fn render_macro_gutter(
-        &mut self,
-        current_word: usize,
-        total_words: usize,
-        reader_area: Rect,
-        paused: bool,
-        image_id: u32,
-    ) -> Result<(), RendererError> {
-        // Calculate progress ratio (0.0 to 1.0)
-        let progress_ratio = if total_words > 1 {
-            (current_word as f32 / (total_words - 1) as f32).clamp(0.0, 1.0)
-        } else {
-            0.0
-        };
-
-        // Calculate fill height
-        let reader_height = reader_area.height as u32;
-        let fill_height = (reader_height as f32 * progress_ratio) as u32;
-
-        // Determine alpha multiplier based on mode
-        let alpha_mult: f32 = if paused { 1.0 } else { 0.3 };
-
-        // Create RGBA buffer for gutter (4px wide × reader_height tall)
-        let gutter_width: u32 = 4;
-
-        // Colors matching micro bar (SentenceProgressBar):
-        // - Bright for read portion (filled)
-        // - Dim for unread portion (unfilled)
-        let bright_alpha = (PROGRESS_BRIGHT_ALPHA as f32 * alpha_mult) as u8;
-        let dim_alpha = (PROGRESS_DIM_ALPHA as f32 * alpha_mult) as u8;
-
-        let read_color = Rgba([
-            PROGRESS_COLOR_R,
-            PROGRESS_COLOR_G,
-            PROGRESS_COLOR_B,
-            bright_alpha,
-        ]);
-        let unread_color = Rgba([
-            PROGRESS_COLOR_R,
-            PROGRESS_COLOR_G,
-            PROGRESS_COLOR_B,
-            dim_alpha,
-        ]);
-
-        let mut buffer: ImageBuffer<Rgba<u8>, Vec<u8>> =
-            ImageBuffer::new(gutter_width, reader_height);
-
-        // Fill gutter: bright for read (top portion), dim for unread (bottom portion)
-        for y in 0..reader_height {
-            let color = if y < fill_height {
-                read_color // Read portion - bright
-            } else {
-                unread_color // Unread portion - dim
-            };
-            for x in 0..gutter_width {
-                buffer.put_pixel(x, y, color);
-            }
-        }
-
-        // Calculate position at right edge of reader zone
-        let x_position =
-            reader_area.x as u32 + (reader_area.width as u32).saturating_sub(gutter_width);
-        let y_position = reader_area.y as u32;
-
-        // Move cursor to position
-        if let Some((col, row)) = self.viewport.pixel_to_cell(x_position, y_position) {
-            print!("\x1b[{};{}H", row + 1, col + 1);
-            if let Err(e) = io::stdout().flush() {
-                return Err(RendererError::RenderFailed(format!(
-                    "Gutter cursor flush failed: {}",
-                    e
-                )));
-            }
-        }
-
-        // Transmit gutter image
-        let base64_data = encode_image_base64(&buffer);
-        transmit_graphics(image_id, gutter_width, reader_height, &base64_data, 0, 0)
-            .map_err(|e| RendererError::RenderFailed(format!("Gutter render failed: {}", e)))
-    }
 }
 
 impl RsvpRenderer for KittyGraphicsRenderer {
@@ -457,16 +277,13 @@ impl RsvpRenderer for KittyGraphicsRenderer {
                 if let Err(e) = self.render_at_position(word, anchor, y_offset, self.ghost_opacity)
                 {
                     // Log but don't fail - ghost rendering is non-fatal
-                    eprintln!("Warning: ghost_prev render failed: {}", e);
+                    tracing::warn!(error = %e, "ghost_prev render failed");
                 } else {
                     // Track the image ID for clearing next frame
                     self.prev_ghost_prev_id = Some(self.current_image_id - 1);
                 }
             } else {
-                eprintln!(
-                    "Warning: ghost_prev anchor {} out of bounds for word '{}'",
-                    anchor, word
-                );
+                tracing::warn!(anchor, word = %word, "ghost_prev anchor out of bounds");
             }
         }
 
@@ -478,16 +295,13 @@ impl RsvpRenderer for KittyGraphicsRenderer {
                 if let Err(e) = self.render_at_position(word, anchor, y_offset, self.ghost_opacity)
                 {
                     // Log but don't fail - ghost rendering is non-fatal
-                    eprintln!("Warning: ghost_next render failed: {}", e);
+                    tracing::warn!(error = %e, "ghost_next render failed");
                 } else {
                     // Track the image ID for clearing next frame
                     self.prev_ghost_next_id = Some(self.current_image_id - 1);
                 }
             } else {
-                eprintln!(
-                    "Warning: ghost_next anchor {} out of bounds for word '{}'",
-                    anchor, word
-                );
+                tracing::warn!(anchor, word = %word, "ghost_next anchor out of bounds");
             }
         }
 
