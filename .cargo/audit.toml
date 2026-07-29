@@ -1,4 +1,18 @@
 [advisories]
 ignore = [
     "RUSTSEC-2024-0436",  # paste - unmaintained (transitive, low risk)
+    # quick-xml 0.38.4 — two DoS advisories (RUSTSEC-2026-0194 quadratic
+    # runtime, RUSTSEC-2026-0195 memory exhaustion). Non-applicable: pulled
+    # only by wayland-scanner, a BUILD-TIME proc-macro that parses the fixed
+    # Wayland protocol spec at compile time. Not linked at runtime, no user /
+    # untrusted XML ever reaches it. epub uses xml-rs, not quick-xml.
+    "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0195",
+    # ttf-parser 0.25.1 — flagged unmaintained (RUSTSEC-2026-0192).
+    # Unfixable from here: pinned by ab_glyph 0.2.32 (owned_ttf_parser, our
+    # font rasterizer) AND by pdf-extract 0.10.0 (lopdf). Both are the latest
+    # releases of their crates. This is a project-health advisory, not a
+    # soundness bug; we only parse fonts we control. Drop once ab_glyph /
+    # pdf-extract move to a maintained parser.
+    "RUSTSEC-2026-0192",
 ]
