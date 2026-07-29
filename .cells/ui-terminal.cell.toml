@@ -1,0 +1,14 @@
+name = "ui-terminal"
+purpose = "Terminal surface + TUI lifecycle: TuiManager runs the ratatui event/render loop."
+provides = ["TuiManager"]
+requires = [
+  "app",
+  "autocomplete",
+  "config-popup",
+  "kitty",
+  "reader",
+  "rendering",
+  "ui-events",
+  "ui-theme",
+]
+layer = 4

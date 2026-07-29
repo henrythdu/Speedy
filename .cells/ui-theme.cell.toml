@@ -1,0 +1,5 @@
+name = "ui-theme"
+layer = 4
+purpose = "App-wide Theme singleton (thread-local RefCell) holding the runtime Midnight-style color palette; resolved by name via Theme::get_by_name and consumed by every UI render site."
+provides = ["Theme", "set_current_theme"]
+requires = []

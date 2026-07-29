@@ -7,7 +7,9 @@ use crate::ui::autocomplete::render::render_autocomplete_popup;
 use crate::ui::autocomplete::state::AutocompleteState;
 use crate::ui::config_popup::render_config_popup;
 use crate::ui::key_handler::KeyHandlerRegistry;
-use crate::ui::key_handlers::{create_command_handlers, create_popup_handlers, create_reading_handlers};
+use crate::ui::key_handlers::{
+    create_command_handlers, create_popup_handlers, create_reading_handlers,
+};
 use crate::ui::reader::view::{render_command_deck, render_wpm};
 use crate::ui::theme::{set_current_theme, Theme};
 use anyhow::Result;
@@ -267,10 +269,14 @@ impl TuiManager {
                                             current_mode,
                                             app,
                                         ) {
-                                            Some(Ok(crate::ui::key_handler::KeyResult::Consumed)) => {
+                                            Some(Ok(
+                                                crate::ui::key_handler::KeyResult::Consumed,
+                                            )) => {
                                                 // Key was handled, nothing more to do
                                             }
-                                            Some(Ok(crate::ui::key_handler::KeyResult::Ignored)) => {
+                                            Some(Ok(
+                                                crate::ui::key_handler::KeyResult::Ignored,
+                                            )) => {
                                                 // Key was ignored
                                             }
                                             Some(Err(e)) => {
@@ -288,10 +294,14 @@ impl TuiManager {
                                             current_mode,
                                             app,
                                         ) {
-                                            Some(Ok(crate::ui::key_handler::KeyResult::Consumed)) => {
+                                            Some(Ok(
+                                                crate::ui::key_handler::KeyResult::Consumed,
+                                            )) => {
                                                 // Key was handled, nothing more to do
                                             }
-                                            Some(Ok(crate::ui::key_handler::KeyResult::Ignored)) => {
+                                            Some(Ok(
+                                                crate::ui::key_handler::KeyResult::Ignored,
+                                            )) => {
                                                 // Key was ignored, could fall back to legacy handling if needed
                                             }
                                             Some(Err(e)) => {
@@ -318,15 +328,22 @@ impl TuiManager {
                                                 current_mode,
                                                 app,
                                             ) {
-                                                Some(Ok(crate::ui::key_handler::KeyResult::Consumed)) => {
+                                                Some(Ok(
+                                                    crate::ui::key_handler::KeyResult::Consumed,
+                                                )) => {
                                                     // Check if mode changed to Quit
                                                     if app.mode() == AppMode::Quit {
                                                         return Ok(AppMode::Quit);
                                                     }
                                                 }
-                                                Some(Ok(crate::ui::key_handler::KeyResult::Ignored)) => {}
+                                                Some(Ok(
+                                                    crate::ui::key_handler::KeyResult::Ignored,
+                                                )) => {}
                                                 Some(Err(e)) => {
-                                                    app.set_error(format!("Key handler error: {}", e));
+                                                    app.set_error(format!(
+                                                        "Key handler error: {}",
+                                                        e
+                                                    ));
                                                 }
                                                 None => {}
                                             }
@@ -349,8 +366,12 @@ impl TuiManager {
                                             current_mode,
                                             app,
                                         ) {
-                                            Some(Ok(crate::ui::key_handler::KeyResult::Consumed)) => {}
-                                            Some(Ok(crate::ui::key_handler::KeyResult::Ignored)) => {}
+                                            Some(Ok(
+                                                crate::ui::key_handler::KeyResult::Consumed,
+                                            )) => {}
+                                            Some(Ok(
+                                                crate::ui::key_handler::KeyResult::Ignored,
+                                            )) => {}
                                             Some(Err(e)) => {
                                                 app.set_error(format!("Key handler error: {}", e));
                                             }
@@ -376,9 +397,9 @@ impl TuiManager {
                                     if app.mode() == AppMode::Command {
                                         if self.autocomplete_state.is_active() {
                                             // Apply selection with trailing space
-                                        self.autocomplete_state
-                                            .apply_selection(app.command_buffer_mut());
-                                        app.command_buffer_mut().push(' ');
+                                            self.autocomplete_state
+                                                .apply_selection(app.command_buffer_mut());
+                                            app.command_buffer_mut().push(' ');
                                             // Keep autocomplete open for chaining
                                         } else if app.reading_state().is_some() {
                                             // Toggle to Reading mode
@@ -404,8 +425,12 @@ impl TuiManager {
                                             current_mode,
                                             app,
                                         ) {
-                                            Some(Ok(crate::ui::key_handler::KeyResult::Consumed)) => {}
-                                            Some(Ok(crate::ui::key_handler::KeyResult::Ignored)) => {}
+                                            Some(Ok(
+                                                crate::ui::key_handler::KeyResult::Consumed,
+                                            )) => {}
+                                            Some(Ok(
+                                                crate::ui::key_handler::KeyResult::Ignored,
+                                            )) => {}
                                             Some(Err(e)) => {
                                                 app.set_error(format!("Key handler error: {}", e));
                                             }
@@ -425,10 +450,14 @@ impl TuiManager {
                                             current_mode,
                                             app,
                                         ) {
-                                            Some(Ok(crate::ui::key_handler::KeyResult::Consumed)) => {
+                                            Some(Ok(
+                                                crate::ui::key_handler::KeyResult::Consumed,
+                                            )) => {
                                                 // Key was handled, nothing more to do
                                             }
-                                            Some(Ok(crate::ui::key_handler::KeyResult::Ignored)) => {
+                                            Some(Ok(
+                                                crate::ui::key_handler::KeyResult::Ignored,
+                                            )) => {
                                                 // Key was ignored, could fall back to legacy handling if needed
                                             }
                                             Some(Err(e)) => {
@@ -649,6 +678,7 @@ impl TuiManager {
                     let current_index = reading_state.current_index();
                     let total_tokens = reading_state.tokens().len();
                     let app_mode = app.mode();
+                    let paused = matches!(app_mode, AppMode::Paused);
 
                     let progress = crate::reading::calculate_sentence_progress(
                         current_index,
@@ -664,7 +694,7 @@ impl TuiManager {
                             word_y,
                             word_height,
                             progress,
-                            &app_mode,
+                            paused,
                             bar_image_id,
                         ) {
                             app.set_error(format!("Bar render error: {}", e));
@@ -678,7 +708,7 @@ impl TuiManager {
                             current_index,
                             total_tokens,
                             reader_area,
-                            app_mode,
+                            paused,
                             gutter_id,
                         ) {
                             app.set_error(format!("Gutter render error: {}", e));

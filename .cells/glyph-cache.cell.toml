@@ -1,0 +1,5 @@
+name = "glyph-cache"
+layer = 2
+purpose = "Word-level LRU cache of rasterized RGBA word buffers with a memory cap; callers supply the rasterize step via a factory closure on get_or_render so the cache stays backend-agnostic."
+provides = ["WordCache", "CacheKey", "CachedWord", "CacheError"]
+requires = ["engine"]

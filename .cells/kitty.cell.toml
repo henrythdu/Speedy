@@ -1,0 +1,12 @@
+name = "kitty"
+layer = 2
+purpose = "Kitty Graphics Protocol renderer: rasterizes each word to an RGBA image (ab_glyph + imageproc) with an LRU glyph cache, OVP-anchors it, and transmits/deletes graphics via the Kitty protocol for pixel-perfect display at 1000+ WPM."
+provides = [
+  "KittyGraphicsRenderer",
+  "rasterize_word",
+  "transmit_graphics",
+  "encode_image_base64",
+  "calculate_start_x",
+  "delete_image",
+]
+requires = ["engine", "glyph-cache", "rendering"]

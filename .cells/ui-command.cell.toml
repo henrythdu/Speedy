@@ -1,0 +1,5 @@
+name = "ui-command"
+layer = 4
+purpose = "Command system: parses the command deck input (Command enum, parse_command) and executes it against App (execute_command -> CommandResult)."
+provides = ["Command", "parse_command", "CommandResult", "execute_command", "tokens_to_text"]
+requires = ["app", "input"]

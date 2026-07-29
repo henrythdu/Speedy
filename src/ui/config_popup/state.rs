@@ -1,4 +1,4 @@
-use super::{theme_index, THEME_NAMES};
+use crate::config::themes::{theme_index, THEME_NAMES};
 use crate::config::Config;
 use crate::engine::config::{MAX_WPM, MIN_WPM};
 

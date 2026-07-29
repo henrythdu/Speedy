@@ -1,0 +1,5 @@
+name = "cli"
+layer = 5
+purpose = "CLI entry point: parses args (clap), lists themes, or launches the TUI reading app."
+provides = ["Args", "list_themes"]
+requires = ["app", "config", "rendering", "themes", "ui-terminal"]

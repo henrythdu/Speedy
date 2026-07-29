@@ -1,7 +1,7 @@
 use crate::app::mode::AppMode;
 use crate::config::{save, Config};
 use crate::reading::{tokenize_text, ReadingState};
-use crate::ui::config_popup::ConfigPopupState;
+use crate::ui::config_popup::state::ConfigPopupState;
 use std::path::PathBuf;
 
 pub struct App {

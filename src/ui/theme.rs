@@ -114,7 +114,7 @@ impl Theme {
 
 /// Convenience access to current theme colors
 pub mod colors {
-    use super::Theme;
+    use crate::ui::theme::Theme;
     use ratatui::style::Color;
 
     pub fn text() -> Color {

@@ -1,0 +1,50 @@
+[cli]
+files = ["src/cli.rs", "src/main.rs"]
+
+[app]
+files = ["src/app/app_impl.rs", "src/app/mod.rs", "src/app/mode.rs", "src/lib.rs", "src/ui/config_popup/state.rs"]
+
+[reading]
+files = ["src/reading/duration.rs", "src/reading/mod.rs", "src/reading/ovp.rs", "src/reading/sentence.rs", "src/reading/state.rs", "src/reading/timing.rs", "src/reading/token.rs", "src/reading/tokenization.rs"]
+
+[rendering]
+files = ["src/rendering/font.rs", "src/rendering/mod.rs", "src/rendering/renderer.rs", "src/rendering/viewport.rs"]
+
+[kitty]
+files = ["src/rendering/kitty/mod.rs", "src/rendering/kitty/positioning.rs", "src/rendering/kitty/protocol.rs", "src/rendering/kitty/rasterizer.rs"]
+
+[input]
+files = ["src/input/clipboard.rs", "src/input/epub.rs", "src/input/mod.rs", "src/input/pdf.rs"]
+
+[config]
+files = ["src/config/file.rs", "src/config/mod.rs", "src/config/theme.rs"]
+
+[themes]
+files = ["src/config/themes/catppuccin.rs", "src/config/themes/dracula.rs", "src/config/themes/gruvbox.rs", "src/config/themes/light.rs", "src/config/themes/mod.rs", "src/config/themes/nord.rs", "src/config/themes/tokyo_night.rs"]
+
+[ui-events]
+files = ["src/ui/key_handler.rs", "src/ui/key_handlers.rs"]
+
+[ui-terminal]
+files = ["src/ui/terminal.rs", "src/ui/mod.rs"]
+
+[ui-command]
+files = ["src/ui/command.rs", "src/ui/command_executor.rs"]
+
+[autocomplete]
+files = ["src/ui/autocomplete/cache.rs", "src/ui/autocomplete/discovery.rs", "src/ui/autocomplete/mod.rs", "src/ui/autocomplete/render.rs", "src/ui/autocomplete/state.rs"]
+
+[config-popup]
+files = ["src/ui/config_popup/handler.rs", "src/ui/config_popup/mod.rs", "src/ui/config_popup/render.rs"]
+
+[reader]
+files = ["src/ui/reader/mod.rs", "src/ui/reader/view.rs"]
+
+[engine]
+files = ["src/engine/config.rs", "src/engine/mod.rs"]
+
+[glyph-cache]
+files = ["src/rendering/cache.rs"]
+
+[ui-theme]
+files = ["src/ui/theme.rs"]

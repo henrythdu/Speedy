@@ -4,7 +4,7 @@
 //! is now done via the key handler registry in key_handlers.rs.
 
 #[cfg(test)]
-use super::ConfigPopupState;
+use super::state::ConfigPopupState;
 #[cfg(test)]
 use crate::config::Config;
 #[cfg(test)]

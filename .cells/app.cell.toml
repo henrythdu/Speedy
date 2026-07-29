@@ -1,0 +1,5 @@
+name = "app"
+layer = 3
+purpose = "Application core: the App struct holds reading state and the config-popup state, and drives the mode loop (command/reading/popup); AppMode enumerates the modes. lib.rs is the crate root."
+provides = ["App", "AppMode", "ConfigPopupState"]
+requires = ["config", "engine", "reading", "themes"]

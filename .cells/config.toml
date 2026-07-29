@@ -1,0 +1,9 @@
+# Cells census — Speedy is a Rust project.
+code-dirs = ["src"]   # only census the source tree
+code-exts = [".rs"]   # Rust source files
+
+# Layers (0 = core/foundation; higher = peripheral). Filled in after partitioning.
+# [layers]
+# 0 = "core"
+# 1 = "domain"
+# 2 = "ui"

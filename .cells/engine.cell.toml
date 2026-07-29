@@ -1,0 +1,5 @@
+name = "engine"
+layer = 0
+purpose = "Engine tuning constants: WPM bounds, word/punctuation timing multipliers, and font/progress/cache/memory defaults; plus the TimingConfig struct."
+provides = ["TimingConfig", "DEFAULT_WPM", "MIN_WPM", "MAX_WPM", "LONG_WORD_THRESHOLD", "DEFAULT_FONT_SIZE", "DEFAULT_MEMORY_CAP_BYTES"]
+requires = []

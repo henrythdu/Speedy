@@ -5,14 +5,13 @@
 
 mod handler;
 mod render;
-mod state;
+pub mod state;
 
 // Note: handler module is used for popup key handling
 pub use render::render_config_popup;
-pub use state::ConfigPopupState;
 
 // Re-export from central theme definition
-pub use crate::config::themes::{theme_index, THEME_NAMES};
+pub use crate::config::themes::THEME_NAMES;
 
 // Backwards compatibility alias
 #[allow(dead_code)]

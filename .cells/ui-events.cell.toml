@@ -1,0 +1,13 @@
+name = "ui-events"
+layer = 4
+purpose = "Key handler registry: maps keys to actions across command, reading, and popup modes (KeyHandler trait, KeyHandlerRegistry, CommandAction, KeyResult, and the create_*_handlers factories)."
+provides = [
+  "KeyHandler",
+  "KeyHandlerRegistry",
+  "CommandAction",
+  "KeyResult",
+  "create_reading_handlers",
+  "create_command_handlers",
+  "create_popup_handlers",
+]
+requires = ["app", "ui-command"]

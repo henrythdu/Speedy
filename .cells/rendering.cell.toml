@@ -1,0 +1,14 @@
+name = "rendering"
+layer = 1
+purpose = "Rendering abstraction over the terminal: the RsvpRenderer trait, font metrics (ab_glyph), and viewport/terminal dimensions."
+provides = [
+  "RsvpRenderer",
+  "RenderFrame",
+  "RendererError",
+  "Viewport",
+  "TerminalDimensions",
+  "FontMetrics",
+  "get_font",
+  "calculate_string_width",
+]
+requires = []

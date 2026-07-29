@@ -4,9 +4,6 @@
 //! rasterization and enable consistent 1000+ WPM reading speeds.
 
 use crate::engine::config::{DEFAULT_FONT_SIZE, DEFAULT_MEMORY_CAP_BYTES};
-use crate::rendering::font::FontMetrics;
-use crate::rendering::kitty::rasterizer::rasterize_word;
-use ab_glyph::FontRef;
 use imageproc::image::ImageBuffer;
 use imageproc::image::Rgba;
 use lru::LruCache;
@@ -135,13 +132,15 @@ impl WordCache {
     ///
     /// # Returns
     /// Cached word buffer (cloned from cache)
-    pub fn get_or_render(
+    pub fn get_or_render<F>(
         &mut self,
         word: &str,
         anchor_position: usize,
-        font: &FontRef,
-        metrics: &FontMetrics,
-    ) -> Result<CachedWord, CacheError> {
+        render: F,
+    ) -> Result<CachedWord, CacheError>
+    where
+        F: FnOnce() -> Option<ImageBuffer<Rgba<u8>, Vec<u8>>>,
+    {
         // Check memory cap and evict if needed
         self.enforce_memory_cap();
 
@@ -159,10 +158,18 @@ impl WordCache {
             return Ok(cached_word);
         }
 
-        // Cache miss - need to render
+        // Cache miss - invoke caller's rasterizer
         self.misses += 1;
 
-        let cached_word = self.render_word_internal(word, anchor_position, font, metrics)?;
+        let image = render().ok_or_else(|| {
+            CacheError::RasterizationFailed(format!("Failed to rasterize word: {}", word))
+        })?;
+
+        let cached_word = CachedWord {
+            width: image.width(),
+            height: image.height(),
+            buffer: image,
+        };
 
         // Check if we're at capacity before inserting
         // The lru crate doesn't reliably return evicted items from put(),
@@ -260,45 +267,11 @@ impl WordCache {
             }
         }
     }
-
-    /// Internal method to render a word and create CachedWord
-    fn render_word_internal(
-        &self,
-        word: &str,
-        anchor_position: usize,
-        font: &FontRef,
-        metrics: &FontMetrics,
-    ) -> Result<CachedWord, CacheError> {
-        // Validate anchor position
-        let word_len = word.chars().count();
-        if anchor_position >= word_len && word_len > 0 {
-            return Err(CacheError::RasterizationFailed(format!(
-                "anchor_position {} out of bounds for word '{}' (length: {})",
-                anchor_position, word, word_len
-            )));
-        }
-
-        // Rasterize word using existing rasterizer
-        let image = rasterize_word(word, anchor_position, font, self.font_size, metrics)
-            .ok_or_else(|| {
-                CacheError::RasterizationFailed(format!("Failed to rasterize word: {}", word))
-            })?;
-
-        let width = image.width();
-        let height = image.height();
-
-        Ok(CachedWord {
-            buffer: image,
-            width,
-            height,
-        })
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rendering::font::{get_font, get_font_metrics};
 
     #[test]
     fn test_cache_key_hashing() {
@@ -410,12 +383,17 @@ mod tests {
     fn test_memory_accounting_with_eviction() {
         // This test verifies the HIGH priority fix: when put() evicts an item
         // due to capacity limits, the evicted item's size is properly subtracted
-        let font = get_font().expect("Font should be available");
-        let metrics = get_font_metrics(&font, 24.0);
+        // ponytail: dummy factory instead of real rasterizer — keeps the cache cell
+        // decoupled from kitty in tests (would otherwise create a false import cycle).
+        fn dummy_image() -> ImageBuffer<Rgba<u8>, Vec<u8>> {
+            ImageBuffer::from_pixel(4, 4, Rgba([255, 255, 255, 255]))
+        }
         let mut cache = WordCache::new(2); // Very small capacity to force eviction
 
         // Add first word
-        let word1 = cache.get_or_render("first", 0, &font, &metrics).unwrap();
+        let word1 = cache
+            .get_or_render("first", 0, || Some(dummy_image()))
+            .unwrap();
         let size1 = word1.memory_size_bytes();
         let memory_after_first = cache.total_cached_bytes();
         assert_eq!(
@@ -424,7 +402,9 @@ mod tests {
         );
 
         // Add second word
-        let word2 = cache.get_or_render("second", 0, &font, &metrics).unwrap();
+        let word2 = cache
+            .get_or_render("second", 0, || Some(dummy_image()))
+            .unwrap();
         let size2 = word2.memory_size_bytes();
         let memory_after_second = cache.total_cached_bytes();
         assert_eq!(
@@ -434,7 +414,9 @@ mod tests {
         );
 
         // Add third word - this should evict the first word due to capacity=2
-        let word3 = cache.get_or_render("third", 0, &font, &metrics).unwrap();
+        let word3 = cache
+            .get_or_render("third", 0, || Some(dummy_image()))
+            .unwrap();
         let size3 = word3.memory_size_bytes();
         let memory_after_third = cache.total_cached_bytes();
 
@@ -454,7 +436,7 @@ mod tests {
         );
 
         // Verify we can still access the third word (cache hit)
-        let _ = cache.get_or_render("third", 0, &font, &metrics);
+        let _ = cache.get_or_render("third", 0, || Some(dummy_image()));
         assert_eq!(cache.hits(), 1, "Should have 1 hit for third word");
     }
 }

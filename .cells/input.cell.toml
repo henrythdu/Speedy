@@ -1,0 +1,5 @@
+name = "input"
+layer = 2
+purpose = "Input sources: loads text from the clipboard, EPUB, and PDF files into a uniform LoadedDocument."
+provides = ["LoadedDocument", "LoadError", "load"]
+requires = ["reading"]

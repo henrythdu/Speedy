@@ -7,7 +7,6 @@ pub mod positioning;
 pub mod protocol;
 pub mod rasterizer;
 
-use crate::app::mode::AppMode;
 use crate::engine::config::{
     DEFAULT_CACHE_CAPACITY, DEFAULT_FONT_SIZE, PROGRESS_BAR_HEIGHT, PROGRESS_BAR_MARGIN_PX,
     PROGRESS_BAR_WIDTH_PCT, PROGRESS_BRIGHT_ALPHA, PROGRESS_COLOR_B, PROGRESS_COLOR_G,
@@ -19,6 +18,7 @@ use crate::rendering::kitty::positioning::{calculate_start_x, calculate_vertical
 use crate::rendering::kitty::protocol::{
     delete_all_graphics, delete_image, encode_image_base64, transmit_graphics,
 };
+use crate::rendering::kitty::rasterizer::rasterize_word;
 
 use crate::rendering::renderer::{RenderFrame, RendererError, RsvpRenderer};
 use crate::rendering::viewport::Viewport;
@@ -116,7 +116,9 @@ impl KittyGraphicsRenderer {
 
         let cached_word = self
             .word_cache
-            .get_or_render(word, anchor_position, font, metrics)
+            .get_or_render(word, anchor_position, || {
+                rasterize_word(word, anchor_position, font, self.font_size, metrics)
+            })
             .map_err(|e| RendererError::RenderFailed(format!("Cache error: {}", e)))?;
 
         Ok(cached_word.height)
@@ -187,7 +189,9 @@ impl KittyGraphicsRenderer {
         // Get cached word buffer
         let cached_word = self
             .word_cache
-            .get_or_render(word, anchor, font, metrics)
+            .get_or_render(word, anchor, || {
+                rasterize_word(word, anchor, font, self.font_size, metrics)
+            })
             .map_err(|e| RendererError::RenderFailed(format!("Cache error: {}", e)))?;
 
         // Apply opacity at render time
@@ -221,7 +225,7 @@ impl KittyGraphicsRenderer {
         word_y: u32,
         word_height: u32,
         progress: f64,
-        mode: &AppMode,
+        paused: bool,
         image_id: u32,
     ) -> Result<(), RendererError> {
         use imageproc::image::ImageBuffer;
@@ -241,10 +245,7 @@ impl KittyGraphicsRenderer {
         let bar_height = PROGRESS_BAR_HEIGHT;
 
         // Determine alpha multiplier based on mode (same as macro gutter)
-        let alpha_mult: f32 = match *mode {
-            AppMode::Paused => 1.0, // 100% opacity
-            _ => 0.3,               // 30% opacity
-        };
+        let alpha_mult: f32 = if paused { 1.0 } else { 0.3 };
 
         // Calculate mode-aware alpha values
         let bright_alpha = (PROGRESS_BRIGHT_ALPHA as f32 * alpha_mult) as u8;
@@ -311,7 +312,7 @@ impl KittyGraphicsRenderer {
         current_word: usize,
         total_words: usize,
         reader_area: Rect,
-        mode: AppMode,
+        paused: bool,
         image_id: u32,
     ) -> Result<(), RendererError> {
         // Calculate progress ratio (0.0 to 1.0)
@@ -326,10 +327,7 @@ impl KittyGraphicsRenderer {
         let fill_height = (reader_height as f32 * progress_ratio) as u32;
 
         // Determine alpha multiplier based on mode
-        let alpha_mult: f32 = match mode {
-            AppMode::Paused => 1.0, // 100% opacity
-            _ => 0.3,               // 30% opacity
-        };
+        let alpha_mult: f32 = if paused { 1.0 } else { 0.3 };
 
         // Create RGBA buffer for gutter (4px wide × reader_height tall)
         let gutter_width: u32 = 4;

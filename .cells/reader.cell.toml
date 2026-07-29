@@ -1,0 +1,5 @@
+name = "reader"
+layer = 4
+purpose = "Reader view: renders the command deck and WPM display (ratatui) during reading."
+provides = ["render_command_deck", "render_wpm"]
+requires = ["app", "ui-theme"]
