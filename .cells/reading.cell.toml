@@ -1,5 +1,14 @@
 name = "reading"
 layer = 1
 purpose = "Core RSVP logic: text tokenization, Optimal Viewing Position (OVP) anchoring, sentence-boundary detection (abbreviations, decimals), WPM->timing, and the ReadingState that advances word display."
-provides = ["Token", "ReadingState", "GhostContext", "tokenize_text", "calculate_anchor_position", "detect_sentence_boundary", "wpm_to_milliseconds"]
+provides = [
+  "Token",
+  "ReadingState",
+  "GhostContext",
+  "tokenize_text",
+  "calculate_anchor_position",
+  "calculate_anchor_position_from_len",
+  "calculate_sentence_progress",
+  "wpm_to_milliseconds",
+]
 requires = ["engine"]

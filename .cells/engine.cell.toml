@@ -1,5 +1,22 @@
 name = "engine"
 layer = 0
 purpose = "Engine tuning constants: WPM bounds, word/punctuation timing multipliers, and font/progress/cache/memory defaults; plus the TimingConfig struct."
-provides = ["TimingConfig", "DEFAULT_WPM", "MIN_WPM", "MAX_WPM", "LONG_WORD_THRESHOLD", "DEFAULT_FONT_SIZE", "DEFAULT_MEMORY_CAP_BYTES"]
+provides = [
+  "TimingConfig",
+  "DEFAULT_WPM",
+  "MIN_WPM",
+  "MAX_WPM",
+  "LONG_WORD_THRESHOLD",
+  "DEFAULT_FONT_SIZE",
+  "DEFAULT_MEMORY_CAP_BYTES",
+  "DEFAULT_CACHE_CAPACITY",
+  "PROGRESS_BAR_MARGIN_PX",
+  "PROGRESS_BAR_WIDTH_PCT",
+  "PROGRESS_BAR_HEIGHT",
+  "PROGRESS_COLOR_R",
+  "PROGRESS_COLOR_G",
+  "PROGRESS_COLOR_B",
+  "PROGRESS_BRIGHT_ALPHA",
+  "PROGRESS_DIM_ALPHA",
+]
 requires = []
