@@ -421,15 +421,25 @@ mod tests {
         app.start_reading("test", 300);
 
         // Test j key (next sentence)
-        assert!(registry.dispatch(KeyCode::Char('j'), AppMode::Reading, &mut app).is_some());
+        assert!(registry
+            .dispatch(KeyCode::Char('j'), AppMode::Reading, &mut app)
+            .is_some());
         // Test k key (previous sentence)
-        assert!(registry.dispatch(KeyCode::Char('k'), AppMode::Reading, &mut app).is_some());
+        assert!(registry
+            .dispatch(KeyCode::Char('k'), AppMode::Reading, &mut app)
+            .is_some());
         // Test p key (pause toggle)
-        assert!(registry.dispatch(KeyCode::Char('p'), AppMode::Reading, &mut app).is_some());
+        assert!(registry
+            .dispatch(KeyCode::Char('p'), AppMode::Reading, &mut app)
+            .is_some());
         // Test [ key (speed down)
-        assert!(registry.dispatch(KeyCode::Char('['), AppMode::Reading, &mut app).is_some());
+        assert!(registry
+            .dispatch(KeyCode::Char('['), AppMode::Reading, &mut app)
+            .is_some());
         // Test ] key (speed up)
-        assert!(registry.dispatch(KeyCode::Char(']'), AppMode::Reading, &mut app).is_some());
+        assert!(registry
+            .dispatch(KeyCode::Char(']'), AppMode::Reading, &mut app)
+            .is_some());
     }
 
     #[test]
@@ -441,17 +451,29 @@ mod tests {
         let mut app = App::default();
 
         // Test Enter key (confirm)
-        assert!(registry.dispatch(KeyCode::Enter, AppMode::Popup, &mut app).is_some());
+        assert!(registry
+            .dispatch(KeyCode::Enter, AppMode::Popup, &mut app)
+            .is_some());
         // Test Esc key (dismiss)
-        assert!(registry.dispatch(KeyCode::Esc, AppMode::Popup, &mut app).is_some());
+        assert!(registry
+            .dispatch(KeyCode::Esc, AppMode::Popup, &mut app)
+            .is_some());
         // Test j key (navigate down)
-        assert!(registry.dispatch(KeyCode::Char('j'), AppMode::Popup, &mut app).is_some());
+        assert!(registry
+            .dispatch(KeyCode::Char('j'), AppMode::Popup, &mut app)
+            .is_some());
         // Test k key (navigate up)
-        assert!(registry.dispatch(KeyCode::Char('k'), AppMode::Popup, &mut app).is_some());
+        assert!(registry
+            .dispatch(KeyCode::Char('k'), AppMode::Popup, &mut app)
+            .is_some());
         // Test h key (cycle left)
-        assert!(registry.dispatch(KeyCode::Char('h'), AppMode::Popup, &mut app).is_some());
+        assert!(registry
+            .dispatch(KeyCode::Char('h'), AppMode::Popup, &mut app)
+            .is_some());
         // Test l key (cycle right)
-        assert!(registry.dispatch(KeyCode::Char('l'), AppMode::Popup, &mut app).is_some());
+        assert!(registry
+            .dispatch(KeyCode::Char('l'), AppMode::Popup, &mut app)
+            .is_some());
     }
 
     #[test]

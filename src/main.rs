@@ -38,7 +38,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Save config path for later (needed for save)
     let config_path = args.config.clone();
-    
+
     // Load configuration (from file or use defaults)
     let config = match crate::config::load(args.config) {
         Ok(mut cfg) => {

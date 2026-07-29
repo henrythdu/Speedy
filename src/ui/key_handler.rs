@@ -48,14 +48,19 @@ impl KeyHandlerRegistry {
             handlers: Vec::new(),
         }
     }
-    
+
     /// Register a key handler
     pub fn register<H: KeyHandler + 'static>(&mut self, handler: H) {
         self.handlers.push(Box::new(handler));
     }
-    
+
     /// Dispatch a key event to the appropriate handler
-    pub fn dispatch(&self, key: KeyCode, mode: AppMode, app: &mut App) -> Option<Result<KeyResult>> {
+    pub fn dispatch(
+        &self,
+        key: KeyCode,
+        mode: AppMode,
+        app: &mut App,
+    ) -> Option<Result<KeyResult>> {
         for handler in &self.handlers {
             if handler.mode() == mode && handler.keys().contains(&key) {
                 return Some(handler.handle(app));
@@ -84,34 +89,34 @@ impl Default for KeyHandlerRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     struct TestHandler;
     impl KeyHandler for TestHandler {
         fn mode(&self) -> AppMode {
             AppMode::Reading
         }
-        
+
         fn keys(&self) -> Vec<KeyCode> {
             vec![KeyCode::Char('x')]
         }
-        
+
         fn handle(&self, _app: &mut App) -> Result<KeyResult> {
             Ok(KeyResult::Consumed)
         }
     }
-    
+
     #[test]
     fn test_register_and_dispatch() {
         let mut registry = KeyHandlerRegistry::new();
         registry.register(TestHandler);
-        
+
         let mut app = App::default();
         let result = registry.dispatch(KeyCode::Char('x'), AppMode::Reading, &mut app);
         assert!(result.is_some());
         let result = result.unwrap();
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), KeyResult::Consumed);
-        
+
         let result = registry.dispatch(KeyCode::Char('y'), AppMode::Reading, &mut app);
         assert!(result.is_none());
     }

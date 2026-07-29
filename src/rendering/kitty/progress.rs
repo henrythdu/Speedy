@@ -110,7 +110,11 @@ impl KittyGraphicsRenderer {
         let mut buffer: ImageBuffer<Rgba<u8>, Vec<u8>> =
             ImageBuffer::new(gutter_width, reader_height);
         for y in 0..reader_height {
-            let color = if y < fill_height { read_color } else { unread_color };
+            let color = if y < fill_height {
+                read_color
+            } else {
+                unread_color
+            };
             for x in 0..gutter_width {
                 buffer.put_pixel(x, y, color);
             }
