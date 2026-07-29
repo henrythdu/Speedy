@@ -5,7 +5,7 @@ files = ["src/cli.rs", "src/main.rs"]
 files = ["src/app/app_impl.rs", "src/app/mod.rs", "src/app/mode.rs", "src/lib.rs", "src/ui/config_popup/state.rs"]
 
 [reading]
-files = ["src/reading/duration.rs", "src/reading/mod.rs", "src/reading/ovp.rs", "src/reading/sentence.rs", "src/reading/state.rs", "src/reading/timing.rs", "src/reading/token.rs", "src/reading/tokenization.rs"]
+files = ["src/reading/mod.rs", "src/reading/ovp.rs", "src/reading/sentence.rs", "src/reading/state.rs", "src/reading/timing.rs", "src/reading/token.rs", "src/reading/tokenization.rs"]
 
 [rendering]
 files = ["src/rendering/font.rs", "src/rendering/mod.rs", "src/rendering/renderer.rs", "src/rendering/viewport.rs"]
