@@ -47,7 +47,7 @@ pub fn transmit_graphics(
             apc_start, width, height, image_id, pos_x, pos_y, base64_data, apc_end
         );
         print!("{}", command);
-        io::stdout().flush()
+        Ok(())
     } else {
         // Multi-chunk transmission
         let chunks: Vec<&str> = base64_data
@@ -63,7 +63,6 @@ pub fn transmit_graphics(
                 apc_start, width, height, image_id, pos_x, pos_y, more, chunk, apc_end
             );
             print!("{}", command);
-            io::stdout().flush()?;
         }
         Ok(())
     }
@@ -73,7 +72,7 @@ pub fn transmit_graphics(
 pub fn delete_image(image_id: u32) -> io::Result<()> {
     let command = format!("\x1b_Ga=d,d=I,i={}\x1b\\", image_id);
     print!("{}", command);
-    io::stdout().flush()
+    Ok(())
 }
 
 /// Delete all graphics (cleanup on exit)

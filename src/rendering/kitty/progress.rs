@@ -9,8 +9,6 @@
 //! transmission helpers — they share no state with word rasterization, so they
 //! form a clean sub-concern of the KGP renderer.
 
-use std::io::{self, Write};
-
 use imageproc::image::{ImageBuffer, Rgba};
 use ratatui::layout::Rect;
 
@@ -49,6 +47,7 @@ fn progress_colors(paused: bool) -> (Rgba<u8>, Rgba<u8>) {
 impl KittyGraphicsRenderer {
     /// Render the sentence-progress bar + document-progress gutter in one pass,
     /// owning the image-id sequence so callers never touch renderer bookkeeping.
+    #[allow(clippy::too_many_arguments)] // +self = 8; cohesive one-pass renderer API
     pub fn render_progress(
         &mut self,
         word_y: u32,
@@ -62,6 +61,7 @@ impl KittyGraphicsRenderer {
         let bar_image_id = self.current_image_id;
         self.render_bar(word_y, word_height, progress, paused, bar_image_id)?;
         self.current_image_id += 1;
+        self.cur_frame.bar = Some(bar_image_id);
 
         let gutter_image_id = self.current_image_id;
         self.render_macro_gutter(
@@ -72,6 +72,7 @@ impl KittyGraphicsRenderer {
             gutter_image_id,
         )?;
         self.current_image_id += 1;
+        self.cur_frame.gutter = Some(gutter_image_id);
         Ok(())
     }
 
@@ -159,15 +160,13 @@ impl KittyGraphicsRenderer {
     }
 
     /// Move the terminal cursor to a pixel position via the viewport's cell map.
+    ///
+    /// Buffered, not flushed: the whole frame (placements + deletes + ratatui
+    /// cells) must reach the terminal in ONE batch so it repaints once — per-op
+    /// flushes split the frame and cause visible flicker.
     fn move_to_pixel(&mut self, x: u32, y: u32) -> Result<(), RendererError> {
         if let Some((col, row)) = self.viewport().pixel_to_cell(x, y) {
             print!("\x1b[{};{}H", row + 1, col + 1);
-            if let Err(e) = io::stdout().flush() {
-                return Err(RendererError::RenderFailed(format!(
-                    "Cursor flush failed: {}",
-                    e
-                )));
-            }
         }
         Ok(())
     }

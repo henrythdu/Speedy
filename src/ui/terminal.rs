@@ -366,8 +366,11 @@ impl TuiManager {
     pub fn render_frame(&mut self, app: &mut App) -> Result<()> {
         // Reader area (pixel rect) is shared with the KGP layer for the macro gutter.
         let reader_area = self.calculate_reader_area();
-        self.render_tui_layer(app)?;
+        // Kitty layer FIRST, TUI layer LAST: ratatui's draw() flushes stdout once
+        // at the end, so all kitty placements/deletes reach the terminal in ONE
+        // write batch → one repaint per frame → no word flicker.
         self.render_kitty_layer(app, reader_area)?;
+        self.render_tui_layer(app)?;
         Ok(())
     }
 
@@ -445,80 +448,88 @@ impl TuiManager {
             render_config_popup(frame, &app.config_popup, command_area, terminal_height);
         })?;
 
-        // Flush stdout to ensure ratatui output appears immediately
-        io::stdout().flush()?;
+        // No explicit flush here: Terminal::draw flushes the buffer when it
+        // completes, and render_frame runs the kitty layer first so this single
+        // flush pushes the whole frame out in one batch.
         Ok(())
     }
 
-    /// Kitty Graphics Protocol layer: clear previous graphics, render the current
-    /// word (with ghost context) via ab_glyph rasterization, and draw the sentence
-    /// progress micro-bar plus the document-progress macro gutter.
+    /// Kitty Graphics Protocol layer: place the current word (with ghost
+    /// context) via ab_glyph rasterization, the sentence-progress micro-bar and
+    /// the document-progress macro gutter, then delete the PREVIOUS frame's
+    /// images. Place-then-delete in one write batch = one repaint per frame.
     fn render_kitty_layer(&mut self, app: &mut App, reader_area: Rect) -> Result<()> {
-        // Always clear previous graphics first to prevent artifacts when switching modes
-        if let Err(e) = RsvpRenderer::clear(&mut self.kitty_renderer) {
-            app.set_error(format!("Failed to clear previous word: {}", e));
+        // Skip rendering (and clearing) pure whitespace/newline tokens so the
+        // previous word stays visible — words run together instead of blanking.
+        let word = app.get_current_word();
+        let should_render = word
+            .as_ref()
+            .map(|w| !w.trim().is_empty() && w.trim() != "\n" && w.trim() != "\r\n")
+            .unwrap_or(false);
+
+        if !should_render {
+            return Ok(());
         }
 
-        // Skip rendering pure whitespace/newline tokens to avoid blank screens
-        if let Some(word) = app.get_current_word() {
-            let trimmed = word.trim();
-            if !trimmed.is_empty() && trimmed != "\n" && trimmed != "\r\n" {
-                // Use precomputed char_count from token for O(1) anchor calculation
-                // instead of O(n) chars().count() on the word string
-                let (anchor_pos, ghost_prev, ghost_next) =
-                    if let Some(reading_state) = app.reading_state() {
-                        let anchor = if let Some(token) = reading_state.current_token() {
-                            calculate_anchor_position_from_len(token.char_count())
-                        } else {
-                            calculate_anchor_position(&word)
-                        };
-                        // Get ghost context only if enabled in config
-                        let (prev, next) = if app.ghost_words_enabled() {
-                            reading_state.ghost_context()
-                        } else {
-                            (None, None)
-                        };
-                        (anchor, prev, next)
-                    } else {
-                        (calculate_anchor_position(&word), None, None)
-                    };
+        let word = word.expect("should_render implies a word");
 
-                // Create render frame with ghost context
-                let frame = RenderFrame::with_ghosts(&word, anchor_pos, ghost_prev, ghost_next);
+        // Use precomputed char_count from token for O(1) anchor calculation
+        // instead of O(n) chars().count() on the word string
+        let (anchor_pos, ghost_prev, ghost_next) = if let Some(reading_state) = app.reading_state()
+        {
+            let anchor = if let Some(token) = reading_state.current_token() {
+                calculate_anchor_position_from_len(token.char_count())
+            } else {
+                calculate_anchor_position(&word)
+            };
+            // Get ghost context only if enabled in config
+            let (prev, next) = if app.ghost_words_enabled() {
+                reading_state.ghost_context()
+            } else {
+                (None, None)
+            };
+            (anchor, prev, next)
+        } else {
+            (calculate_anchor_position(&word), None, None)
+        };
 
-                // Render frame (current word + optional ghost words)
-                if let Err(e) = RsvpRenderer::render_frame(&mut self.kitty_renderer, &frame) {
-                    app.set_error(format!("Render error: {}", e));
-                }
+        // Create render frame with ghost context
+        let frame = RenderFrame::with_ghosts(&word, anchor_pos, ghost_prev, ghost_next);
 
-                // Render progress bar and macro gutter
-                if let Some(reading_state) = app.reading_state() {
-                    let current_index = reading_state.current_index();
-                    let total_tokens = reading_state.tokens().len();
-                    let paused = matches!(app.mode(), AppMode::Paused);
+        // Render frame (current word + optional ghost words)
+        if let Err(e) = RsvpRenderer::render_frame(&mut self.kitty_renderer, &frame) {
+            app.set_error(format!("Render error: {}", e));
+        }
 
-                    let progress =
-                        calculate_sentence_progress(current_index, reading_state.tokens());
-                    let word_y = self.kitty_renderer.get_vertical_center().unwrap_or(0);
-                    if let Ok(word_height) =
-                        self.kitty_renderer.calculate_word_height(&word, anchor_pos)
-                    {
-                        // Render micro bar (sentence progress) + macro gutter (document progress)
-                        if let Err(e) = self.kitty_renderer.render_progress(
-                            word_y,
-                            word_height,
-                            progress,
-                            paused,
-                            current_index,
-                            total_tokens,
-                            reader_area,
-                        ) {
-                            app.set_error(format!("Progress render error: {}", e));
-                        }
-                    }
+        // Render progress bar and macro gutter
+        if let Some(reading_state) = app.reading_state() {
+            let current_index = reading_state.current_index();
+            let total_tokens = reading_state.tokens().len();
+            let paused = matches!(app.mode(), AppMode::Paused);
+
+            let progress = calculate_sentence_progress(current_index, reading_state.tokens());
+            let word_y = self.kitty_renderer.get_vertical_center().unwrap_or(0);
+            if let Ok(word_height) = self.kitty_renderer.calculate_word_height(&word, anchor_pos) {
+                // Render micro bar (sentence progress) + macro gutter (document progress)
+                if let Err(e) = self.kitty_renderer.render_progress(
+                    word_y,
+                    word_height,
+                    progress,
+                    paused,
+                    current_index,
+                    total_tokens,
+                    reader_area,
+                ) {
+                    app.set_error(format!("Progress render error: {}", e));
                 }
             }
-            // If word is newline/whitespace, don't clear or render - keep previous word visible
+        }
+
+        // Delete the PREVIOUS frame's images (the current frame is already
+        // placed on top of them, so the swap is invisible). Skipped entirely
+        // for blank tokens, keeping the last word on screen.
+        if let Err(e) = RsvpRenderer::clear(&mut self.kitty_renderer) {
+            app.set_error(format!("Failed to clear previous word: {}", e));
         }
 
         Ok(())
@@ -543,18 +554,17 @@ impl TuiManager {
         // This helps ensure CSI 14t returns updated dimensions
         std::thread::sleep(std::time::Duration::from_millis(50));
 
-        // Update viewport dimensions using the resize event data
-        // This is more reliable than querying CSI 14t which can return stale data
+        // Update viewport dimensions using the resize event data.
+        // Cell size (px per cell) is constant across resizes — only the number of
+        // cols/rows changes — so extrapolate pixel size from the previous cell
+        // size instead of re-querying CSI 14t. Querying stdin here would race
+        // crossterm's event-loop reader and corrupt the event stream.
         self.kitty_renderer
             .viewport()
             .update_from_resize(cols, rows);
 
-        // Clear previous graphics and redraw at new position
-        if let Err(e) = RsvpRenderer::clear(&mut self.kitty_renderer) {
-            app.set_error(format!("Failed to clear during resize: {}", e));
-        }
-
-        // Force immediate redraw
+        // Force immediate redraw (render_frame places the new frame and clears
+        // the previous one internally).
         self.render_frame(app)?;
 
         // Resume if we were reading
