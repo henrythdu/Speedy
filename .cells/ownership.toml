@@ -11,7 +11,7 @@ files = ["src/reading/mod.rs", "src/reading/ovp.rs", "src/reading/sentence.rs", 
 files = ["src/rendering/font.rs", "src/rendering/mod.rs", "src/rendering/renderer.rs", "src/rendering/viewport.rs"]
 
 [kitty]
-files = ["src/rendering/kitty/mod.rs", "src/rendering/kitty/positioning.rs", "src/rendering/kitty/protocol.rs", "src/rendering/kitty/rasterizer.rs", "src/rendering/kitty/progress.rs"]
+files = ["src/rendering/kitty/mod.rs", "src/rendering/kitty/positioning.rs", "src/rendering/kitty/protocol.rs", "src/rendering/kitty/rasterizer.rs"]
 
 [input]
 files = ["src/input/clipboard.rs", "src/input/epub.rs", "src/input/mod.rs", "src/input/pdf.rs"]
@@ -37,8 +37,8 @@ files = ["src/ui/autocomplete/cache.rs", "src/ui/autocomplete/discovery.rs", "sr
 [config-popup]
 files = ["src/ui/config_popup/mod.rs", "src/ui/config_popup/render.rs"]
 
-[reader]
-files = ["src/ui/reader/mod.rs", "src/ui/reader/view.rs"]
+[ui-parts]
+files = ["src/ui/parts/background.rs", "src/ui/parts/deck.rs", "src/ui/parts/mod.rs", "src/ui/parts/progress.rs", "src/ui/parts/word.rs"]
 
 [engine]
 files = ["src/engine/config.rs", "src/engine/mod.rs"]

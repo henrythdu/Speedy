@@ -1,24 +1,24 @@
-//! Progress indicators rendered via the Kitty Graphics Protocol.
+//! Progress part — the two reading-progress indicators.
 //!
-//! Two separate progress displays live here, split out of the word renderer:
+//! - `render_bar`: sentence-progress micro bar below the word. Capsule shape
+//!   (rounded ends) matching the rounded popup borders; anchored to the
+//!   constant `word_line_height()` so its Y position never jitters between
+//!   words of different glyph heights.
+//! - `render_macro_gutter`: document-progress macro gutter on the right edge.
 //!
-//! - `render_bar`: the sentence-progress micro bar drawn below the current word.
-//! - `render_macro_gutter`: the document-progress macro gutter on the right edge.
-//!
-//! Both only need the viewport (for sizing + cell mapping) and the protocol
-//! transmission helpers — they share no state with word rasterization, so they
-//! form a clean sub-concern of the KGP renderer.
-
-use imageproc::image::{ImageBuffer, Rgba};
-use ratatui::layout::Rect;
+//! Both share the viewport (sizing + cell mapping) and the protocol helpers;
+//! colors are alpha-scaled by pause state (dimmed 30% while reading so the
+//! word stays the focus, full opacity when paused).
 
 use crate::engine::config::{
     PROGRESS_BAR_HEIGHT, PROGRESS_BAR_MARGIN_PX, PROGRESS_BAR_WIDTH_PCT, PROGRESS_BRIGHT_ALPHA,
     PROGRESS_COLOR_B, PROGRESS_COLOR_G, PROGRESS_COLOR_R, PROGRESS_DIM_ALPHA,
 };
 use crate::rendering::kitty::protocol::{encode_image_base64, transmit_graphics};
-use crate::rendering::kitty::KittyGraphicsRenderer;
 use crate::rendering::renderer::RendererError;
+use crate::ui::parts::word::KittyGraphicsRenderer;
+use imageproc::image::{ImageBuffer, Rgba};
+use ratatui::layout::Rect;
 
 /// Bright/dim progress colors, alpha-scaled by pause state.
 ///

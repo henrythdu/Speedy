@@ -1,3 +1,10 @@
+//! Deck part — the command deck + WPM label.
+//!
+//! The deck is the app's interaction surface: surface-colored block, left
+//! accent bar, input line with blinking cursor, mode label, error display.
+//! It dims when unfocused (Reading — the word is the focus) and goes bright
+//! when it becomes interactable (Command = typing, Paused = ':' / '@' open it).
+
 use crate::app::mode::AppMode;
 use crate::ui::theme::colors;
 use ratatui::{
@@ -7,18 +14,21 @@ use ratatui::{
     Frame,
 };
 
+/// Render the command deck at the bottom of the screen.
+///
+/// `active` = the deck is the current interaction surface (Command or Paused):
+/// bright accents and text. Inactive (Reading) recedes via `Theme::dim()` so
+/// the "typing place" reads as not-focused until Tab / ':' / '@' activates it.
 pub fn render_command_deck(
     frame: &mut Frame,
     area: Rect,
     mode: AppMode,
     command_buffer: &str,
     error_message: Option<&str>,
-    cursor_visible: bool, // NEW: Blink state
-    active: bool,         // Focused (Command mode): bright; otherwise dimmed
+    cursor_visible: bool,
+    active: bool,
 ) {
     let theme = crate::ui::theme::Theme::current();
-    // Inactive deck recedes: dim accents, hints and labels so the "typing
-    // place" reads as not-focused until Tab / ':' / '@' activates it.
     let accent = if active {
         colors::accent()
     } else {

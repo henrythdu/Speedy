@@ -2,7 +2,6 @@ use crate::app::{mode::AppMode, App};
 use crate::reading::{
     calculate_anchor_position, calculate_anchor_position_from_len, calculate_sentence_progress,
 };
-use crate::rendering::kitty::KittyGraphicsRenderer;
 use crate::rendering::renderer::{RenderFrame, RsvpRenderer};
 use crate::ui::autocomplete::controller::AutocompleteController;
 use crate::ui::autocomplete::render::render_autocomplete_popup;
@@ -11,7 +10,9 @@ use crate::ui::key_handler::{KeyHandlerRegistry, KeyResult};
 use crate::ui::key_handlers::{
     create_command_handlers, create_popup_handlers, create_reading_handlers,
 };
-use crate::ui::reader::view::{render_command_deck, render_wpm};
+use crate::ui::parts::background::render_background_cells;
+use crate::ui::parts::deck::{render_command_deck, render_wpm};
+use crate::ui::parts::word::KittyGraphicsRenderer;
 use crate::ui::theme::{set_current_theme, Theme};
 use anyhow::Result;
 use imageproc::image::Rgba;
@@ -25,8 +26,7 @@ use crossterm::{
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
-    widgets::Block,
+    style::Color,
     Terminal,
 };
 
@@ -411,21 +411,9 @@ impl TuiManager {
             let theme = Theme::get_by_name(app.theme_name());
 
             // Background fill with rounded corners: the kitty layer placed an
-            // opaque rounded rect BEHIND the text (z=-1), so ratatui must leave
-            // the 4 screen-corner cells unpainted or it would square them off.
-            let bg_style = Style::default().bg(theme.background);
-            let (w, h) = (area.width, area.height);
-            if w > 2 && h > 2 {
-                for strip in [
-                    Rect::new(area.x + 1, area.y, w - 2, 1), // top, minus corners
-                    Rect::new(area.x, area.y + 1, w, h - 2), // middle, full width
-                    Rect::new(area.x + 1, area.y + h - 1, w - 2, 1), // bottom, minus corners
-                ] {
-                    frame.render_widget(Block::default().style(bg_style), strip);
-                }
-            } else {
-                frame.render_widget(Block::default().style(bg_style), area);
-            }
+            // opaque rounded rect BEHIND the text (z=i32::MIN), so ratatui must
+            // leave the 4 screen-corner cells unpainted or it would square them.
+            render_background_cells(frame, area, theme.background);
 
             // Calculate responsive margins based on terminal size
             let (top, bottom, left, right) = calculate_margins(area);

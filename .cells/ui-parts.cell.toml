@@ -1,0 +1,5 @@
+name = "ui-parts"
+layer = 4
+purpose = "UI parts — one module per visible element (cells-style): word.rs (RSVP word + ghosts, KittyGraphicsRenderer), progress.rs (bar + gutter), background.rs (rounded card), deck.rs (command deck + WPM). A bug in one part has exactly one file to look in."
+provides = ["KittyGraphicsRenderer", "render_command_deck", "render_wpm", "render_background_cells"]
+requires = ["app", "engine", "glyph-cache", "kitty", "rendering", "ui-theme"]

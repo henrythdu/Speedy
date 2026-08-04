@@ -5,8 +5,7 @@ requires = [
   "app",
   "autocomplete",
   "config-popup",
-  "kitty",
-  "reader",
+  "ui-parts",
   "reading",  # terminal.rs calls calculate_anchor_position/calculate_sentence_progress (crossing hidden by cells rust-importer bug; lands when fixed)
   "rendering",
   "ui-events",
