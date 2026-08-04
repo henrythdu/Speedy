@@ -85,6 +85,7 @@ impl KittyGraphicsRenderer {
     /// Render the sentence-progress bar + document-progress gutter in one pass.
     /// Each slot change-detects (see `bar_slot`/`gutter_slot`) and swaps via a
     /// fresh image id: place new → delete old (see the slot-id docs in word.rs).
+    #[allow(clippy::too_many_arguments)] // +self = 8; cohesive one-pass renderer API
     pub fn render_progress(
         &mut self,
         word_y: u32,

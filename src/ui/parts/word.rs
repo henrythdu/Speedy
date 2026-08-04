@@ -35,7 +35,7 @@ use imageproc::image::{ImageBuffer, Rgba};
 /// on top during the transient overlap (kitty: same z → higher id = higher
 /// z-index). The background (background.rs) keeps id 0 — anonymous, but it
 /// only re-transmits on theme/dims change.
-
+///
 /// Everything that determines a slot's on-screen image: word, anchor (OVP
 /// point), pixel y, and opacity. Equal state ⇒ the image on screen is already
 /// correct ⇒ transmitting again would only make kitty delete + rebuild it.
