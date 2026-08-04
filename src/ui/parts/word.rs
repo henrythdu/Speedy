@@ -19,6 +19,22 @@ use crate::rendering::viewport::Viewport;
 use ab_glyph::FontRef;
 use imageproc::image::{ImageBuffer, Rgba};
 
+/// Fixed Kitty image ids per render slot.
+///
+/// Re-transmitting with an EXISTING id REPLACES the image in place (kitty
+/// protocol: same id = replace — the `a=q` query action exists precisely to
+/// transmit WITHOUT replacing). A slot therefore never stacks over its previous
+/// occupant, which matters for semi-transparent pixels: the old place-new-id /
+/// delete-old-id scheme put the new dim track over the old bright fill for a
+/// repaint → the bar's dim section flickered on every word advance.
+///
+/// 0 is the background card (background.rs); 1-5 are the reading-zone slots.
+pub(crate) const GHOST_PREV_IMAGE_ID: u32 = 1;
+pub(crate) const GHOST_NEXT_IMAGE_ID: u32 = 2;
+pub(crate) const WORD_IMAGE_ID: u32 = 3;
+pub(crate) const BAR_IMAGE_ID: u32 = 4;
+pub(crate) const GUTTER_IMAGE_ID: u32 = 5;
+
 /// Kitty Graphics Protocol renderer for pixel-perfect RSVP
 pub struct KittyGraphicsRenderer {
     /// Terminal viewport for coordinate conversion
@@ -29,33 +45,16 @@ pub struct KittyGraphicsRenderer {
     font_size: f32,
     /// Font metrics for positioning calculations
     font_metrics: Option<FontMetrics>,
-    /// Current image ID for protocol (incremented per word)
-    pub(crate) current_image_id: u32,
     /// Word-level LRU cache for rendered buffers
     word_cache: WordCache,
     /// Ghost word opacity (0.0 - 1.0), default 0.3
     ghost_opacity: f32,
-    /// Image ids placed this frame (deleted by the NEXT clear())
-    pub(crate) cur_frame: FrameImages,
-    /// Image ids from the previous frame — the ones clear() actually deletes
-    pub(crate) prev_frame: FrameImages,
+    /// Whether each ghost slot was rendered last frame — true means a stale
+    /// image may be on screen, so toggling ghosts off must delete the slot.
+    ghost_prev_was_rendered: bool,
+    ghost_next_was_rendered: bool,
     /// Cache key of the last placed background (w, h, r, g, b) — skip re-transmit when unchanged
     pub(crate) background_key: Option<(u32, u32, u8, u8, u8)>,
-}
-
-/// Image ids placed in a single render frame.
-///
-/// clear() deletes the PREVIOUS frame's ids, never the current ones: the new
-/// frame is transmitted first (covering the old images in place), then the old
-/// ids are deleted — all in one write batch — so the terminal repaints once
-/// instead of showing the word blink out and back in on every advance.
-#[derive(Default, Clone, Copy)]
-pub(crate) struct FrameImages {
-    pub(crate) ghost_prev: Option<u32>,
-    pub(crate) ghost_next: Option<u32>,
-    pub(crate) word: Option<u32>,
-    pub(crate) bar: Option<u32>,
-    pub(crate) gutter: Option<u32>,
 }
 
 impl Default for KittyGraphicsRenderer {
@@ -72,11 +71,10 @@ impl KittyGraphicsRenderer {
             font: None,
             font_size: DEFAULT_FONT_SIZE,
             font_metrics: None,
-            current_image_id: 1,
             word_cache: WordCache::new(DEFAULT_CACHE_CAPACITY),
             ghost_opacity: 0.1,
-            cur_frame: FrameImages::default(),
-            prev_frame: FrameImages::default(),
+            ghost_prev_was_rendered: false,
+            ghost_next_was_rendered: false,
             background_key: None,
         }
     }
@@ -137,6 +135,7 @@ impl KittyGraphicsRenderer {
         anchor: usize,
         y_position: u32,
         opacity: f32,
+        image_id: u32,
     ) -> Result<u32, RendererError> {
         if word.is_empty() {
             return Err(RendererError::InvalidArguments(
@@ -190,11 +189,8 @@ impl KittyGraphicsRenderer {
         let base64_data = encode_image_base64(&buffer);
         let (width, height) = (cached_word.width, cached_word.height);
 
-        let image_id = self.current_image_id;
         transmit_graphics(image_id, width, height, &base64_data, 0, 0, 1)
             .map_err(|e| RendererError::RenderFailed(e.to_string()))?;
-
-        self.current_image_id += 1;
 
         Ok(image_id)
     }
@@ -247,24 +243,34 @@ impl RsvpRenderer for KittyGraphicsRenderer {
         // 1. Previous ghost (above) - transmitted first, non-fatal
         // 2. Next ghost (below) - transmitted second, non-fatal
         // 3. Current word (center) - transmitted last, MUST succeed
-        // Deletes for the PREVIOUS frame are batched in clear(), called after
-        // this frame is fully placed.
+        // Fixed slot ids: re-transmission replaces the slot's image in place
+        // (kitty same-id semantics), so the previous occupants of these slots
+        // are gone the moment the new image completes — no delete pass needed.
 
         // 1. Previous ghost (above center)
         if let Some((word, anchor)) = frame.ghost_prev {
             // Validate anchor but don't fail on error - ghost rendering is non-fatal
             if anchor < word.chars().count() {
                 let y_offset = center_y.saturating_sub(line_height);
-                match self.render_at_position(word, anchor, y_offset, self.ghost_opacity) {
-                    Ok(id) => self.cur_frame.ghost_prev = Some(id),
-                    Err(e) => {
-                        // Log but don't fail - ghost rendering is non-fatal
-                        tracing::warn!(error = %e, "ghost_prev render failed");
-                    }
+                if let Err(e) = self.render_at_position(
+                    word,
+                    anchor,
+                    y_offset,
+                    self.ghost_opacity,
+                    GHOST_PREV_IMAGE_ID,
+                ) {
+                    // Log but don't fail - ghost rendering is non-fatal
+                    tracing::warn!(error = %e, "ghost_prev render failed");
                 }
+                self.ghost_prev_was_rendered = true;
             } else {
                 tracing::warn!(anchor, word = %word, "ghost_prev anchor out of bounds");
             }
+        } else if self.ghost_prev_was_rendered {
+            // Ghosts were just toggled off: clear the stale slot image so it
+            // doesn't linger on screen (replace-only would never touch it).
+            let _ = delete_image(GHOST_PREV_IMAGE_ID);
+            self.ghost_prev_was_rendered = false;
         }
 
         // 2. Next ghost (below center)
@@ -272,39 +278,27 @@ impl RsvpRenderer for KittyGraphicsRenderer {
             // Validate anchor but don't fail on error - ghost rendering is non-fatal
             if anchor < word.chars().count() {
                 let y_offset = center_y + line_height;
-                match self.render_at_position(word, anchor, y_offset, self.ghost_opacity) {
-                    Ok(id) => self.cur_frame.ghost_next = Some(id),
-                    Err(e) => {
-                        // Log but don't fail - ghost rendering is non-fatal
-                        tracing::warn!(error = %e, "ghost_next render failed");
-                    }
+                if let Err(e) = self.render_at_position(
+                    word,
+                    anchor,
+                    y_offset,
+                    self.ghost_opacity,
+                    GHOST_NEXT_IMAGE_ID,
+                ) {
+                    // Log but don't fail - ghost rendering is non-fatal
+                    tracing::warn!(error = %e, "ghost_next render failed");
                 }
+                self.ghost_next_was_rendered = true;
             } else {
                 tracing::warn!(anchor, word = %word, "ghost_next anchor out of bounds");
             }
+        } else if self.ghost_next_was_rendered {
+            let _ = delete_image(GHOST_NEXT_IMAGE_ID);
+            self.ghost_next_was_rendered = false;
         }
 
         // 3. Current word (center) - CRITICAL: rendered last, must succeed
-        let id = self.render_at_position(frame.word, frame.anchor, center_y, 1.0)?;
-        self.cur_frame.word = Some(id);
-        Ok(())
-    }
-
-    fn clear(&mut self) -> Result<(), RendererError> {
-        // Delete the PREVIOUS frame's images. Called AFTER the current frame was
-        // placed, so every deleted image is already covered by a new placement
-        // at the same cells — the terminal repaints once, no blink-out.
-        // Errors are not propagated to prevent a single failed delete from
-        // crashing the app.
-        let _ = self.prev_frame.ghost_prev.map(delete_image);
-        let _ = self.prev_frame.ghost_next.map(delete_image);
-        let _ = self.prev_frame.word.map(delete_image);
-        let _ = self.prev_frame.bar.map(delete_image);
-        let _ = self.prev_frame.gutter.map(delete_image);
-
-        // The frame just rendered becomes the previous frame for next clear().
-        self.prev_frame = self.cur_frame;
-        self.cur_frame = FrameImages::default();
+        self.render_at_position(frame.word, frame.anchor, center_y, 1.0, WORD_IMAGE_ID)?;
         Ok(())
     }
 
@@ -409,61 +403,49 @@ mod tests {
     }
 
     #[test]
-    fn test_clear_returns_ok() {
+    fn test_render_frame_uses_fixed_slot_ids() {
         let mut renderer = KittyGraphicsRenderer::new();
         renderer.initialize().unwrap();
 
-        // Render a frame first to have something to clear
+        // Rendering the same frame twice must succeed — re-transmission with
+        // a fixed id replaces the slot image in place (kitty same-id semantics),
+        // so there is no id sequence to exhaust and nothing to delete.
         let frame = RenderFrame::with_ghosts("test", 0, None, None);
         let _ = renderer.render_frame(&frame);
+        let _ = renderer.render_frame(&frame);
 
-        // Clear should succeed (though actual deletion may fail in test env)
-        let result = renderer.clear();
-        // In test environment without actual terminal, cleanup might fail
-        // but we should at least not panic
-        assert!(result.is_ok() || result.is_err());
+        // Slot ids are distinct and the background slot (0) is never reused.
+        let ids = [
+            GHOST_PREV_IMAGE_ID,
+            GHOST_NEXT_IMAGE_ID,
+            WORD_IMAGE_ID,
+            BAR_IMAGE_ID,
+            GUTTER_IMAGE_ID,
+        ];
+        for (i, a) in ids.iter().enumerate() {
+            assert_ne!(*a, 0, "slot {} must not collide with the background", i);
+            for b in ids.iter().skip(i + 1) {
+                assert_ne!(a, b, "slots must be distinct");
+            }
+        }
     }
 
     #[test]
-    fn test_frame_id_bookkeeping_rotates_on_clear() {
+    fn test_ghost_off_clears_stale_ghost_slots() {
         let mut renderer = KittyGraphicsRenderer::new();
         renderer.initialize().unwrap();
 
-        // Render a word frame (no ghosts)
-        let frame = RenderFrame::with_ghosts("test", 0, None, None);
-        let _ = renderer.render_frame(&frame);
-        assert!(
-            renderer.cur_frame.word.is_some(),
-            "render must record the placed word id"
-        );
-        assert!(renderer.prev_frame.word.is_none());
+        // Ghosts on: both slots render.
+        let with_ghosts = RenderFrame::with_ghosts("word", 0, Some(("prev", 0)), Some(("next", 0)));
+        let _ = renderer.render_frame(&with_ghosts);
+        assert!(renderer.ghost_prev_was_rendered);
+        assert!(renderer.ghost_next_was_rendered);
 
-        // clear() rotates: current frame becomes previous (deleted next frame)
-        let _ = renderer.clear();
-        assert!(renderer.prev_frame.word.is_some());
-        assert!(renderer.cur_frame.word.is_none());
-
-        // A second clear (after nothing new was rendered) deletes prev and empties it
-        let _ = renderer.clear();
-        assert!(renderer.prev_frame.word.is_none());
-        assert!(renderer.cur_frame.word.is_none());
-    }
-
-    #[test]
-    fn test_whitespace_skip_keeps_previous_frame_pending() {
-        // Skipping a blank token must NOT rotate/clear: the previous frame's
-        // ids stay in prev_frame so the next non-blank frame's clear() deletes
-        // them (i.e. the last word stays visible during whitespace).
-        let mut renderer = KittyGraphicsRenderer::new();
-        renderer.initialize().unwrap();
-
-        let frame = RenderFrame::with_ghosts("test", 0, None, None);
-        let _ = renderer.render_frame(&frame);
-        let _ = renderer.clear();
-        assert!(renderer.prev_frame.word.is_some());
-
-        // Blank token: no render_frame, no clear() — ids untouched.
-        assert!(renderer.prev_frame.word.is_some());
+        // Ghosts off: the flags flip back, signalling the slots were cleared.
+        let no_ghosts = RenderFrame::with_ghosts("word", 0, None, None);
+        let _ = renderer.render_frame(&no_ghosts);
+        assert!(!renderer.ghost_prev_was_rendered);
+        assert!(!renderer.ghost_next_was_rendered);
     }
 
     #[test]

@@ -212,6 +212,7 @@ impl TuiManager {
                         match (key.code, app.mode()) {
                             // Command mode: drive autocomplete inline + forward chars to the buffer
                             (KeyCode::Char(c), AppMode::Command) => {
+                                app.clear_error(); // new input dismisses stale errors
                                 let activated = {
                                     let buf = app.command_buffer();
                                     self.autocomplete.try_activate(c, buf, buf.len())
@@ -267,6 +268,7 @@ impl TuiManager {
                                 if self.autocomplete.is_active() {
                                     self.autocomplete.backspace();
                                 }
+                                app.clear_error();
                                 self.dispatch_key(KeyCode::Backspace, app);
                             }
                             (KeyCode::Up, AppMode::Command) => {
@@ -283,6 +285,11 @@ impl TuiManager {
                                 if self.autocomplete.is_active() {
                                     self.autocomplete.apply_and_chain(app.command_buffer_mut());
                                 } else if app.reading_state().is_some() {
+                                    // Leave the deck: drop any half-typed buffer
+                                    // and stale errors so nothing lingers in the
+                                    // type area during Reading.
+                                    app.clear_command_buffer();
+                                    app.clear_error();
                                     app.set_mode(AppMode::Reading);
                                 }
                             }
@@ -296,6 +303,7 @@ impl TuiManager {
                                 } else {
                                     self.dispatch_key(KeyCode::Esc, app);
                                 }
+                                app.clear_error();
                             }
                             // Keys whose effect is Command-only: no-op elsewhere (preserves prior behavior)
                             (
@@ -557,12 +565,11 @@ impl TuiManager {
             }
         }
 
-        // Delete the PREVIOUS frame's images (the current frame is already
-        // placed on top of them, so the swap is invisible). Skipped entirely
-        // for blank tokens, keeping the last word on screen.
-        if let Err(e) = RsvpRenderer::clear(&mut self.kitty_renderer) {
-            app.set_error(format!("Failed to clear previous word: {}", e));
-        }
+        // No delete pass: every slot re-transmits with a fixed id, and kitty
+        // REPLACES the slot's previous image in place (same-id semantics). The
+        // old word/bar/gutter are gone the moment the new image completes, so
+        // there is nothing to clear. Blank tokens skip rendering entirely,
+        // which leaves the last word on screen — as intended.
 
         Ok(())
     }

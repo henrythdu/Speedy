@@ -51,6 +51,12 @@ impl App {
         self.error_message = Some(message);
     }
 
+    /// Clear the current error message. Called when the user starts typing a
+    /// new command or leaves the deck — errors are transient, not sticky.
+    pub fn clear_error(&mut self) {
+        self.error_message = None;
+    }
+
     /// Get the current error message if any
     pub fn get_error(&self) -> Option<&str> {
         self.error_message.as_deref()

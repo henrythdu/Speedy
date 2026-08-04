@@ -112,11 +112,6 @@ pub trait RsvpRenderer {
     /// Ghost render failures should be logged but NOT propagated (non-fatal).
     fn render_frame(&mut self, frame: &RenderFrame) -> Result<(), RendererError>;
 
-    /// Clear the current word from the display
-    ///
-    /// Removes any previously rendered content in the reading zone.
-    fn clear(&mut self) -> Result<(), RendererError>;
-
     /// Cleanup resources before app exit
     ///
     /// Ensures no lingering graphics or state remains.
@@ -163,10 +158,6 @@ mod tests {
             Ok(())
         }
 
-        fn clear(&mut self) -> Result<(), RendererError> {
-            Ok(())
-        }
-
         fn cleanup(&mut self) -> Result<(), RendererError> {
             Ok(())
         }
@@ -185,7 +176,6 @@ mod tests {
         assert!(renderer.initialize().is_ok());
         let frame = RenderFrame::with_ghosts("hello", 1, None, None);
         assert!(renderer.render_frame(&frame).is_ok());
-        assert!(renderer.clear().is_ok());
         assert!(renderer.cleanup().is_ok());
     }
 

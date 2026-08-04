@@ -16,7 +16,7 @@ use crate::engine::config::{
 };
 use crate::rendering::kitty::protocol::{encode_image_base64, transmit_graphics};
 use crate::rendering::renderer::RendererError;
-use crate::ui::parts::word::{move_to_pixel, KittyGraphicsRenderer};
+use crate::ui::parts::word::{move_to_pixel, KittyGraphicsRenderer, BAR_IMAGE_ID, GUTTER_IMAGE_ID};
 use imageproc::image::{ImageBuffer, Rgba};
 use ratatui::layout::Rect;
 
@@ -83,7 +83,8 @@ fn build_capsule_bar(
 
 impl KittyGraphicsRenderer {
     /// Render the sentence-progress bar + document-progress gutter in one pass,
-    /// owning the image-id sequence so callers never touch renderer bookkeeping.
+    /// using the fixed slot ids so re-transmission replaces in place (see the
+    /// slot-id docs in word.rs — no id churn, no stacking, no flicker).
     #[allow(clippy::too_many_arguments)] // +self = 8; cohesive one-pass renderer API
     pub fn render_progress(
         &mut self,
@@ -95,21 +96,14 @@ impl KittyGraphicsRenderer {
         total_tokens: usize,
         reader_area: Rect,
     ) -> Result<(), RendererError> {
-        let bar_image_id = self.current_image_id;
-        self.render_bar(word_y, word_height, progress, paused, bar_image_id)?;
-        self.current_image_id += 1;
-        self.cur_frame.bar = Some(bar_image_id);
-
-        let gutter_image_id = self.current_image_id;
+        self.render_bar(word_y, word_height, progress, paused, BAR_IMAGE_ID)?;
         self.render_macro_gutter(
             current_index,
             total_tokens,
             reader_area,
             paused,
-            gutter_image_id,
+            GUTTER_IMAGE_ID,
         )?;
-        self.current_image_id += 1;
-        self.cur_frame.gutter = Some(gutter_image_id);
         Ok(())
     }
 

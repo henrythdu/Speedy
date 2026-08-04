@@ -23,8 +23,8 @@ use ratatui::{
     Frame,
 };
 
-/// Reserved image id for the rounded background rect. Frame ids start at 1
-/// (current_image_id init), so id 0 never collides with word/bar/gutter.
+/// Reserved image id for the rounded background rect — slot ids 1-5 cover
+/// ghosts, word, bar, gutter (see word.rs), so 0 never collides.
 const BACKGROUND_IMAGE_ID: u32 = 0;
 /// Corner radius of the app background card, in pixels.
 const BACKGROUND_RADIUS_PX: u32 = 10;
