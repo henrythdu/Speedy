@@ -33,20 +33,20 @@ pub fn render_help_popup(frame: &mut Frame, command_area: Rect, terminal_height:
     info(&mut lines, "Space / p", "pause / resume");
     info(&mut lines, "j / k", "previous / next sentence");
     info(&mut lines, "[ / ]", "slower / faster");
-    info(&mut lines, "Tab", "open command deck");
-    info(&mut lines, ": command", "type a command (e.g. :q)");
-    info(&mut lines, "@ path", "open a file, then pick with ↑↓");
+    blank(&mut lines);
+    section(&mut lines, "DECK — active when paused");
+    info(&mut lines, "@ path", "open a file, pick with ↑↓");
+    info(&mut lines, "@@", "paste from clipboard");
+    info(&mut lines, ":q", "quit");
+    info(&mut lines, ":h", "this help");
+    info(&mut lines, "Esc", "back to reading");
     blank(&mut lines);
     section(&mut lines, "PROGRESS");
     info(&mut lines, "bar", "progress in current sentence");
     info(&mut lines, "right gutter", "progress in whole document");
     blank(&mut lines);
-    section(&mut lines, "FILES & THEMES");
-    info(&mut lines, "@@", "paste from clipboard");
+    section(&mut lines, "THEMES");
     info(&mut lines, "Ctrl+P", "settings (theme, WPM, ghosts)");
-    blank(&mut lines);
-    info(&mut lines, ":q", "quit");
-    info(&mut lines, "Esc", "close this help");
 
     let paragraph = Paragraph::new(lines).alignment(Alignment::Left);
     frame.render_widget(paragraph, inner);
@@ -56,7 +56,7 @@ pub fn render_help_popup(frame: &mut Frame, command_area: Rect, terminal_height:
 /// Width fits the content (~52) instead of spanning the whole command area,
 /// so no line can run into the right border on any terminal.
 fn calculate_help_area(command_area: Rect, terminal_height: u16) -> Rect {
-    const POPUP_HEIGHT: u16 = 19;
+    const POPUP_HEIGHT: u16 = 20;
     const POPUP_WIDTH: u16 = 52;
 
     let popup_width = command_area.width.clamp(40, POPUP_WIDTH);

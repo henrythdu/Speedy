@@ -100,7 +100,10 @@ pub fn render_command_deck(
     let input_text = if let Some(error) = error_message {
         format!("ERROR: {}{}", error, cursor_char)
     } else if command_buffer.is_empty() {
-        format!("@ file · @@ clipboard · :h keys{}", cursor_char)
+        format!(
+            "Space pauses, then type: @ file · @@ clipboard · :h{}",
+            cursor_char
+        )
     } else {
         format!("{}{}", command_buffer, cursor_char)
     };

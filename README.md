@@ -109,7 +109,8 @@ cargo build --release
    - `Space` to pause/resume
    - `]` to increase WPM, `[` to decrease
    - `j` / `k` to jump forward/backward one sentence
-   - `Tab` to open the command deck
+   - Pause first, then the command deck at the bottom accepts input
+     (`@file`, `:q`, `:h`)
 
 ---
 
@@ -117,7 +118,9 @@ cargo build --release
 
 ### Command Deck
 
-Speedy has a command deck at the bottom of the terminal. `Tab` opens it from Reading/Paused mode; typing `:` or `@` opens it directly.
+Speedy has a command deck at the bottom of the terminal. While Reading it
+sits dimmed; press `Space` to pause and it becomes the active input — type
+directly, no key needed to "open" it.
 
 #### Loading Files
 
@@ -161,9 +164,9 @@ The six themes are also listed in [Configuration](#configuration).
 | `[` | Decrease WPM by 50 |
 | `j` | Jump forward one sentence |
 | `k` | Jump backward one sentence |
-| `Tab` | Open command deck |
-| `:` | Open command deck with `:` |
-| `@` | Open command deck and start file autocomplete |
+
+Paused is when the deck accepts input — type `@file`, `:q`, or `:h`
+directly (Space / `p` still resume).
 
 ### Command Mode
 

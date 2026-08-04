@@ -228,14 +228,12 @@ impl TuiManager {
                                     self.autocomplete.feed_char(c);
                                 }
                             }
-                            // Reading/Paused: ':' and '@' open the command deck
-                            // directly (matches the deck hint "Type @ for files,
-                            // @@, or :q") instead of being swallowed by the
-                            // key registry — lets the user quit / change file
-                            // without knowing Tab first.
-                            (KeyCode::Char(c), AppMode::Reading | AppMode::Paused)
-                                if c == ':' || c == '@' =>
-                            {
+                            // Paused: the deck below is the active surface —
+                            // ANY key except Space / p (which resume) starts
+                            // typing there. Reading has no deck entry key at
+                            // all: pause first, then type. This is the only
+                            // path into Command mode.
+                            (KeyCode::Char(c), AppMode::Paused) if c != ' ' && c != 'p' => {
                                 app.set_mode(AppMode::Command);
                                 let activated = {
                                     let buf = app.command_buffer();
@@ -303,10 +301,6 @@ impl TuiManager {
                                     app.clear_error();
                                     app.set_mode(AppMode::Reading);
                                 }
-                            }
-                            (KeyCode::Tab, AppMode::Reading | AppMode::Paused) => {
-                                app.set_mode(AppMode::Command);
-                                app.clear_command_buffer();
                             }
                             (KeyCode::Esc, _) => {
                                 if self.autocomplete.is_active() {
