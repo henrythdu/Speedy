@@ -14,9 +14,20 @@ pub fn render_command_deck(
     command_buffer: &str,
     error_message: Option<&str>,
     cursor_visible: bool, // NEW: Blink state
+    active: bool,         // Focused (Command mode): bright; otherwise dimmed
 ) {
     // Clear the command area first
     frame.render_widget(Clear, area);
+
+    let theme = crate::ui::theme::Theme::current();
+    // Inactive deck recedes: dim accents, hints and labels so the "typing
+    // place" reads as not-focused until Tab / ':' / '@' activates it.
+    let accent = if active {
+        colors::accent()
+    } else {
+        theme.dim()
+    };
+    let text_color = if active { colors::text() } else { theme.dim() };
 
     // Fill entire command area with surface color
     let surface_block = Block::default().style(Style::default().bg(colors::surface()));
@@ -30,8 +41,8 @@ pub fn render_command_deck(
 
     // Left accent bar - full height of command section
     let accent_text = "▌\n▌\n▌\n▌\n▌"; // One per row for full 5-cell height
-    let accent_bar = Paragraph::new(accent_text)
-        .style(Style::default().fg(colors::accent()).bg(colors::surface()));
+    let accent_bar =
+        Paragraph::new(accent_text).style(Style::default().fg(accent).bg(colors::surface()));
     frame.render_widget(accent_bar, layout[0]);
 
     let content_area = layout[1];
@@ -72,8 +83,8 @@ pub fn render_command_deck(
         AppMode::Quit => "QUIT",
     };
 
-    let label_widget = Paragraph::new(mode_label)
-        .style(Style::default().fg(colors::accent()).bg(colors::surface()));
+    let label_widget =
+        Paragraph::new(mode_label).style(Style::default().fg(accent).bg(colors::surface()));
     frame.render_widget(label_widget, label_area);
 
     // Render input above label with blinking cursor
@@ -89,7 +100,7 @@ pub fn render_command_deck(
     let text_color = if error_message.is_some() {
         colors::accent() // Use accent color (red) for errors
     } else {
-        colors::text()
+        text_color
     };
 
     // Input widget without borders (cleaner look)

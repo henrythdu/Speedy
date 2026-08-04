@@ -22,6 +22,7 @@ pub fn encode_image_base64(image: &ImageBuffer<Rgba<u8>, Vec<u8>>) -> String {
 /// * `base64_data` - Base64-encoded image data
 /// * `pos_x` - X position in pixels
 /// * `pos_y` - Y position in pixels
+/// * `z` - Z-index: >0 renders above the text layer, <0 behind it (backgrounds)
 pub fn transmit_graphics(
     image_id: u32,
     width: u32,
@@ -29,12 +30,13 @@ pub fn transmit_graphics(
     base64_data: &str,
     pos_x: u32,
     pos_y: u32,
+    z: i32,
 ) -> io::Result<()> {
     // Kitty Graphics Protocol: APC sequence
-    // Format: ESC _ G a=T f=32 s=<width> v=<height> i=<image_id> x=<x> y=<y> z=1 m=0 C=1 <data> ESC \
+    // Format: ESC _ G a=T f=32 s=<width> v=<height> i=<image_id> x=<x> y=<y> z=<z> m=0 C=1 <data> ESC \
     // f=32 means 32-bit RGBA
     // x and y specify pixel position (top-left corner of image)
-    // z=1 ensures image renders above terminal text layer
+    // z>0 renders above the terminal text layer, z<0 behind it
     // C=1 prevents cursor movement after graphics placement
     // q=1 suppresses acknowledgment responses (_Gi=<id>;OK) from Kitty
     let apc_start = "\x1b_G";
@@ -43,8 +45,8 @@ pub fn transmit_graphics(
     // If data fits in single transmission
     if base64_data.len() <= 4096 {
         let command = format!(
-            "{}a=T,f=32,s={},v={},i={},x={},y={},z=1,C=1,m=0,q=1;{}{}",
-            apc_start, width, height, image_id, pos_x, pos_y, base64_data, apc_end
+            "{}a=T,f=32,s={},v={},i={},x={},y={},z={},C=1,m=0,q=1;{}{}",
+            apc_start, width, height, image_id, pos_x, pos_y, z, base64_data, apc_end
         );
         print!("{}", command);
         Ok(())
@@ -59,8 +61,8 @@ pub fn transmit_graphics(
         for (i, chunk) in chunks.iter().enumerate() {
             let more = if i == chunks.len() - 1 { 0 } else { 1 };
             let command = format!(
-                "{}a=T,f=32,s={},v={},i={},x={},y={},z=1,C=1,m={},q=1;{}{}",
-                apc_start, width, height, image_id, pos_x, pos_y, more, chunk, apc_end
+                "{}a=T,f=32,s={},v={},i={},x={},y={},z={},C=1,m={},q=1;{}{}",
+                apc_start, width, height, image_id, pos_x, pos_y, z, more, chunk, apc_end
             );
             print!("{}", command);
         }
@@ -117,10 +119,11 @@ mod tests {
         let data = "dGVzdA=="; // base64 for "test"
         let pos_x = 100u32;
         let pos_y = 200u32;
+        let z = 1i32;
 
         let command = format!(
-            "\x1b_Ga=T,f=32,s={},v={},i={},x={},y={},z=1,m=0;{}\x1b\\",
-            width, height, image_id, pos_x, pos_y, data
+            "\x1b_Ga=T,f=32,s={},v={},i={},x={},y={},z={},m=0;{}\x1b\\",
+            width, height, image_id, pos_x, pos_y, z, data
         );
 
         assert!(command.contains("a=T")); // Action: transmit
@@ -132,5 +135,15 @@ mod tests {
         assert!(command.contains("y=200")); // Y position
         assert!(command.contains("z=1")); // Z-index: above text layer
         assert!(command.contains("m=0")); // No more chunks
+    }
+
+    #[test]
+    fn test_transmit_graphics_behind_text_z() {
+        // Background images use negative z so text stays readable on top
+        let command = format!(
+            "\x1b_Ga=T,f=32,s={},v={},i={},x={},y={},z={},m=0;{}\x1b\\",
+            100, 50, 0, 0, 0, -1i32, "dGVzdA=="
+        );
+        assert!(command.contains("z=-1"));
     }
 }

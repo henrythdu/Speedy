@@ -150,8 +150,16 @@ impl KittyGraphicsRenderer {
         let bar_x = (container_width - bar_width) / 2;
         self.move_to_pixel(bar_x, bar_y)?;
         let base64_data = encode_image_base64(&buffer);
-        transmit_graphics(image_id, bar_width, PROGRESS_BAR_HEIGHT, &base64_data, 0, 0)
-            .map_err(|e| RendererError::RenderFailed(format!("Bar render failed: {}", e)))
+        transmit_graphics(
+            image_id,
+            bar_width,
+            PROGRESS_BAR_HEIGHT,
+            &base64_data,
+            0,
+            0,
+            1,
+        )
+        .map_err(|e| RendererError::RenderFailed(format!("Bar render failed: {}", e)))
     }
 
     /// Render the document-progress macro gutter on the right edge of the reader zone.
@@ -194,7 +202,7 @@ impl KittyGraphicsRenderer {
         let y_position = reader_area.y as u32;
         self.move_to_pixel(x_position, y_position)?;
         let base64_data = encode_image_base64(&buffer);
-        transmit_graphics(image_id, gutter_width, reader_height, &base64_data, 0, 0)
+        transmit_graphics(image_id, gutter_width, reader_height, &base64_data, 0, 0, 1)
             .map_err(|e| RendererError::RenderFailed(format!("Gutter render failed: {}", e)))
     }
 

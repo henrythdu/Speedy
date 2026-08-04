@@ -375,10 +375,12 @@ pub struct KittyGraphicsRenderer {
 
 - `get_reading_zone_height() -> Option<u32>` - Get reading zone height (total height minus fixed command deck) (src/rendering/kitty/mod.rs:57)
 - `get_vertical_center() -> Option<u32>` - Get Y position at 42% of reading zone (src/rendering/kitty/mod.rs:68)
-- `viewport() -> &mut Viewport` - Get mutable viewport access (src/rendering/kitty/mod.rs:79)
+- `word_line_height() -> u32` - Constant font line height (font_size×1.5); bar anchor so the bar Y stays fixed across words (src/rendering/kitty/mod.rs:73)
+- `render_background(bg: Rgba<u8>) -> Result<()>` - Opaque rounded-corner background card at z=-1 (behind text), re-transmitted only on dims/theme change (src/rendering/kitty/mod.rs:84)
+- `viewport() -> &mut Viewport` - Get mutable viewport access (src/rendering/kitty/mod.rs:100)
 
-- `render_bar(word_y, word_height, progress, mode, image_id) -> Result<()>` - Render micro progress bar below word with mode-aware opacity (30% Reading, 100% Paused) (src/rendering/kitty/mod.rs:86)
-- `render_macro_gutter(current_word, total_words, reader_area, mode, image_id) -> Result<()>` - Render 4px vertical document progress bar at right edge of reader zone (src/rendering/kitty/mod.rs:120)
+- `render_bar(word_y, word_height, progress, mode, image_id) -> Result<()>` - Capsule progress bar below word with mode-aware opacity (30% Reading, 100% Paused) (src/rendering/kitty/progress.rs:80)
+- `render_macro_gutter(current_word, total_words, reader_area, mode, image_id) -> Result<()>` - Render 4px vertical document progress bar at right edge of reader zone (src/rendering/kitty/progress.rs:122)
 
 **Implements RsvpRenderer trait:**
 
@@ -403,6 +405,8 @@ pub struct KittyGraphicsRenderer {
 - Creates RGBA buffer with transparent background (theme handles background)
 - Vertical centering at 42% of reading zone height (per PRD Section 4.3)
 - Sub-pixel OVP anchoring via positioning module
+- Rounded background card (SDF anti-aliased corners, radius 10px) behind text via z=-1
+- Capsule progress bar (rounded ends, SDF anti-aliased, 6px tall)
 - Modular design: Decomposed into protocol, rasterizer, and positioning modules
 
 ### `protocol` module (`src/rendering/kitty/protocol.rs`)
@@ -412,7 +416,7 @@ Kitty Graphics Protocol transmission and encoding functions.
 **Public Functions:**
 
 - `encode_image_base64(image) -> String` - Encode RGBA image to base64 (src/rendering/kitty/protocol.rs:14)
-- `transmit_graphics(id, width, height, data, x, y) -> io::Result<()>` - Send image via KGP (src/rendering/kitty/protocol.rs:25)
+- `transmit_graphics(id, width, height, data, x, y, z) -> io::Result<()>` - Send image via KGP; z>0 above text, z<0 behind (src/rendering/kitty/protocol.rs:25)
 - `delete_image(id) -> io::Result<()>` - Delete specific KGP image (src/rendering/kitty/protocol.rs:45)
 - `delete_all_graphics() -> io::Result<()>` - Clear all KGP images (src/rendering/kitty/protocol.rs:52)
 

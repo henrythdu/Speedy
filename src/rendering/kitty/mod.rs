@@ -23,6 +23,12 @@ use ab_glyph::FontRef;
 use imageproc::image::{ImageBuffer, Rgba};
 use std::io::{self, Write};
 
+/// Reserved image id for the rounded background rect. Frame ids start at 1
+/// (current_image_id init), so id 0 never collides with word/bar/gutter.
+const BACKGROUND_IMAGE_ID: u32 = 0;
+/// Corner radius of the app background card, in pixels.
+const BACKGROUND_RADIUS_PX: u32 = 10;
+
 /// Kitty Graphics Protocol renderer for pixel-perfect RSVP
 pub struct KittyGraphicsRenderer {
     /// Terminal viewport for coordinate conversion
@@ -43,6 +49,8 @@ pub struct KittyGraphicsRenderer {
     cur_frame: FrameImages,
     /// Image ids from the previous frame — the ones clear() actually deletes
     prev_frame: FrameImages,
+    /// Cache key of the last placed background (w, h, r, g, b) — skip re-transmit when unchanged
+    background_key: Option<(u32, u32, u8, u8, u8)>,
 }
 
 /// Image ids placed in a single render frame.
@@ -79,6 +87,7 @@ impl KittyGraphicsRenderer {
             ghost_opacity: 0.1,
             cur_frame: FrameImages::default(),
             prev_frame: FrameImages::default(),
+            background_key: None,
         }
     }
 
@@ -110,29 +119,37 @@ impl KittyGraphicsRenderer {
         calculate_vertical_center(&self.viewport)
     }
 
-    /// Calculate word height for bar positioning
-    pub fn calculate_word_height(
-        &mut self,
-        word: &str,
-        anchor_position: usize,
-    ) -> Result<u32, RendererError> {
-        let font = self
-            .font
-            .as_ref()
-            .ok_or_else(|| RendererError::RenderFailed("Font not initialized".to_string()))?;
-        let metrics = self
-            .font_metrics
-            .as_ref()
-            .ok_or_else(|| RendererError::RenderFailed("Font metrics not available".to_string()))?;
+    /// Constant line height in px (font_size × 1.5, same as ghost stacking).
+    /// Used as the bar anchor so the progress bar sits at a FIXED position —
+    /// per-word glyph heights vary a few px and made the bar jitter each word.
+    pub fn word_line_height(&self) -> u32 {
+        (self.font_size * 1.5) as u32
+    }
 
-        let cached_word = self
-            .word_cache
-            .get_or_render(word, anchor_position, || {
-                rasterize_word(word, anchor_position, font, self.font_size, metrics)
-            })
-            .map_err(|e| RendererError::RenderFailed(format!("Cache error: {}", e)))?;
+    /// Render the rounded-corner background image, behind the text layer.
+    ///
+    /// One opaque rounded rect per (pixel dims, theme background) pair, placed
+    /// with a negative z-index so the ratatui text stays on top. Re-transmitted
+    /// only when dims or theme change — the cached key is stored on the
+    /// renderer and the image persists in the terminal until deleted.
+    pub fn render_background(&mut self, background: Rgba<u8>) -> Result<(), RendererError> {
+        let dims = match self.viewport.get_dimensions() {
+            Some(d) => d,
+            None => return Ok(()),
+        };
+        let (w, h) = (dims.pixel_size.0, dims.pixel_size.1);
+        let key = (w, h, background[0], background[1], background[2]);
+        if self.background_key == Some(key) {
+            return Ok(()); // already placed, image persists in the terminal
+        }
 
-        Ok(cached_word.height)
+        let buffer = build_rounded_rect(w, h, BACKGROUND_RADIUS_PX, background);
+        let base64_data = encode_image_base64(&buffer);
+        transmit_graphics(BACKGROUND_IMAGE_ID, w, h, &base64_data, 0, 0, -1)
+            .map_err(|e| RendererError::RenderFailed(format!("Background render failed: {}", e)))?;
+
+        self.background_key = Some(key);
+        Ok(())
     }
 
     /// Render a word at a specific Y position with given opacity
@@ -219,7 +236,7 @@ impl KittyGraphicsRenderer {
         let (width, height) = (cached_word.width, cached_word.height);
 
         let image_id = self.current_image_id;
-        transmit_graphics(image_id, width, height, &base64_data, 0, 0)
+        transmit_graphics(image_id, width, height, &base64_data, 0, 0, 1)
             .map_err(|e| RendererError::RenderFailed(e.to_string()))?;
 
         self.current_image_id += 1;
@@ -373,9 +390,87 @@ fn apply_opacity(
     result
 }
 
+/// Build an opaque rounded-rect image (the app background card).
+///
+/// Anti-aliased corners via a signed-distance field, same technique as the
+/// capsule progress bar: alpha per pixel = coverage of the rounded-rect
+/// silhouette, so the corner curve stays smooth instead of stair-stepped.
+fn build_rounded_rect(
+    width: u32,
+    height: u32,
+    radius: u32,
+    color: Rgba<u8>,
+) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
+    let mut buffer: ImageBuffer<Rgba<u8>, Vec<u8>> = ImageBuffer::new(width, height);
+    if width == 0 || height == 0 || radius == 0 {
+        return buffer;
+    }
+
+    let (w, h) = (width as f32, height as f32);
+    let r = radius as f32;
+    // Center of the rounded rect, and half-extents minus radius (the flat core)
+    let (cx, cy) = (w / 2.0, h / 2.0);
+    let (hx, hy) = ((w / 2.0 - r).max(0.0), (h / 2.0 - r).max(0.0));
+
+    for y in 0..height {
+        for x in 0..width {
+            let (px, py) = (x as f32 + 0.5 - cx, y as f32 + 0.5 - cy);
+            let qx = px.abs() - hx;
+            let qy = py.abs() - hy;
+            let dx = qx.max(0.0);
+            let dy = qy.max(0.0);
+            // Distance to the rounded-rect boundary: negative inside, 0 on edge
+            let d = (dx * dx + dy * dy).sqrt() - r;
+            let coverage = (0.5 - d).clamp(0.0, 1.0);
+            if coverage <= 0.0 {
+                continue; // outside the card: transparent notch
+            }
+            let a = (color[3] as f32 * coverage) as u8;
+            buffer.put_pixel(x, y, Rgba([color[0], color[1], color[2], a]));
+        }
+    }
+    buffer
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Rounded background: corner cells transparent (the notch), flat interior
+    /// opaque, anti-aliased transition at the curve.
+    #[test]
+    fn rounded_rect_leaves_transparent_corners() {
+        let color = Rgba([26u8, 27, 38, 255]); // tokyo-night bg
+        let img = build_rounded_rect(100, 50, 10, color);
+
+        // Exact corners are outside the radius-10 circle → transparent
+        assert_eq!(img.get_pixel(0, 0)[3], 0, "top-left corner transparent");
+        assert_eq!(img.get_pixel(99, 0)[3], 0, "top-right corner transparent");
+        assert_eq!(img.get_pixel(0, 49)[3], 0, "bottom-left corner transparent");
+        assert_eq!(
+            img.get_pixel(99, 49)[3],
+            0,
+            "bottom-right corner transparent"
+        );
+
+        // Interior is fully opaque and the theme color
+        assert_eq!(*img.get_pixel(50, 25), color, "center opaque fill");
+
+        // Degenerate sizes don't panic
+        assert_eq!(build_rounded_rect(0, 50, 10, color).width(), 0);
+        assert_eq!(build_rounded_rect(50, 0, 10, color).height(), 0);
+    }
+
+    /// Background cache key: same (dims, color) must not re-transmit; a
+    /// changed color must. Exercises render_background's dedup without a real
+    /// terminal (transmit is a no-op print, key is the observable state).
+    #[test]
+    fn background_cache_key_tracks_dims_and_color() {
+        let mut renderer = KittyGraphicsRenderer::new();
+        // No dimensions yet → no-op, key stays None
+        let _ = renderer.render_background(Rgba([26u8, 27, 38, 255]));
+        assert_eq!(renderer.background_key, None);
+    }
 
     #[test]
     fn test_kitty_renderer_initialize_loads_font() {

@@ -14,6 +14,7 @@ use crate::ui::key_handlers::{
 use crate::ui::reader::view::{render_command_deck, render_wpm};
 use crate::ui::theme::{set_current_theme, Theme};
 use anyhow::Result;
+use imageproc::image::Rgba;
 
 use crossterm::{
     cursor::{Hide, Show},
@@ -24,7 +25,7 @@ use crossterm::{
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Rect},
-    style::Style,
+    style::{Color, Style},
     widgets::Block,
     Terminal,
 };
@@ -225,6 +226,25 @@ impl TuiManager {
                                     self.autocomplete.feed_char(c);
                                 }
                             }
+                            // Reading/Paused: ':' and '@' open the command deck
+                            // directly (matches the deck hint "Type @ for files,
+                            // @@, or :q") instead of being swallowed by the
+                            // key registry — lets the user quit / change file
+                            // without knowing Tab first.
+                            (KeyCode::Char(c), AppMode::Reading | AppMode::Paused)
+                                if c == ':' || c == '@' =>
+                            {
+                                app.set_mode(AppMode::Command);
+                                let activated = {
+                                    let buf = app.command_buffer();
+                                    self.autocomplete.try_activate(c, buf, buf.len())
+                                };
+                                app.push_command_char(c);
+                                self.cursor.on_key();
+                                if !activated {
+                                    self.autocomplete.feed_char(c);
+                                }
+                            }
                             // Popup / Reading / Paused: route every char through the registry
                             (KeyCode::Char(_), _) => {
                                 self.dispatch_key(key.code, app);
@@ -232,7 +252,12 @@ impl TuiManager {
                             (KeyCode::Enter, AppMode::Command) => {
                                 if self.autocomplete.is_active() {
                                     self.autocomplete.apply_and_close(app.command_buffer_mut());
-                                } else if self.dispatch_key(KeyCode::Enter, app)
+                                }
+                                // Execute unless the popup is still active (no
+                                // selection to apply) — typing @file + Enter must
+                                // work in one keypress, not two.
+                                if !self.autocomplete.is_active()
+                                    && self.dispatch_key(KeyCode::Enter, app)
                                     && app.mode() == AppMode::Quit
                                 {
                                     return Ok(AppMode::Quit);
@@ -360,6 +385,13 @@ impl TuiManager {
     }
 
     pub fn render_frame(&mut self, app: &mut App) -> Result<()> {
+        // Rounded background card: one opaque rounded rect behind the text
+        // (z=-1), re-transmitted only when dims or theme change.
+        let theme = Theme::get_by_name(app.theme_name());
+        if let Color::Rgb(r, g, b) = theme.background {
+            let _ = self.kitty_renderer.render_background(Rgba([r, g, b, 255]));
+        }
+
         // Reader area (pixel rect) is shared with the KGP layer for the macro gutter.
         let reader_area = self.calculate_reader_area();
         // Kitty layer FIRST, TUI layer LAST: ratatui's draw() flushes stdout once
@@ -378,9 +410,22 @@ impl TuiManager {
             set_current_theme(app.theme_name());
             let theme = Theme::get_by_name(app.theme_name());
 
-            // Fill entire viewport with background color first
-            let full_bg = Block::default().style(Style::default().bg(theme.background));
-            frame.render_widget(full_bg, area);
+            // Background fill with rounded corners: the kitty layer placed an
+            // opaque rounded rect BEHIND the text (z=-1), so ratatui must leave
+            // the 4 screen-corner cells unpainted or it would square them off.
+            let bg_style = Style::default().bg(theme.background);
+            let (w, h) = (area.width, area.height);
+            if w > 2 && h > 2 {
+                for strip in [
+                    Rect::new(area.x + 1, area.y, w - 2, 1), // top, minus corners
+                    Rect::new(area.x, area.y + 1, w, h - 2), // middle, full width
+                    Rect::new(area.x + 1, area.y + h - 1, w - 2, 1), // bottom, minus corners
+                ] {
+                    frame.render_widget(Block::default().style(bg_style), strip);
+                }
+            } else {
+                frame.render_widget(Block::default().style(bg_style), area);
+            }
 
             // Calculate responsive margins based on terminal size
             let (top, bottom, left, right) = calculate_margins(area);
@@ -429,8 +474,8 @@ impl TuiManager {
                 app.command_buffer(),
                 app.get_error(),
                 self.cursor.visible() && app.mode() == AppMode::Command, // Only blink cursor in Command mode
+                app.mode() == AppMode::Command, // Active = typing; dimmed otherwise
             );
-
             // Render autocomplete popup if active
             let terminal_height = frame.area().height;
             render_autocomplete_popup(
@@ -505,19 +550,20 @@ impl TuiManager {
 
             let progress = calculate_sentence_progress(current_index, reading_state.tokens());
             let word_y = self.kitty_renderer.get_vertical_center().unwrap_or(0);
-            if let Ok(word_height) = self.kitty_renderer.calculate_word_height(&word, anchor_pos) {
-                // Render micro bar (sentence progress) + macro gutter (document progress)
-                if let Err(e) = self.kitty_renderer.render_progress(
-                    word_y,
-                    word_height,
-                    progress,
-                    paused,
-                    current_index,
-                    total_tokens,
-                    reader_area,
-                ) {
-                    app.set_error(format!("Progress render error: {}", e));
-                }
+            // Constant line height (not per-word glyph height): the bar's Y
+            // position must not jitter between words of different heights.
+            let word_height = self.kitty_renderer.word_line_height();
+            // Render micro bar (sentence progress) + macro gutter (document progress)
+            if let Err(e) = self.kitty_renderer.render_progress(
+                word_y,
+                word_height,
+                progress,
+                paused,
+                current_index,
+                total_tokens,
+                reader_area,
+            ) {
+                app.set_error(format!("Progress render error: {}", e));
             }
         }
 

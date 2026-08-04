@@ -105,6 +105,28 @@ impl Theme {
     pub fn current() -> Self {
         CURRENT_THEME_NAME.with(|name| Self::get_by_name(&name.borrow()))
     }
+
+    /// Dimmed variant of the text color: text blended 50% toward the
+    /// background. Used for receded (inactive) UI — the command deck when it's
+    /// not focused, hints, secondary labels.
+    pub fn dim(&self) -> Color {
+        let (tr, tg, tb) = rgb_of(self.text);
+        let (br, bg, bb) = rgb_of(self.background);
+        Color::Rgb(
+            ((tr + br) / 2) as u8,
+            ((tg + bg) / 2) as u8,
+            ((tb + bb) / 2) as u8,
+        )
+    }
+}
+
+/// Extract (r, g, b) from a ratatui Color. Named colors fall back to a
+/// mid-gray — all shipped themes use explicit Rgb values.
+fn rgb_of(color: Color) -> (u16, u16, u16) {
+    match color {
+        Color::Rgb(r, g, b) => (r as u16, g as u16, b as u16),
+        _ => (128, 128, 128),
+    }
 }
 
 /// Convenience access to current theme colors
