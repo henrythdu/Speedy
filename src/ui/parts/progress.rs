@@ -14,9 +14,9 @@ use crate::engine::config::{
     PROGRESS_BAR_HEIGHT, PROGRESS_BAR_MARGIN_PX, PROGRESS_BAR_WIDTH_PCT, PROGRESS_BRIGHT_ALPHA,
     PROGRESS_COLOR_B, PROGRESS_COLOR_G, PROGRESS_COLOR_R, PROGRESS_DIM_ALPHA,
 };
-use crate::rendering::kitty::protocol::{encode_image_base64, transmit_graphics};
+use crate::rendering::kitty::protocol::{delete_image, encode_image_base64, transmit_graphics};
 use crate::rendering::renderer::RendererError;
-use crate::ui::parts::word::{move_to_pixel, KittyGraphicsRenderer, BAR_IMAGE_ID, GUTTER_IMAGE_ID};
+use crate::ui::parts::word::{move_to_pixel, KittyGraphicsRenderer};
 use imageproc::image::{ImageBuffer, Rgba};
 use ratatui::layout::Rect;
 
@@ -82,10 +82,9 @@ fn build_capsule_bar(
 }
 
 impl KittyGraphicsRenderer {
-    /// Render the sentence-progress bar + document-progress gutter in one pass,
-    /// using the fixed slot ids so re-transmission replaces in place (see the
-    /// slot-id docs in word.rs — no id churn, no stacking, no flicker).
-    #[allow(clippy::too_many_arguments)] // +self = 8; cohesive one-pass renderer API
+    /// Render the sentence-progress bar + document-progress gutter in one pass.
+    /// Each slot change-detects (see `bar_slot`/`gutter_slot`) and swaps via a
+    /// fresh image id: place new → delete old (see the slot-id docs in word.rs).
     pub fn render_progress(
         &mut self,
         word_y: u32,
@@ -96,14 +95,8 @@ impl KittyGraphicsRenderer {
         total_tokens: usize,
         reader_area: Rect,
     ) -> Result<(), RendererError> {
-        self.render_bar(word_y, word_height, progress, paused, BAR_IMAGE_ID)?;
-        self.render_macro_gutter(
-            current_index,
-            total_tokens,
-            reader_area,
-            paused,
-            GUTTER_IMAGE_ID,
-        )?;
+        self.render_bar(word_y, word_height, progress, paused)?;
+        self.render_macro_gutter(current_index, total_tokens, reader_area, paused)?;
         Ok(())
     }
 
@@ -117,7 +110,6 @@ impl KittyGraphicsRenderer {
         word_height: u32,
         progress: f64,
         paused: bool,
-        image_id: u32,
     ) -> Result<(), RendererError> {
         // Bar sits one margin below the word
         let bar_y = word_y + word_height + PROGRESS_BAR_MARGIN_PX;
@@ -141,6 +133,7 @@ impl KittyGraphicsRenderer {
             return Ok(());
         }
 
+        let id = self.alloc_image_id();
         let buffer = build_capsule_bar(
             bar_width,
             PROGRESS_BAR_HEIGHT,
@@ -153,16 +146,12 @@ impl KittyGraphicsRenderer {
         let bar_x = (container_width - bar_width) / 2;
         move_to_pixel(self.viewport(), bar_x, bar_y);
         let base64_data = encode_image_base64(&buffer);
-        transmit_graphics(
-            image_id,
-            bar_width,
-            PROGRESS_BAR_HEIGHT,
-            &base64_data,
-            0,
-            0,
-            1,
-        )
-        .map_err(|e| RendererError::RenderFailed(format!("Bar render failed: {}", e)))?;
+        transmit_graphics(id, bar_width, PROGRESS_BAR_HEIGHT, &base64_data, 0, 0, 1)
+            .map_err(|e| RendererError::RenderFailed(format!("Bar render failed: {}", e)))?;
+        // Place new → delete old (double-buffer swap, no blank window).
+        if let Some(old) = self.bar_slot_id.replace(id) {
+            let _ = delete_image(old);
+        }
         self.bar_slot = Some(key);
         Ok(())
     }
@@ -174,7 +163,6 @@ impl KittyGraphicsRenderer {
         total_words: usize,
         reader_area: Rect,
         paused: bool,
-        image_id: u32,
     ) -> Result<(), RendererError> {
         let progress_ratio = if total_words > 1 {
             (current_word as f32 / (total_words - 1) as f32).clamp(0.0, 1.0)
@@ -212,10 +200,15 @@ impl KittyGraphicsRenderer {
             return Ok(());
         }
 
+        let id = self.alloc_image_id();
         move_to_pixel(self.viewport(), x_position, y_position);
         let base64_data = encode_image_base64(&buffer);
-        transmit_graphics(image_id, gutter_width, reader_height, &base64_data, 0, 0, 1)
+        transmit_graphics(id, gutter_width, reader_height, &base64_data, 0, 0, 1)
             .map_err(|e| RendererError::RenderFailed(format!("Gutter render failed: {}", e)))?;
+        // Place new → delete old (double-buffer swap, no blank window).
+        if let Some(old) = self.gutter_slot_id.replace(id) {
+            let _ = delete_image(old);
+        }
         self.gutter_slot = Some(key);
         Ok(())
     }

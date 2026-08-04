@@ -19,21 +19,22 @@ use crate::rendering::viewport::Viewport;
 use ab_glyph::FontRef;
 use imageproc::image::{ImageBuffer, Rgba};
 
-/// Fixed Kitty image ids per render slot.
+/// Kitty image-id strategy (double-buffer swap).
 ///
-/// Re-transmitting with an EXISTING id REPLACES the image in place (kitty
-/// protocol: same id = replace — the `a=q` query action exists precisely to
-/// transmit WITHOUT replacing). A slot therefore never stacks over its previous
-/// occupant, which matters for semi-transparent pixels: the old place-new-id /
-/// delete-old-id scheme put the new dim track over the old bright fill for a
-/// repaint → the bar's dim section flickered on every word advance.
+/// Every slot re-transmits its image only when the content actually changed
+/// (see the per-slot state below) — kitty deletes an image + its placements
+/// on ANY same-id re-transmit, so idle re-uploads tear the word/bar down and
+/// rebuild it at the render rate (which scales with WPM) and read as flicker.
 ///
-/// 0 is the background card (background.rs); 1-5 are the reading-zone slots.
-pub(crate) const GHOST_PREV_IMAGE_ID: u32 = 1;
-pub(crate) const GHOST_NEXT_IMAGE_ID: u32 = 2;
-pub(crate) const WORD_IMAGE_ID: u32 = 3;
-pub(crate) const BAR_IMAGE_ID: u32 = 4;
-pub(crate) const GUTTER_IMAGE_ID: u32 = 5;
+/// On a change, the slot allocates a FRESH image id and only then deletes the
+/// old one (delete-after-place). Same-id re-transmission would delete the old
+/// image first and show the new one only once its placement lands — a visible
+/// gap at every word advance. With a fresh id the sequence is: place new →
+/// delete old, so the screen always has a complete word (no gap, by
+/// construction). Ids only grow, so the fresh image (higher id, same z) sits
+/// on top during the transient overlap (kitty: same z → higher id = higher
+/// z-index). The background (background.rs) keeps id 0 — anonymous, but it
+/// only re-transmits on theme/dims change.
 
 /// Everything that determines a slot's on-screen image: word, anchor (OVP
 /// point), pixel y, and opacity. Equal state ⇒ the image on screen is already
@@ -66,19 +67,23 @@ pub struct KittyGraphicsRenderer {
     ghost_next_was_rendered: bool,
     /// Cache key of the last placed background (w, h, r, g, b) — skip re-transmit when unchanged
     pub(crate) background_key: Option<(u32, u32, u8, u8, u8)>,
-    /// Last-transmitted state of each reading-zone slot (word.rs) — skip
-    /// re-transmit when unchanged. Kitty DELETES an image + its placements on
-    /// ANY same-id re-transmit (graphics protocol), so re-uploading identical
-    /// content every frame tears the word down and rebuilds it at the render
-    /// rate — which scales with WPM (poll timeout = token duration) and shows
-    /// up as flicker at high WPM. Slots transmit only on actual change.
+    /// Next image id to allocate (see `alloc_image_id`).
+    image_id_counter: u32,
+    /// Last-transmitted state + on-screen image id per reading-zone slot. A
+    /// slot skips re-transmission when its state is unchanged; on change it
+    /// allocates a fresh id (place-new-then-delete-old, see module docs).
     word_slot: Option<SlotState>,
+    word_slot_id: Option<u32>,
     ghost_prev_slot: Option<SlotState>,
+    ghost_prev_slot_id: Option<u32>,
     ghost_next_slot: Option<SlotState>,
+    ghost_next_slot_id: Option<u32>,
     /// Last-transmitted bar/gutter keys (progress.rs) — same change-detection
-    /// rule as the word slots.
+    /// rule as the word slots; the on-screen ids live here too.
     pub(crate) bar_slot: Option<(u32, u32, u32, bool)>, // (bar_y, bar_width, fill_width, paused)
+    pub(crate) bar_slot_id: Option<u32>,
     pub(crate) gutter_slot: Option<(u32, u32, u32, u32, bool)>, // (x, y, fill_height, reader_height, paused)
+    pub(crate) gutter_slot_id: Option<u32>,
 }
 
 impl Default for KittyGraphicsRenderer {
@@ -100,11 +105,17 @@ impl KittyGraphicsRenderer {
             ghost_prev_was_rendered: false,
             ghost_next_was_rendered: false,
             background_key: None,
+            image_id_counter: 1,
             word_slot: None,
+            word_slot_id: None,
             ghost_prev_slot: None,
+            ghost_prev_slot_id: None,
             ghost_next_slot: None,
+            ghost_next_slot_id: None,
             bar_slot: None,
+            bar_slot_id: None,
             gutter_slot: None,
+            gutter_slot_id: None,
         }
     }
 
@@ -129,6 +140,17 @@ impl KittyGraphicsRenderer {
     /// Get reference to viewport (for external access to query dimensions)
     pub fn viewport(&mut self) -> &mut Viewport {
         &mut self.viewport
+    }
+
+    /// Allocate the next image id for a slot's transmission. Never 0 (that's
+    /// the anonymous background slot). Ids only increase within a session, so
+    /// during the brief moment a fresh image coexists with the one it replaces
+    /// (same position, same z), the fresh one has the higher id → draws on top
+    /// (kitty: same z → higher id = higher z-index).
+    pub(crate) fn alloc_image_id(&mut self) -> u32 {
+        let id = self.image_id_counter;
+        self.image_id_counter = self.image_id_counter % 2_000_000_000 + 1;
+        id
     }
 
     /// Get vertical center Y position (for bar positioning)
@@ -272,9 +294,12 @@ impl RsvpRenderer for KittyGraphicsRenderer {
         // 1. Previous ghost (above) - transmitted first, non-fatal
         // 2. Next ghost (below) - transmitted second, non-fatal
         // 3. Current word (center) - transmitted last, MUST succeed
-        // Fixed slot ids: re-transmission replaces the slot's image in place
-        // (kitty same-id semantics), so the previous occupants of these slots
-        // are gone the moment the new image completes — no delete pass needed.
+        //
+        // Double-buffer swap per slot: on change, allocate a FRESH id, place
+        // the new image, then delete the old id — the screen always shows a
+        // complete image (no delete-then-recreate gap). Unchanged slots are
+        // left alone entirely (kitty deletes + rebuilds on any same-id
+        // re-transmit, which flickers at high render rates).
 
         // 1. Previous ghost (above center)
         if let Some((word, anchor)) = frame.ghost_prev {
@@ -287,20 +312,19 @@ impl RsvpRenderer for KittyGraphicsRenderer {
                     y: y_offset,
                     opacity_bits: self.ghost_opacity.to_bits(),
                 };
-                // Unchanged since last frame → image already on screen, do not
-                // re-transmit (kitty deletes + rebuilds on any same-id re-send).
                 if self.ghost_prev_slot.as_ref() != Some(&state) {
-                    if let Err(e) = self.render_at_position(
-                        word,
-                        anchor,
-                        y_offset,
-                        self.ghost_opacity,
-                        GHOST_PREV_IMAGE_ID,
-                    ) {
+                    let id = self.alloc_image_id();
+                    if let Err(e) =
+                        self.render_at_position(word, anchor, y_offset, self.ghost_opacity, id)
+                    {
                         // Log but don't fail - ghost rendering is non-fatal
                         tracing::warn!(error = %e, "ghost_prev render failed");
+                    } else {
+                        if let Some(old) = self.ghost_prev_slot_id.replace(id) {
+                            let _ = delete_image(old);
+                        }
+                        self.ghost_prev_slot = Some(state);
                     }
-                    self.ghost_prev_slot = Some(state);
                 }
                 self.ghost_prev_was_rendered = true;
             } else {
@@ -309,7 +333,9 @@ impl RsvpRenderer for KittyGraphicsRenderer {
         } else if self.ghost_prev_was_rendered {
             // Ghosts were just toggled off: clear the stale slot image so it
             // doesn't linger on screen (replace-only would never touch it).
-            let _ = delete_image(GHOST_PREV_IMAGE_ID);
+            if let Some(old) = self.ghost_prev_slot_id.take() {
+                let _ = delete_image(old);
+            }
             self.ghost_prev_slot = None;
             self.ghost_prev_was_rendered = false;
         }
@@ -326,24 +352,27 @@ impl RsvpRenderer for KittyGraphicsRenderer {
                     opacity_bits: self.ghost_opacity.to_bits(),
                 };
                 if self.ghost_next_slot.as_ref() != Some(&state) {
-                    if let Err(e) = self.render_at_position(
-                        word,
-                        anchor,
-                        y_offset,
-                        self.ghost_opacity,
-                        GHOST_NEXT_IMAGE_ID,
-                    ) {
+                    let id = self.alloc_image_id();
+                    if let Err(e) =
+                        self.render_at_position(word, anchor, y_offset, self.ghost_opacity, id)
+                    {
                         // Log but don't fail - ghost rendering is non-fatal
                         tracing::warn!(error = %e, "ghost_next render failed");
+                    } else {
+                        if let Some(old) = self.ghost_next_slot_id.replace(id) {
+                            let _ = delete_image(old);
+                        }
+                        self.ghost_next_slot = Some(state);
                     }
-                    self.ghost_next_slot = Some(state);
                 }
                 self.ghost_next_was_rendered = true;
             } else {
                 tracing::warn!(anchor, word = %word, "ghost_next anchor out of bounds");
             }
         } else if self.ghost_next_was_rendered {
-            let _ = delete_image(GHOST_NEXT_IMAGE_ID);
+            if let Some(old) = self.ghost_next_slot_id.take() {
+                let _ = delete_image(old);
+            }
             self.ghost_next_slot = None;
             self.ghost_next_was_rendered = false;
         }
@@ -356,7 +385,11 @@ impl RsvpRenderer for KittyGraphicsRenderer {
             opacity_bits: 1.0f32.to_bits(),
         };
         if self.word_slot.as_ref() != Some(&state) {
-            self.render_at_position(frame.word, frame.anchor, center_y, 1.0, WORD_IMAGE_ID)?;
+            let id = self.alloc_image_id();
+            self.render_at_position(frame.word, frame.anchor, center_y, 1.0, id)?;
+            if let Some(old) = self.word_slot_id.replace(id) {
+                let _ = delete_image(old);
+            }
             self.word_slot = Some(state);
         }
         Ok(())
@@ -463,31 +496,34 @@ mod tests {
     }
 
     #[test]
-    fn test_render_frame_uses_fixed_slot_ids() {
+    fn test_render_frame_double_buffers_slot_swaps() {
         let mut renderer = KittyGraphicsRenderer::new();
         renderer.initialize().unwrap();
 
-        // Rendering the same frame twice must succeed — re-transmission with
-        // a fixed id replaces the slot image in place (kitty same-id semantics),
-        // so there is no id sequence to exhaust and nothing to delete.
+        // First render places the word with a fresh id.
         let frame = RenderFrame::with_ghosts("test", 0, None, None);
         let _ = renderer.render_frame(&frame);
-        let _ = renderer.render_frame(&frame);
+        let id_after_first = renderer.word_slot_id;
+        assert!(id_after_first.is_some(), "first render must place a word");
+        assert_ne!(
+            id_after_first,
+            Some(0),
+            "slots never use the anonymous id 0"
+        );
 
-        // Slot ids are distinct and the background slot (0) is never reused.
-        let ids = [
-            GHOST_PREV_IMAGE_ID,
-            GHOST_NEXT_IMAGE_ID,
-            WORD_IMAGE_ID,
-            BAR_IMAGE_ID,
-            GUTTER_IMAGE_ID,
-        ];
-        for (i, a) in ids.iter().enumerate() {
-            assert_ne!(*a, 0, "slot {} must not collide with the background", i);
-            for b in ids.iter().skip(i + 1) {
-                assert_ne!(a, b, "slots must be distinct");
-            }
-        }
+        // Unchanged frame: slot skips re-transmission — the SAME id stays on
+        // screen (no churn, no same-id re-transmit that kitty would tear down).
+        let _ = renderer.render_frame(&frame);
+        assert_eq!(renderer.word_slot_id, id_after_first);
+
+        // Changed content: a FRESH id is allocated (place-new-then-delete-old
+        // swap) — never the previous one.
+        let frame2 = RenderFrame::with_ghosts("different", 0, None, None);
+        let _ = renderer.render_frame(&frame2);
+        assert_ne!(
+            renderer.word_slot_id, id_after_first,
+            "swap must use a new id"
+        );
     }
 
     #[test]
