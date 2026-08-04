@@ -2,4 +2,4 @@ name = "themes"
 layer = 2
 purpose = "Built-in color theme presets (Catppuccin, Dracula, Gruvbox, Light, Nord, Tokyo Night) — each exports colors()->ThemeColors. Unknown names fall back to Tokyo Night (the default)."
 provides = ["THEME_NAMES", "theme_index"]
-requires = ["config"]
+requires = []

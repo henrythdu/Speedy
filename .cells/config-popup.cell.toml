@@ -2,4 +2,4 @@ name = "config-popup"
 layer = 4
 purpose = "In-app config popup VIEW: key handling (PopupAction via handle_popup_key) and ratatui rendering of the ConfigPopupState owned by the app cell; cycles the built-in themes."
 provides = ["render_config_popup"]
-requires = ["app", "config", "themes", "ui-theme"]
+requires = ["app", "ui-theme"]

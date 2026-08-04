@@ -1,4 +1,7 @@
 use crate::app::{mode::AppMode, App};
+use crate::reading::{
+    calculate_anchor_position, calculate_anchor_position_from_len, calculate_sentence_progress,
+};
 use crate::rendering::kitty::KittyGraphicsRenderer;
 use crate::rendering::renderer::{RenderFrame, RsvpRenderer};
 use crate::ui::autocomplete::controller::AutocompleteController;
@@ -465,9 +468,9 @@ impl TuiManager {
                 let (anchor_pos, ghost_prev, ghost_next) =
                     if let Some(reading_state) = app.reading_state() {
                         let anchor = if let Some(token) = reading_state.current_token() {
-                            crate::reading::calculate_anchor_position_from_len(token.char_count())
+                            calculate_anchor_position_from_len(token.char_count())
                         } else {
-                            crate::reading::calculate_anchor_position(&word)
+                            calculate_anchor_position(&word)
                         };
                         // Get ghost context only if enabled in config
                         let (prev, next) = if app.ghost_words_enabled() {
@@ -477,7 +480,7 @@ impl TuiManager {
                         };
                         (anchor, prev, next)
                     } else {
-                        (crate::reading::calculate_anchor_position(&word), None, None)
+                        (calculate_anchor_position(&word), None, None)
                     };
 
                 // Create render frame with ghost context
@@ -494,10 +497,8 @@ impl TuiManager {
                     let total_tokens = reading_state.tokens().len();
                     let paused = matches!(app.mode(), AppMode::Paused);
 
-                    let progress = crate::reading::calculate_sentence_progress(
-                        current_index,
-                        reading_state.tokens(),
-                    );
+                    let progress =
+                        calculate_sentence_progress(current_index, reading_state.tokens());
                     let word_y = self.kitty_renderer.get_vertical_center().unwrap_or(0);
                     if let Ok(word_height) =
                         self.kitty_renderer.calculate_word_height(&word, anchor_pos)

@@ -17,10 +17,10 @@ files = ["src/rendering/kitty/mod.rs", "src/rendering/kitty/positioning.rs", "sr
 files = ["src/input/clipboard.rs", "src/input/epub.rs", "src/input/mod.rs", "src/input/pdf.rs"]
 
 [config]
-files = ["src/config/file.rs", "src/config/mod.rs", "src/config/theme.rs"]
+files = ["src/config/file.rs", "src/config/mod.rs"]
 
 [themes]
-files = ["src/config/themes/catppuccin.rs", "src/config/themes/dracula.rs", "src/config/themes/gruvbox.rs", "src/config/themes/light.rs", "src/config/themes/mod.rs", "src/config/themes/nord.rs", "src/config/themes/tokyo_night.rs"]
+files = ["src/config/themes/mod.rs"]
 
 [ui-events]
 files = ["src/ui/key_handler.rs", "src/ui/key_handlers.rs"]
@@ -35,7 +35,7 @@ files = ["src/ui/command.rs", "src/ui/command_executor.rs"]
 files = ["src/ui/autocomplete/cache.rs", "src/ui/autocomplete/discovery.rs", "src/ui/autocomplete/mod.rs", "src/ui/autocomplete/render.rs", "src/ui/autocomplete/state.rs", "src/ui/autocomplete/controller.rs"]
 
 [config-popup]
-files = ["src/ui/config_popup/handler.rs", "src/ui/config_popup/mod.rs", "src/ui/config_popup/render.rs"]
+files = ["src/ui/config_popup/mod.rs", "src/ui/config_popup/render.rs"]
 
 [reader]
 files = ["src/ui/reader/mod.rs", "src/ui/reader/view.rs"]
