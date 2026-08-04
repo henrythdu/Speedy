@@ -7,7 +7,7 @@ Speedy shows words one at a time at a fixed screen position. It renders text as 
 [![CI](https://github.com/henrythdu/Speedy/actions/workflows/ci.yml/badge.svg)](https://github.com/henrythdu/Speedy/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
 
-[![Watch the demo — 12s clip](assets/demo-poster.png)](assets/demo.mp4)
+https://github.com/user-attachments/assets/91a10125-5c8d-49e7-9f04-96bebc18f4a9
 
 ---
 
