@@ -139,11 +139,20 @@ mod tests {
 
     #[test]
     fn test_transmit_graphics_behind_text_z() {
-        // Background images use negative z so text stays readable on top
+        // Background images use a z-index below INT32_MIN/2 so kitty draws
+        // them UNDER cells with non-default backgrounds (z in [-INT32_MIN/2,
+        // -1] would render above them, hiding the deck surface / popup bgs).
         let command = format!(
             "\x1b_Ga=T,f=32,s={},v={},i={},x={},y={},z={},m=0;{}\x1b\\",
-            100, 50, 0, 0, 0, -1i32, "dGVzdA=="
+            100,
+            50,
+            0,
+            0,
+            0,
+            i32::MIN,
+            "dGVzdA=="
         );
-        assert!(command.contains("z=-1"));
+        assert!(command.contains(&format!("z={}", i32::MIN)));
+        assert!(command.contains("z=-2147483648"));
     }
 }

@@ -474,7 +474,9 @@ impl TuiManager {
                 app.command_buffer(),
                 app.get_error(),
                 self.cursor.visible() && app.mode() == AppMode::Command, // Only blink cursor in Command mode
-                app.mode() == AppMode::Command, // Active = typing; dimmed otherwise
+                // Active = Command (typing) or Paused (deck is the interaction
+                // surface — ':' / '@' open it). Dimmed only while Reading.
+                matches!(app.mode(), AppMode::Command | AppMode::Paused),
             );
             // Render autocomplete popup if active
             let terminal_height = frame.area().height;

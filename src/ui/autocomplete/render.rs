@@ -9,7 +9,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Clear, List, ListItem, ListState, Paragraph},
+    widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph},
     Frame,
 };
 use std::path::Path;
@@ -32,9 +32,6 @@ pub fn render_autocomplete_popup(
     }
 
     let popup_area = calculate_popup_area(state, command_area, terminal_height);
-
-    // Clear the popup area first
-    frame.render_widget(Clear, popup_area);
 
     // Render the popup content
     if state.is_scanning() && state.files().is_empty() {

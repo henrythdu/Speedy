@@ -28,6 +28,13 @@ use std::io::{self, Write};
 const BACKGROUND_IMAGE_ID: u32 = 0;
 /// Corner radius of the app background card, in pixels.
 const BACKGROUND_RADIUS_PX: u32 = 10;
+/// Z-index of the background card. MUST be below INT32_MIN/2 (-1,073,741,824):
+/// kitty draws images with z in [-INT32_MIN/2, -1] BETWEEN the default
+/// background and the cells — i.e. ON TOP of non-default cell backgrounds —
+/// which would swallow the deck's surface fill and every popup background.
+/// Only z < INT32_MIN/2 places the image UNDER cells with non-default
+/// backgrounds (kitty graphics protocol §Controlling displayed image layout).
+const BACKGROUND_Z_INDEX: i32 = i32::MIN;
 
 /// Kitty Graphics Protocol renderer for pixel-perfect RSVP
 pub struct KittyGraphicsRenderer {
@@ -145,8 +152,16 @@ impl KittyGraphicsRenderer {
 
         let buffer = build_rounded_rect(w, h, BACKGROUND_RADIUS_PX, background);
         let base64_data = encode_image_base64(&buffer);
-        transmit_graphics(BACKGROUND_IMAGE_ID, w, h, &base64_data, 0, 0, -1)
-            .map_err(|e| RendererError::RenderFailed(format!("Background render failed: {}", e)))?;
+        transmit_graphics(
+            BACKGROUND_IMAGE_ID,
+            w,
+            h,
+            &base64_data,
+            0,
+            0,
+            BACKGROUND_Z_INDEX,
+        )
+        .map_err(|e| RendererError::RenderFailed(format!("Background render failed: {}", e)))?;
 
         self.background_key = Some(key);
         Ok(())

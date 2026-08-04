@@ -3,7 +3,7 @@ use crate::ui::theme::colors;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::Style,
-    widgets::{Block, Clear, Paragraph},
+    widgets::{Block, Paragraph},
     Frame,
 };
 
@@ -16,9 +16,6 @@ pub fn render_command_deck(
     cursor_visible: bool, // NEW: Blink state
     active: bool,         // Focused (Command mode): bright; otherwise dimmed
 ) {
-    // Clear the command area first
-    frame.render_widget(Clear, area);
-
     let theme = crate::ui::theme::Theme::current();
     // Inactive deck recedes: dim accents, hints and labels so the "typing
     // place" reads as not-focused until Tab / ':' / '@' activates it.
