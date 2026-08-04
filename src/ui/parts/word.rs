@@ -47,7 +47,8 @@ struct SlotState {
     opacity_bits: u32,
 }
 
-/// Kitty Graphics Protocol renderer for pixel-perfect RSVP
+/// Kitty Graphics Protocol renderer for RSVP — draws the current word, the
+/// optional ghost words, and owns the progress bar / gutter slots.
 pub struct KittyGraphicsRenderer {
     /// Terminal viewport for coordinate conversion
     viewport: Viewport,

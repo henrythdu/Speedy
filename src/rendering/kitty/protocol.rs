@@ -44,8 +44,9 @@ pub fn transmit_graphics(
     // pixels stay on screen until the new data arrives. Without it, the
     // terminal deletes the old placement first and the word/bar blink
     // between the delete and the new image landing (the advance-moment
-    // flicker). Each slot has a distinct image id, so one placement id
-    // keeps every (image, placement) pair unique.
+    // flicker). Image ids are unique per transmission (double-buffer swap
+    // in word.rs), so the pair never repeats — p=1 is kept as a stable
+    // placement id for protocol robustness.
     let apc_start = "\x1b_G";
     let apc_end = "\x1b\\";
 

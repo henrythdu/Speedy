@@ -574,11 +574,11 @@ impl TuiManager {
             }
         }
 
-        // No delete pass: every slot re-transmits with a fixed id, and kitty
-        // REPLACES the slot's previous image in place (same-id semantics). The
-        // old word/bar/gutter are gone the moment the new image completes, so
-        // there is nothing to clear. Blank tokens skip rendering entirely,
-        // which leaves the last word on screen — as intended.
+        // Slot cleanup is handled inside render_frame/render_progress: each
+        // slot swaps via a fresh image id and deletes the old id only after
+        // the new image is placed (see the double-buffer docs in word.rs).
+        // Blank tokens skip rendering entirely, which leaves the last word on
+        // screen — as intended.
 
         Ok(())
     }

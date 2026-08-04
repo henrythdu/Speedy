@@ -34,7 +34,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .init();
 
-    tracing::info!("✓ Kitty Graphics Protocol detected - pixel-perfect mode enabled");
+    tracing::info!("✓ Kitty Graphics Protocol detected - pixel graphics mode enabled");
 
     // Save config path for later (needed for save)
     let config_path = args.config.clone();

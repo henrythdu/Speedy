@@ -1,7 +1,7 @@
 //! RsvpRenderer trait definition for Kitty Graphics Protocol rendering
 //!
-//! This trait provides pixel-perfect word rendering with sub-pixel OVP anchoring
-//! with optional vertical ghost words for eye tracking continuity.
+//! This trait provides pixel-level word rendering with OVP anchoring
+//! and optional vertical ghost words for eye tracking continuity.
 
 use std::error::Error;
 use std::fmt;
@@ -81,7 +81,7 @@ impl Error for RendererError {}
 /// Core trait for RSVP word rendering backends
 ///
 /// Implementations handle the actual display of words, abstracting away
-/// whether we're using TUI cell-based rendering or pixel-perfect graphics.
+/// whether we're using TUI cell-based rendering or kitty pixel graphics.
 pub trait RsvpRenderer {
     /// Initialize the renderer (allocate resources, setup state)
     ///
