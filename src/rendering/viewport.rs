@@ -1,13 +1,17 @@
 //! Viewport management for graphics rendering
 //!
 //! Implements the viewport overlay pattern that coordinates Ratatui layout
-//! with direct terminal graphics. Queries terminal dimensions using CSI
-//! escape sequences (14t for pixels, 18t for cells) to calculate cell
-//! dimensions for accurate pixel-to-cell coordinate conversion.
+//! with direct terminal graphics. Queries terminal dimensions via the
+//! TIOCGWINSZ ioctl (crossterm's window_size) to calculate cell dimensions
+//! for accurate pixel-to-cell coordinate conversion.
+//!
+//! NOTE: never query CSI 14t / read stdin from here. The crossterm 0.29
+//! event source deadlocks when a CSI response arrives mid-poll on its
+//! blocking tty fd (speedy startup used to hang until the user pressed a
+//! key). window_size() is a pure ioctl — safe at startup AND inside the
+//! event loop.
 
-use crossterm::event;
-use std::io::{self, Read, Write};
-use std::time::Duration;
+use std::io;
 
 /// Terminal dimension information
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -54,95 +58,44 @@ impl Viewport {
         Self { dimensions: None }
     }
 
-    /// Query terminal dimensions using CSI escape sequences
+    /// Query terminal dimensions via the TIOCGWINSZ ioctl.
     ///
-    /// Sends:
-    /// - CSI 14t: Query text area size in pixels
-    /// - CSI 18t: Query cell count
+    /// crossterm's `window_size()` returns cols/rows plus pixel dimensions
+    /// (set by terminals like kitty; 0 on plain ptys). Pixel size 0 falls
+    /// back to estimated cell dimensions (10x20 pixels per cell).
     ///
     /// # Returns
-    /// TerminalDimensions if queries succeed, error otherwise
-    ///
-    /// # Note
-    /// This implementation uses a timeout-based approach. If the terminal
-    /// doesn't respond within the timeout or parsing fails, falls back
-    /// to estimated cell dimensions (10x20 pixels per cell, a common standard).
+    /// TerminalDimensions if the ioctl succeeds, error otherwise
     pub fn query_dimensions(&mut self) -> Result<TerminalDimensions, ViewportError> {
-        // First, try to get terminal size using crossterm
-        let size = crossterm::terminal::size()
+        let size = crossterm::terminal::window_size()
             .map_err(|e| ViewportError::IoError(format!("Failed to get terminal size: {}", e)))?;
 
-        // Try to query pixel dimensions
-        let pixel_size = self.query_pixel_size();
+        let (cols, rows) = (size.columns, size.rows);
+        let (pixel_width, pixel_height) = (size.width as u32, size.height as u32);
 
-        // If pixel query succeeded, calculate cell dimensions from actual data
-        if let Some((width, height)) = pixel_size {
-            let _cell_width = width as f32 / size.0 as f32;
-            let _cell_height = height as f32 / size.1 as f32;
+        if pixel_width > 0 && pixel_height > 0 {
+            self.dimensions = Some(TerminalDimensions::new(
+                pixel_width,
+                pixel_height,
+                cols,
+                rows,
+            ));
+        } else {
+            // Fallback: Use estimated cell dimensions (10x20 pixels is common)
+            let estimated_cell_width = 10.0;
+            let estimated_cell_height = 20.0;
+            let pixel_width = (cols as f32 * estimated_cell_width) as u32;
+            let pixel_height = (rows as f32 * estimated_cell_height) as u32;
 
-            let dims = TerminalDimensions::new(width, height, size.0, size.1);
-            self.dimensions = Some(dims);
-            return Ok(dims);
+            self.dimensions = Some(TerminalDimensions::new(
+                pixel_width,
+                pixel_height,
+                cols,
+                rows,
+            ));
         }
 
-        // Fallback: Use estimated cell dimensions (10x20 pixels is common)
-        let estimated_cell_width = 10.0;
-        let estimated_cell_height = 20.0;
-        let pixel_width = (size.0 as f32 * estimated_cell_width) as u32;
-        let pixel_height = (size.1 as f32 * estimated_cell_height) as u32;
-
-        let dims = TerminalDimensions::new(pixel_width, pixel_height, size.0, size.1);
-        self.dimensions = Some(dims);
-        Ok(dims)
-    }
-
-    /// Try to query terminal pixel size using CSI 14t
-    ///
-    /// # SAFETY
-    /// This function reads directly from stdin which can conflict with crossterm's
-    /// event loop. It MUST only be called during initialization (before TuiManager
-    /// starts its event loop) or when the event loop is paused.
-    ///
-    /// # Returns
-    /// Some((width, height)) if query succeeds, None otherwise
-    fn query_pixel_size(&self) -> Option<(u32, u32)> {
-        // Send CSI 14t: Query text area size in pixels
-        // Format: ESC [ 14 t
-        // Response: ESC [ 4 ; height ; width t
-        print!("\x1b[14t");
-        io::stdout().flush().ok()?;
-
-        // Try to read response with short timeout
-        let timeout = Duration::from_millis(100);
-        if event::poll(timeout).ok()? {
-            // Try to read from stdin for the CSI response
-            // SAFETY: This is safe because we're called during initialization
-            // before the main event loop starts (see TuiManager::new)
-            let mut stdin = io::stdin();
-            let mut buffer = [0u8; 64];
-
-            // Read response (with timeout)
-            if stdin.read(&mut buffer).ok()? > 0 {
-                let response = String::from_utf8_lossy(&buffer);
-                // Parse CSI response: ESC [ 4 ; height ; width t
-                if response.contains("\x1b[4;") {
-                    let parts: Vec<&str> = response.split(';').collect();
-
-                    if parts.len() >= 3 {
-                        // Format: ESC[4;height;widtht
-                        let height = parts[1]
-                            .trim_matches(|c: char| !c.is_numeric())
-                            .parse::<u32>()
-                            .ok()?;
-                        let width_str = parts[2].trim_matches(|c: char| !c.is_numeric());
-                        let width = width_str.parse::<u32>().ok()?;
-                        return Some((width, height));
-                    }
-                }
-            }
-        }
-
-        None
+        Ok(self.dimensions.expect("dimensions set above"))
     }
 
     /// Get current dimensions if available

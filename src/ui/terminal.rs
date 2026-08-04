@@ -46,7 +46,6 @@ fn calculate_margins(area: Rect) -> (u16, u16, u16, u16) {
     }
 }
 use std::io::{self, Stdout, Write};
-use std::thread;
 use std::time::{Duration, Instant};
 
 /// Cursor blink state machine.
@@ -118,9 +117,6 @@ impl TuiManager {
         enable_raw_mode()?;
         execute!(io::stdout(), EnterAlternateScreen)?;
         io::stdout().flush()?;
-
-        // Give terminal time to switch to alternate screen
-        thread::sleep(Duration::from_millis(100));
 
         let backend = CrosstermBackend::new(io::stdout());
         let mut terminal = Terminal::new(backend)?;
@@ -550,15 +546,11 @@ impl TuiManager {
         // This ensures frame.area() returns correct dimensions for layout calculations
         self.terminal.autoresize()?;
 
-        // Give terminal a moment to settle after resize before querying pixel dimensions
-        // This helps ensure CSI 14t returns updated dimensions
-        std::thread::sleep(std::time::Duration::from_millis(50));
-
         // Update viewport dimensions using the resize event data.
         // Cell size (px per cell) is constant across resizes — only the number of
         // cols/rows changes — so extrapolate pixel size from the previous cell
-        // size instead of re-querying CSI 14t. Querying stdin here would race
-        // crossterm's event-loop reader and corrupt the event stream.
+        // size instead of querying the terminal (stdin queries deadlock the
+        // crossterm event reader and are never used).
         self.kitty_renderer
             .viewport()
             .update_from_resize(cols, rows);

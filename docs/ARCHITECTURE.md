@@ -458,18 +458,20 @@ pub struct TerminalDimensions {
 **Public API:**
 
 - `new() -> Self` - Create new viewport manager (src/rendering/viewport.rs:26)
-- `query_dimensions() -> Result<TerminalDimensions, ViewportError>` - Send CSI 14t/18t queries (src/rendering/viewport.rs:30)
+- `query_dimensions() -> Result<TerminalDimensions, ViewportError>` - TIOCGWINSZ ioctl via crossterm `window_size()` (src/rendering/viewport.rs:30)
 - `get_dimensions() -> Option<TerminalDimensions>` - Get current dimensions (src/rendering/viewport.rs:82)
 
 **Removed Methods:**
 
 - ~~`set_dimensions(dimensions)`~~ - Removed (no longer needed)
 - ~~`convert_rect_to_pixels(x, y, w, h)`~~ - Removed (simplified API)
+- ~~`query_pixel_size()`~~ - Removed (CSI 14t stdin read deadlocked the crossterm 0.29 event source)
 
 **Key Behaviors:**
 
-- Queries terminal using CSI 14t (pixel size) and 18t (cell count)
-- Calculates cell dimensions: pixel_size / cell_count
+- Queries terminal via TIOCGWINSZ ioctl (crossterm `window_size()`) — cols/rows + pixels, no stdin
+- Falls back to estimated 10×20 px cells when pixel size is 0 (plain ptys)
+- `update_from_resize` extrapolates pixel size from the stable cell size (never touches stdin)
 - Enables Viewport Overlay Pattern (PRD Section 4.2)
 
 ### `FontMetrics` (`src/rendering/font.rs:12`)
