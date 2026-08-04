@@ -9,7 +9,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
+    widgets::{Block, BorderType, Borders, Clear, List, ListItem, ListState, Paragraph},
     Frame,
 };
 use std::path::Path;
@@ -95,6 +95,7 @@ fn render_scanning_indicator(frame: &mut Frame, area: Rect) {
     let block = Block::default()
         .title("FILES")
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(colors::accent()))
         .style(Style::default().bg(colors::surface()));
 
@@ -120,6 +121,7 @@ fn render_file_list(frame: &mut Frame, state: &AutocompleteState, area: Rect) {
     let block = Block::default()
         .title(title)
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(colors::accent()))
         .style(Style::default().bg(colors::surface()));
 

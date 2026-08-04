@@ -8,7 +8,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph},
+    widgets::{Block, BorderType, Borders, Clear, Paragraph},
     Frame,
 };
 
@@ -75,6 +75,7 @@ fn render_popup_content(frame: &mut Frame, state: &ConfigPopupState, area: Rect)
     let block = Block::default()
         .title(" CONFIG ")
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(colors::accent()))
         .style(Style::default().bg(colors::surface()));
 

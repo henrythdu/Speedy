@@ -24,7 +24,7 @@ pub const DEFAULT_FONT_SIZE: f32 = 24.0;
 /// Rendering Constants
 pub const PROGRESS_BAR_MARGIN_PX: u32 = 10;
 pub const PROGRESS_BAR_WIDTH_PCT: f64 = 0.3;
-pub const PROGRESS_BAR_HEIGHT: u32 = 2;
+pub const PROGRESS_BAR_HEIGHT: u32 = 6;
 
 /// Cache Constants
 pub const DEFAULT_CACHE_CAPACITY: usize = 1000;
