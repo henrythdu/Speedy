@@ -1,10 +1,10 @@
 # Speedy
 
-**A terminal-based RSVP (Rapid Serial Visual Presentation) speed reader with pixel-perfect rendering.**
+**A terminal-based RSVP (Rapid Serial Visual Presentation) speed reader.**
 
-Speedy is a high-performance speed reading application that uses the Kitty Graphics Protocol for pixel-perfect text rendering with Optimal Viewing Position (OVP) anchoring. Built in Rust for maximum performance at 1000+ WPM.
+Speedy shows words one at a time at a fixed screen position. It renders text as images via the Kitty Graphics Protocol, which lets it position each word precisely (important for the OVP anchor — see below) instead of relying on the terminal's character grid.
 
-[![CI](https://github.com/user/speedy/actions/workflows/ci.yml/badge.svg)](https://github.com/user/speedy/actions/workflows/ci.yml)
+[![CI](https://github.com/henrythdu/Speedy/actions/workflows/ci.yml/badge.svg)](https://github.com/henrythdu/Speedy/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
 
 ---
@@ -18,7 +18,7 @@ Speedy is a high-performance speed reading application that uses the Kitty Graph
 - [Usage](#usage)
 - [Keybindings](#keybindings)
 - [Configuration](#configuration)
-- [Architecture](#architecture)
+- [Project Structure](#project-structure)
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
 - [License](#license)
@@ -27,38 +27,14 @@ Speedy is a high-performance speed reading application that uses the Kitty Graph
 
 ## Features
 
-### Core Reading
-
-- **RSVP Engine**: Words displayed one at a time at your configured WPM
-- **OVP Anchoring**: Words are horizontally shifted so the "anchor letter" remains at a fixed position, reducing eye movement
-- **Sub-pixel Precision**: Pixel-perfect text positioning using Kitty Graphics Protocol
-- **Weighted Timing**: Punctuation and word length affect display duration for natural reading rhythm
-
-### File Support
-
-- **PDF**: Extract and read text from PDF documents
-- **EPUB**: Read electronic books in EPUB format
-- **Clipboard**: Paste text directly from your clipboard
-
-### Navigation
-
-- **Sentence-aware jumps**: Navigate forward/backward by sentence (always lands at sentence beginning)
-- **WPM adjustment**: Increase or decrease reading speed on the fly
-- **Pause/Resume**: Stop and continue reading at any point
-
-### Visual Design
-
-- **Midnight Theme**: Dark theme designed to minimize eye strain with WCAG AA contrast ratios
-- **Progress Indicators**:
-  - Micro-bar: Horizontal progress through current sentence
-  - Macro-gutter: Vertical progress through entire document
-- **Mode-aware opacity**: Progress dims during active reading, brightens when paused
-
-### Performance
-
-- **Word-Level LRU Cache**: Eliminates redundant rasterization for consistent 1000+ WPM
-- **75MB memory cap**: Automatic cache eviction to prevent memory bloat
-- **~70% cache hit rate**: Typical English text achieves high cache efficiency
+- **RSVP reading**: words displayed one at a time at your configured WPM
+- **OVP anchoring**: each word is shifted horizontally so its anchor letter stays at the same screen position, reducing eye movement between words
+- **Weighted timing**: punctuation and long words get longer display times for a natural rhythm
+- **File support**: PDF, EPUB, and clipboard text
+- **Sentence navigation**: jump forward/backward to sentence starts
+- **Progress indicators**: a bar showing progress through the current sentence, and a strip on the right edge showing progress through the document
+- **Six color themes**, switchable at runtime
+- **LRU word cache** with a 100MB memory cap so repeated words aren't re-rasterized
 
 ---
 
@@ -73,7 +49,7 @@ Speedy requires a terminal with **Kitty Graphics Protocol** support:
 | **Kitty** | Any | ✅ Recommended |
 | **Konsole** | 22.04+ | ✅ Supported |
 
-**Why?** Speedy uses pixel-perfect graphics rendering for sub-pixel OVP anchoring. Standard terminal text rendering cannot achieve this precision.
+Text rendering is done as images because the RSVP word needs to be placed at arbitrary pixel positions; standard terminal text is locked to the character grid.
 
 ### System
 
@@ -123,17 +99,17 @@ cargo build --release
 
 2. **Load a file** (in the command deck at the bottom):
 
-   ```
+   ```text
    @document.pdf
    ```
 
-3. **Start reading!** The app automatically begins at 300 WPM.
+3. Reading starts automatically at 300 WPM.
 
 4. **Control your reading:**
-   - Press `Space` to pause/resume
-   - Press `]` to increase WPM, `[` to decrease
-   - Press `j` to jump forward one sentence
-   - Press `k` to jump backward one sentence
+   - `Space` to pause/resume
+   - `]` to increase WPM, `[` to decrease
+   - `j` / `k` to jump forward/backward one sentence
+   - `Tab` to open the command deck
 
 ---
 
@@ -141,7 +117,7 @@ cargo build --release
 
 ### Command Deck
 
-Speedy uses a command deck at the bottom of the terminal for input. Type commands directly without a prompt.
+Speedy has a command deck at the bottom of the terminal. `Tab` opens it from Reading/Paused mode; typing `:` or `@` opens it directly.
 
 #### Loading Files
 
@@ -165,46 +141,37 @@ When typing `@`, a popup appears with file suggestions:
 | Command | Description |
 |---------|-------------|
 | `:q` or `:quit` | Exit application |
-| `:h` or `:help` | Show help |
 
 ---
 
 ## Keybindings
 
-### Reading Mode
+### Reading / Paused Mode
 
 | Key | Action |
 | ----- | -------- |
 | `Space` or `p` | Pause / Resume |
-| `q` | Return to command mode |
 | `]` | Increase WPM by 50 |
 | `[` | Decrease WPM by 50 |
 | `j` | Jump forward one sentence |
 | `k` | Jump backward one sentence |
+| `Tab` | Open command deck |
+| `:` | Open command deck with `:` |
+| `@` | Open command deck and start file autocomplete |
 
 ### Command Mode
 
 | Key | Action |
 | ----- | -------- |
-| `@` | Start file path (triggers autocomplete) |
-| `:` | Start command |
 | `Enter` | Execute command |
-| `Esc` | Cancel |
-
-### Autocomplete Popup
-
-| Key | Action |
-| ----- | -------- |
-| `↑` / `↓` | Navigate file list |
-| `Enter` / `Tab` | Select highlighted file |
-| `Esc` | Close popup |
-| `Ctrl+R` | Refresh file cache |
+| `Esc` | Cancel / leave command mode |
+| `Backspace` | Delete last character |
 
 ---
 
 ## Configuration
 
-Speedy supports configuration via TOML files and command-line flags. All settings have sensible defaults, so configuration is optional.
+Speedy supports configuration via TOML files and command-line flags. All settings have defaults, so configuration is optional.
 
 ### CLI Flags
 
@@ -235,16 +202,14 @@ If no config file exists, Speedy uses built-in defaults.
 
 ### Available Themes
 
-Speedy includes 6 carefully crafted color themes:
-
 | Theme | Description |
 | ------- | ------------- |
-| `tokyo-night` | Dark theme with blue-purple hues (default) |
-| `dracula` | Classic purple-accented dark theme |
-| `gruvbox` | Retro warm color palette |
-| `catppuccin-mocha` | Soothing pastel dark theme |
-| `nord` | Arctic, bluish color scheme |
-| `light` | Light background theme for daytime use |
+| `tokyo-night` | Dark, blue-purple (default) |
+| `dracula` | Dark, purple accent |
+| `gruvbox` | Warm retro palette |
+| `catppuccin-mocha` | Dark pastel |
+| `nord` | Dark, bluish |
+| `light` | Light background |
 
 ### Timing Parameters
 
@@ -253,12 +218,12 @@ Control reading speed and punctuation pauses in the `[timing]` section:
 | Parameter | Default | Range | Description |
 | ----------- | --------- | ------- | ------------- |
 | `wpm` | 300 | 50-1000 | Words per minute reading speed |
-| `period_multiplier` | 3.0 | any | Extra pause after periods (.). |
+| `period_multiplier` | 3.0 | any | Extra pause after periods (.) |
 | `comma_multiplier` | 1.5 | any | Extra pause after commas (,) |
 | `question_multiplier` | 3.0 | any | Extra pause after question marks (?) |
 | `exclamation_multiplier` | 3.0 | any | Extra pause after exclamation marks (!) |
 | `newline_multiplier` | 4.0 | any | Extra pause at line breaks |
-| `long_word_threshold` | 10 | any | Characters before word is considered "long" |
+| `long_word_threshold` | 10 | any | Characters before a word counts as "long" |
 | `long_word_penalty` | 1.15 | any | Extra time multiplier for long words |
 
 ### Example Configuration
@@ -301,34 +266,22 @@ RUST_LOG=debug speedy
 
 ---
 
-## Architecture
-
-Speedy uses a **Dual-Engine Architecture**:
-
-### 1. Command Layer (Ratatui)
-
-- Standard character-grid TUI
-- Command input, progress bars, UI chrome
-
-### 2. Reading Layer (Graphics Engine)
-
-- Pixel-perfect rendering via Kitty Graphics Protocol
-- Sub-pixel OVP anchoring
-- True opacity for visual effects
-
-### Project Structure
+## Project Structure
 
 ```
 src/
-├── app/           # Application state management
-├── reading/       # Core RSVP logic (tokens, timing, OVP)
-├── rendering/     # Graphics backends (Kitty protocol)
-├── ui/            # TUI layer (ratatui)
+├── app/           # Application state
+├── reading/       # RSVP logic (tokens, timing, sentence detection)
+├── rendering/     # Kitty protocol, rasterization, viewport
+├── ui/            # TUI layer (ratatui): parts/, popups, event loop
 ├── input/         # File parsing (PDF, EPUB, clipboard)
 └── main.rs        # Entry point
 ```
 
-For full architecture details, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Code is organized into cells (see [AGENTS.md](AGENTS.md)) — each cell owns a
+context-bounded piece of the app, and `.cells/` records the dependencies
+between them. UI parts live in `src/ui/parts/`: one file per visible element
+(word, progress indicators, background, command deck).
 
 ---
 
@@ -344,12 +297,6 @@ For full architecture details, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 2. Try resizing the terminal and restarting
 3. Check that your terminal font size is reasonable (12-16pt recommended)
 
-### Performance issues at high WPM
-
-1. The word cache needs time to warm up - performance improves after the first pass
-2. Try reducing WPM temporarily to let the cache populate
-3. Ensure your system has available memory (75MB cache cap)
-
 ### File not loading
 
 1. Check the file path is correct
@@ -360,14 +307,14 @@ For full architecture details, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Contributing
 
-Contributions are welcome! Please read the architecture documentation before submitting PRs.
+Contributions are welcome!
 
 ### Development Setup
 
 ```bash
 # Clone and build
-git clone https://github.com/user/speedy.git
-cd speedy
+git clone https://github.com/henrythdu/Speedy.git
+cd Speedy
 cargo build
 
 # Run tests
@@ -404,16 +351,3 @@ See [licenses/JetBrainsMono-LICENSE.txt](licenses/JetBrainsMono-LICENSE.txt) for
 
 Copyright 2020 The JetBrains Mono Project Authors  
 <https://github.com/JetBrains/JetBrainsMono>
-
----
-
-## Acknowledgments
-
-Speedy is built on research in ocular efficiency and cognitive load management:
-
-- **OVP (Optimal Viewing Position)**: Based on O'Regan & Lévy-Schoen (1987) - eye saccades account for ~10% of reading time
-- **RSVP**: Reduces cognitive friction of eye movement through consistent pacing
-
----
-
-*Built with ❤️ in Rust*
