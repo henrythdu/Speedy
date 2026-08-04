@@ -316,14 +316,13 @@ impl TuiManager {
                                 }
                                 app.clear_error();
                             }
-                            // Keys whose effect is Command-only: no-op elsewhere (preserves prior behavior)
+                            // Keys that are Command-only: no-op while Reading /
+                            // Paused. NOT Popup — the config popup navigates
+                            // with Up/Down and confirms with Enter. (Tab in
+                            // Reading/Paused is handled by its own arm above.)
                             (
-                                KeyCode::Enter
-                                | KeyCode::Backspace
-                                | KeyCode::Up
-                                | KeyCode::Down
-                                | KeyCode::Tab,
-                                _,
+                                KeyCode::Enter | KeyCode::Backspace | KeyCode::Up | KeyCode::Down,
+                                AppMode::Reading | AppMode::Paused,
                             ) => {}
                             // Any other key in Reading/Paused/Popup goes through the registry
                             (_, AppMode::Reading | AppMode::Paused | AppMode::Popup) => {

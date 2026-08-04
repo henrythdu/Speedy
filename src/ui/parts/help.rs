@@ -33,18 +33,15 @@ pub fn render_help_popup(frame: &mut Frame, command_area: Rect, terminal_height:
     info(&mut lines, "Space / p", "pause / resume");
     info(&mut lines, "j / k", "previous / next sentence");
     info(&mut lines, "[ / ]", "slower / faster");
-    info(&mut lines, "Tab / : / @", "open command deck");
+    info(&mut lines, "Tab", "open command deck");
+    info(&mut lines, ": command", "type a command (e.g. :q)");
+    info(&mut lines, "@ path", "open a file, then pick with ↑↓");
     blank(&mut lines);
     section(&mut lines, "PROGRESS");
-    info(&mut lines, "bar below word", "progress in current sentence");
-    info(
-        &mut lines,
-        "right-edge gutter",
-        "progress in whole document",
-    );
+    info(&mut lines, "bar", "progress in current sentence");
+    info(&mut lines, "right gutter", "progress in whole document");
     blank(&mut lines);
     section(&mut lines, "FILES & THEMES");
-    info(&mut lines, "@path", "open PDF / EPUB");
     info(&mut lines, "@@", "paste from clipboard");
     info(&mut lines, "Ctrl+P", "settings (theme, WPM, ghosts)");
     blank(&mut lines);
@@ -56,11 +53,13 @@ pub fn render_help_popup(frame: &mut Frame, command_area: Rect, terminal_height:
 }
 
 /// Position above the command deck, clamped to the available space.
+/// Width fits the content (~52) instead of spanning the whole command area,
+/// so no line can run into the right border on any terminal.
 fn calculate_help_area(command_area: Rect, terminal_height: u16) -> Rect {
-    const POPUP_HEIGHT: u16 = 20;
-    const MIN_WIDTH: u16 = 44;
+    const POPUP_HEIGHT: u16 = 19;
+    const POPUP_WIDTH: u16 = 52;
 
-    let popup_width = command_area.width.max(MIN_WIDTH);
+    let popup_width = command_area.width.clamp(40, POPUP_WIDTH);
     let space_above = command_area.y;
     let y = if space_above >= POPUP_HEIGHT {
         command_area.y.saturating_sub(POPUP_HEIGHT)
