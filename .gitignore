@@ -19,3 +19,7 @@ target/
 node_modules/
 package-lock.json
 package.json
+
+# Design docs — new docs need git add -f
+# (tracked docs stay tracked; gitignore only blocks new files)
+docs/
