@@ -88,21 +88,27 @@ Speedy requires a terminal with **Kitty Graphics Protocol** support:
 
 ## Installation
 
-### From Source (Recommended)
+Speedy is not published on crates.io (the `speedy` name there is an unrelated
+serialization crate) — build from source. The binary is self-contained: the
+JetBrains Mono font is embedded at compile time, so there are no assets to
+install alongside it.
+
+### From Source
 
 ```bash
 # Clone the repository
-git clone https://github.com/user/speedy.git
-cd speedy
+git clone https://github.com/henrythdu/Speedy.git
+cd Speedy
 
-# Build and install
+# Build and install to ~/.cargo/bin (release mode by default)
 cargo install --path .
 ```
 
-### Using Cargo
+Or build a release binary in-tree:
 
 ```bash
-cargo install speedy
+cargo build --release
+./target/release/speedy
 ```
 
 ---
