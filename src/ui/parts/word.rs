@@ -35,6 +35,17 @@ pub(crate) const WORD_IMAGE_ID: u32 = 3;
 pub(crate) const BAR_IMAGE_ID: u32 = 4;
 pub(crate) const GUTTER_IMAGE_ID: u32 = 5;
 
+/// Everything that determines a slot's on-screen image: word, anchor (OVP
+/// point), pixel y, and opacity. Equal state ⇒ the image on screen is already
+/// correct ⇒ transmitting again would only make kitty delete + rebuild it.
+#[derive(Clone, PartialEq, Eq)]
+struct SlotState {
+    word: String,
+    anchor: usize,
+    y: u32,
+    opacity_bits: u32,
+}
+
 /// Kitty Graphics Protocol renderer for pixel-perfect RSVP
 pub struct KittyGraphicsRenderer {
     /// Terminal viewport for coordinate conversion
@@ -55,6 +66,19 @@ pub struct KittyGraphicsRenderer {
     ghost_next_was_rendered: bool,
     /// Cache key of the last placed background (w, h, r, g, b) — skip re-transmit when unchanged
     pub(crate) background_key: Option<(u32, u32, u8, u8, u8)>,
+    /// Last-transmitted state of each reading-zone slot (word.rs) — skip
+    /// re-transmit when unchanged. Kitty DELETES an image + its placements on
+    /// ANY same-id re-transmit (graphics protocol), so re-uploading identical
+    /// content every frame tears the word down and rebuilds it at the render
+    /// rate — which scales with WPM (poll timeout = token duration) and shows
+    /// up as flicker at high WPM. Slots transmit only on actual change.
+    word_slot: Option<SlotState>,
+    ghost_prev_slot: Option<SlotState>,
+    ghost_next_slot: Option<SlotState>,
+    /// Last-transmitted bar/gutter keys (progress.rs) — same change-detection
+    /// rule as the word slots.
+    pub(crate) bar_slot: Option<(u32, u32, u32, bool)>, // (bar_y, bar_width, fill_width, paused)
+    pub(crate) gutter_slot: Option<(u32, u32, u32, u32, bool)>, // (x, y, fill_height, reader_height, paused)
 }
 
 impl Default for KittyGraphicsRenderer {
@@ -76,6 +100,11 @@ impl KittyGraphicsRenderer {
             ghost_prev_was_rendered: false,
             ghost_next_was_rendered: false,
             background_key: None,
+            word_slot: None,
+            ghost_prev_slot: None,
+            ghost_next_slot: None,
+            bar_slot: None,
+            gutter_slot: None,
         }
     }
 
@@ -252,15 +281,26 @@ impl RsvpRenderer for KittyGraphicsRenderer {
             // Validate anchor but don't fail on error - ghost rendering is non-fatal
             if anchor < word.chars().count() {
                 let y_offset = center_y.saturating_sub(line_height);
-                if let Err(e) = self.render_at_position(
-                    word,
+                let state = SlotState {
+                    word: word.to_string(),
                     anchor,
-                    y_offset,
-                    self.ghost_opacity,
-                    GHOST_PREV_IMAGE_ID,
-                ) {
-                    // Log but don't fail - ghost rendering is non-fatal
-                    tracing::warn!(error = %e, "ghost_prev render failed");
+                    y: y_offset,
+                    opacity_bits: self.ghost_opacity.to_bits(),
+                };
+                // Unchanged since last frame → image already on screen, do not
+                // re-transmit (kitty deletes + rebuilds on any same-id re-send).
+                if self.ghost_prev_slot.as_ref() != Some(&state) {
+                    if let Err(e) = self.render_at_position(
+                        word,
+                        anchor,
+                        y_offset,
+                        self.ghost_opacity,
+                        GHOST_PREV_IMAGE_ID,
+                    ) {
+                        // Log but don't fail - ghost rendering is non-fatal
+                        tracing::warn!(error = %e, "ghost_prev render failed");
+                    }
+                    self.ghost_prev_slot = Some(state);
                 }
                 self.ghost_prev_was_rendered = true;
             } else {
@@ -270,6 +310,7 @@ impl RsvpRenderer for KittyGraphicsRenderer {
             // Ghosts were just toggled off: clear the stale slot image so it
             // doesn't linger on screen (replace-only would never touch it).
             let _ = delete_image(GHOST_PREV_IMAGE_ID);
+            self.ghost_prev_slot = None;
             self.ghost_prev_was_rendered = false;
         }
 
@@ -278,15 +319,24 @@ impl RsvpRenderer for KittyGraphicsRenderer {
             // Validate anchor but don't fail on error - ghost rendering is non-fatal
             if anchor < word.chars().count() {
                 let y_offset = center_y + line_height;
-                if let Err(e) = self.render_at_position(
-                    word,
+                let state = SlotState {
+                    word: word.to_string(),
                     anchor,
-                    y_offset,
-                    self.ghost_opacity,
-                    GHOST_NEXT_IMAGE_ID,
-                ) {
-                    // Log but don't fail - ghost rendering is non-fatal
-                    tracing::warn!(error = %e, "ghost_next render failed");
+                    y: y_offset,
+                    opacity_bits: self.ghost_opacity.to_bits(),
+                };
+                if self.ghost_next_slot.as_ref() != Some(&state) {
+                    if let Err(e) = self.render_at_position(
+                        word,
+                        anchor,
+                        y_offset,
+                        self.ghost_opacity,
+                        GHOST_NEXT_IMAGE_ID,
+                    ) {
+                        // Log but don't fail - ghost rendering is non-fatal
+                        tracing::warn!(error = %e, "ghost_next render failed");
+                    }
+                    self.ghost_next_slot = Some(state);
                 }
                 self.ghost_next_was_rendered = true;
             } else {
@@ -294,11 +344,21 @@ impl RsvpRenderer for KittyGraphicsRenderer {
             }
         } else if self.ghost_next_was_rendered {
             let _ = delete_image(GHOST_NEXT_IMAGE_ID);
+            self.ghost_next_slot = None;
             self.ghost_next_was_rendered = false;
         }
 
         // 3. Current word (center) - CRITICAL: rendered last, must succeed
-        self.render_at_position(frame.word, frame.anchor, center_y, 1.0, WORD_IMAGE_ID)?;
+        let state = SlotState {
+            word: frame.word.to_string(),
+            anchor: frame.anchor,
+            y: center_y,
+            opacity_bits: 1.0f32.to_bits(),
+        };
+        if self.word_slot.as_ref() != Some(&state) {
+            self.render_at_position(frame.word, frame.anchor, center_y, 1.0, WORD_IMAGE_ID)?;
+            self.word_slot = Some(state);
+        }
         Ok(())
     }
 

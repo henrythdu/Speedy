@@ -132,6 +132,15 @@ impl KittyGraphicsRenderer {
 
         let (fill_color, bg_color) = progress_colors(paused);
         let fill_width = (bar_width as f64 * progress.clamp(0.0, 1.0)) as u32;
+
+        // Unchanged since last frame → image already on screen: skip (kitty
+        // deletes + rebuilds an image on any same-id re-transmit, so idle
+        // re-uploads flicker at high render rates). See word.rs SlotState.
+        let key = (bar_y, bar_width, fill_width, paused);
+        if self.bar_slot.as_ref() == Some(&key) {
+            return Ok(());
+        }
+
         let buffer = build_capsule_bar(
             bar_width,
             PROGRESS_BAR_HEIGHT,
@@ -153,7 +162,9 @@ impl KittyGraphicsRenderer {
             0,
             1,
         )
-        .map_err(|e| RendererError::RenderFailed(format!("Bar render failed: {}", e)))
+        .map_err(|e| RendererError::RenderFailed(format!("Bar render failed: {}", e)))?;
+        self.bar_slot = Some(key);
+        Ok(())
     }
 
     /// Render the document-progress macro gutter on the right edge of the reader zone.
@@ -194,10 +205,19 @@ impl KittyGraphicsRenderer {
         let x_position =
             reader_area.x as u32 + (reader_area.width as u32).saturating_sub(gutter_width);
         let y_position = reader_area.y as u32;
+
+        // Unchanged since last frame → skip re-transmit (same rule as the bar).
+        let key = (x_position, y_position, fill_height, reader_height, paused);
+        if self.gutter_slot.as_ref() == Some(&key) {
+            return Ok(());
+        }
+
         move_to_pixel(self.viewport(), x_position, y_position);
         let base64_data = encode_image_base64(&buffer);
         transmit_graphics(image_id, gutter_width, reader_height, &base64_data, 0, 0, 1)
-            .map_err(|e| RendererError::RenderFailed(format!("Gutter render failed: {}", e)))
+            .map_err(|e| RendererError::RenderFailed(format!("Gutter render failed: {}", e)))?;
+        self.gutter_slot = Some(key);
+        Ok(())
     }
 }
 
