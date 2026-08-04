@@ -11,5 +11,6 @@
 
 pub mod background;
 pub mod deck;
+pub mod help;
 pub mod progress;
 pub mod word;

@@ -46,7 +46,7 @@ impl KeyHandler for CommandEnterHandler {
         if !command.is_empty() {
             app.clear_command_buffer();
             app.clear_error(); // a valid command supersedes any stale error
-            // Execute the command
+                               // Execute the command
             match execute_command(app, &command)? {
                 CommandResult::Continue => {}
                 CommandResult::Exit(_) => {

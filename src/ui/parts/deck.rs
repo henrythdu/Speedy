@@ -87,6 +87,7 @@ pub fn render_command_deck(
         AppMode::Reading => "READING",
         AppMode::Paused => "PAUSED",
         AppMode::Popup => "CONFIG",
+        AppMode::Help => "HELP",
         AppMode::Quit => "QUIT",
     };
 
@@ -99,7 +100,7 @@ pub fn render_command_deck(
     let input_text = if let Some(error) = error_message {
         format!("ERROR: {}{}", error, cursor_char)
     } else if command_buffer.is_empty() {
-        format!("Type @ for files, @@, or :q{}", cursor_char)
+        format!("@ file · @@ clipboard · :help keys{}", cursor_char)
     } else {
         format!("{}{}", command_buffer, cursor_char)
     };

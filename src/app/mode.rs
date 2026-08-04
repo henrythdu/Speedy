@@ -5,6 +5,9 @@ pub enum AppMode {
     Reading,
     Paused,
     Popup,
+    /// Static reference overlay (:help / :h). Blocks all keys except
+    /// dismiss — a mode because reading must freeze while it's open.
+    Help,
     Quit,
 }
 
@@ -18,6 +21,7 @@ mod tests {
         let _mode = AppMode::Paused;
         let _mode = AppMode::Command;
         let _mode = AppMode::Popup;
+        let _mode = AppMode::Help;
         let _mode = AppMode::Quit;
     }
 }

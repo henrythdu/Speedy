@@ -47,7 +47,8 @@ pub fn execute_command(app: &mut App, command_str: &str) -> Result<CommandResult
             Ok(CommandResult::Exit(AppMode::Quit))
         }
         Command::Help => {
-            // Show help - for now just stay in command mode
+            // Reference overlay — see ui/parts/help.rs. Esc/Enter/q dismiss.
+            app.set_mode(AppMode::Help);
             Ok(CommandResult::Continue)
         }
         Command::Unknown(_) => {

@@ -12,6 +12,7 @@ use crate::ui::key_handlers::{
 };
 use crate::ui::parts::background::render_background_cells;
 use crate::ui::parts::deck::{render_command_deck, render_wpm};
+use crate::ui::parts::help::render_help_popup;
 use crate::ui::parts::word::KittyGraphicsRenderer;
 use crate::ui::theme::{set_current_theme, Theme};
 use anyhow::Result;
@@ -244,6 +245,16 @@ impl TuiManager {
                                 self.cursor.on_key();
                                 if !activated {
                                     self.autocomplete.feed_char(c);
+                                }
+                            }
+                            // Help mode: a static reference overlay — everything
+                            // dismisses except Esc / Enter / q (Esc covers both).
+                            (_, AppMode::Help) => {
+                                if matches!(
+                                    key.code,
+                                    KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q')
+                                ) {
+                                    app.set_mode(AppMode::Reading);
                                 }
                             }
                             // Popup / Reading / Paused: route every char through the registry
@@ -485,6 +496,11 @@ impl TuiManager {
 
             // Render config popup if open
             render_config_popup(frame, &app.config_popup, command_area, terminal_height);
+
+            // Render help overlay in Help mode (reading is frozen — no advance)
+            if app.mode() == AppMode::Help {
+                render_help_popup(frame, command_area, terminal_height);
+            }
         })?;
 
         // No explicit flush here: Terminal::draw flushes the buffer when it

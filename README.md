@@ -141,6 +141,12 @@ When typing `@`, a popup appears with file suggestions:
 | Command | Description |
 |---------|-------------|
 | `:q` or `:quit` | Exit application |
+| `:h` or `:help` | Show the help overlay (keybindings, progress indicators, themes) |
+
+#### Themes
+
+`Ctrl+P` opens the settings popup — arrow keys to select, `←/→` to change.
+The six themes are also listed in [Configuration](#configuration).
 
 ---
 
