@@ -144,10 +144,10 @@ pub fn save(config: &Config, path: Option<PathBuf>) -> Result<(), ConfigSaveErro
     fs::write(&config_path, toml_content)?;
 
     tracing::debug!(
-        "Saved config to {:?}: theme={}, default_wpm={}, ghost_words={}",
+        "Saved config to {:?}: theme={}, wpm={}, ghost_words={}",
         config_path,
         config.theme,
-        config.default_wpm,
+        config.timing.wpm,
         config.ghost_words
     );
 
@@ -157,6 +157,7 @@ pub fn save(config: &Config, path: Option<PathBuf>) -> Result<(), ConfigSaveErro
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::config::TimingConfig;
     use std::io::Write;
     use tempfile::NamedTempFile;
 
@@ -244,13 +245,16 @@ wpm = 5000
     }
 
     #[test]
-    fn test_save_and_load_roundtrip_default_wpm() {
+    fn test_save_and_load_roundtrip_timing_wpm() {
         let temp_file = NamedTempFile::new().unwrap();
         let path = temp_file.path().to_path_buf();
 
-        // Create config with custom default_wpm
+        // Create config with custom timing wpm
         let config = Config {
-            default_wpm: 450,
+            timing: TimingConfig {
+                wpm: 450,
+                ..Default::default()
+            },
             ..Default::default()
         };
 
@@ -259,7 +263,7 @@ wpm = 5000
 
         // Load and verify
         let loaded = load(Some(path)).expect("Failed to load config");
-        assert_eq!(loaded.default_wpm, 450);
+        assert_eq!(loaded.timing.wpm, 450);
     }
 
     #[test]

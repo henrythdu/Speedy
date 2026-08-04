@@ -4,7 +4,6 @@ purpose = "Key handler registry: maps keys to actions across command, reading, a
 provides = [
   "KeyHandler",
   "KeyHandlerRegistry",
-  "CommandAction",
   "KeyResult",
   "create_reading_handlers",
   "create_command_handlers",

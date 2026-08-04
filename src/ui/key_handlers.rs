@@ -2,6 +2,7 @@
 
 use crate::app::mode::AppMode;
 use crate::app::App;
+use crate::ui::command_executor::{execute_command, CommandResult};
 use crate::ui::key_handler::{KeyHandler, KeyResult};
 use anyhow::Result;
 use crossterm::event::KeyCode;
@@ -26,10 +27,6 @@ impl KeyHandler for CommandBackspaceHandler {
         app.pop_command_char();
         Ok(KeyResult::Consumed)
     }
-
-    fn help_text(&self) -> &str {
-        "Delete last character (Backspace)"
-    }
 }
 
 /// Handler for Enter in Command mode - executes the command
@@ -49,7 +46,6 @@ impl KeyHandler for CommandEnterHandler {
         if !command.is_empty() {
             app.clear_command_buffer();
             // Execute the command
-            use crate::ui::command_executor::{execute_command, CommandResult};
             match execute_command(app, &command)? {
                 CommandResult::Continue => {}
                 CommandResult::Exit(_) => {
@@ -58,10 +54,6 @@ impl KeyHandler for CommandEnterHandler {
             }
         }
         Ok(KeyResult::Consumed)
-    }
-
-    fn help_text(&self) -> &str {
-        "Execute command (Enter)"
     }
 }
 
@@ -82,10 +74,6 @@ impl KeyHandler for CommandEscapeHandler {
         app.set_mode(AppMode::Reading);
         Ok(KeyResult::Consumed)
     }
-
-    fn help_text(&self) -> &str {
-        "Cancel command (Esc)"
-    }
 }
 
 /// Create registry with all command mode handlers
@@ -99,11 +87,7 @@ pub fn create_command_handlers(registry: &mut crate::ui::key_handler::KeyHandler
 // Reading Mode Handlers
 // ============================================================================
 
-// ============================================================================
-// Reading Mode Handlers
-// ============================================================================
-
-/// Handler for 'j' and Space - move to next sentence
+/// Handler for 'j' - move to next sentence
 pub struct NextSentenceHandler;
 
 impl KeyHandler for NextSentenceHandler {
@@ -112,7 +96,7 @@ impl KeyHandler for NextSentenceHandler {
     }
 
     fn keys(&self) -> Vec<KeyCode> {
-        vec![KeyCode::Char('j'), KeyCode::Char(' ')]
+        vec![KeyCode::Char('j')]
     }
 
     fn handle(&self, app: &mut App) -> Result<KeyResult> {
@@ -120,10 +104,6 @@ impl KeyHandler for NextSentenceHandler {
             state.jump_to_next_sentence();
         }
         Ok(KeyResult::Consumed)
-    }
-
-    fn help_text(&self) -> &str {
-        "Next sentence (j, Space)"
     }
 }
 
@@ -145,10 +125,6 @@ impl KeyHandler for PrevSentenceHandler {
         }
         Ok(KeyResult::Consumed)
     }
-
-    fn help_text(&self) -> &str {
-        "Previous sentence (k)"
-    }
 }
 
 /// Handler for ']' - increase speed
@@ -168,10 +144,6 @@ impl KeyHandler for SpeedUpHandler {
             state.adjust_wpm(50);
         }
         Ok(KeyResult::Consumed)
-    }
-
-    fn help_text(&self) -> &str {
-        "Increase speed (])"
     }
 }
 
@@ -193,13 +165,9 @@ impl KeyHandler for SpeedDownHandler {
         }
         Ok(KeyResult::Consumed)
     }
-
-    fn help_text(&self) -> &str {
-        "Decrease speed ([)"
-    }
 }
 
-/// Handler for 'p' - toggle pause
+/// Handler for Space and 'p' - toggle pause/resume
 pub struct PauseToggleHandler;
 
 impl KeyHandler for PauseToggleHandler {
@@ -208,16 +176,12 @@ impl KeyHandler for PauseToggleHandler {
     }
 
     fn keys(&self) -> Vec<KeyCode> {
-        vec![KeyCode::Char('p')]
+        vec![KeyCode::Char(' '), KeyCode::Char('p')]
     }
 
     fn handle(&self, app: &mut App) -> Result<KeyResult> {
         app.toggle_pause();
         Ok(KeyResult::Consumed)
-    }
-
-    fn help_text(&self) -> &str {
-        "Toggle pause (p)"
     }
 }
 
@@ -258,10 +222,6 @@ impl KeyHandler for PopupConfirmHandler {
         app.set_mode(AppMode::Reading);
         Ok(KeyResult::Consumed)
     }
-
-    fn help_text(&self) -> &str {
-        "Confirm and save (Enter)"
-    }
 }
 
 /// Handler for Esc in Popup mode - dismisses popup without saving
@@ -286,10 +246,6 @@ impl KeyHandler for PopupDismissHandler {
         app.set_mode(AppMode::Reading);
         Ok(KeyResult::Consumed)
     }
-
-    fn help_text(&self) -> &str {
-        "Cancel and close (Esc)"
-    }
 }
 
 /// Handler for Down arrow or 'j' in Popup mode - navigate to next option
@@ -307,10 +263,6 @@ impl KeyHandler for PopupNavigateDownHandler {
     fn handle(&self, app: &mut App) -> Result<KeyResult> {
         app.config_popup.move_down();
         Ok(KeyResult::Consumed)
-    }
-
-    fn help_text(&self) -> &str {
-        "Next option (j, Down)"
     }
 }
 
@@ -330,10 +282,6 @@ impl KeyHandler for PopupNavigateUpHandler {
         app.config_popup.move_up();
         Ok(KeyResult::Consumed)
     }
-
-    fn help_text(&self) -> &str {
-        "Previous option (k, Up)"
-    }
 }
 
 /// Handler for Left arrow or 'h' in Popup mode - cycle value left/decrease
@@ -350,19 +298,9 @@ impl KeyHandler for PopupCycleLeftHandler {
 
     fn handle(&self, app: &mut App) -> Result<KeyResult> {
         app.config_popup.cycle_left();
-        // Live preview: apply theme immediately if on theme row
-        if app.config_popup.selected_row == 1 {
-            app.config.theme = app.config_popup.current_theme().to_string();
-        }
-        // Live preview: apply ghost words immediately if on ghost words row
-        if app.config_popup.selected_row == 2 {
-            app.config.ghost_words = app.config_popup.temp_ghost_words;
-        }
+        // Live preview: apply the selected row (theme / ghost words) immediately
+        app.config_popup.preview(&mut app.config);
         Ok(KeyResult::Consumed)
-    }
-
-    fn help_text(&self) -> &str {
-        "Cycle left/decrease (h, Left)"
     }
 }
 
@@ -380,19 +318,9 @@ impl KeyHandler for PopupCycleRightHandler {
 
     fn handle(&self, app: &mut App) -> Result<KeyResult> {
         app.config_popup.cycle_right();
-        // Live preview: apply theme immediately if on theme row
-        if app.config_popup.selected_row == 1 {
-            app.config.theme = app.config_popup.current_theme().to_string();
-        }
-        // Live preview: apply ghost words immediately if on ghost words row
-        if app.config_popup.selected_row == 2 {
-            app.config.ghost_words = app.config_popup.temp_ghost_words;
-        }
+        // Live preview: apply the selected row (theme / ghost words) immediately
+        app.config_popup.preview(&mut app.config);
         Ok(KeyResult::Consumed)
-    }
-
-    fn help_text(&self) -> &str {
-        "Cycle right/increase (l, Right)"
     }
 }
 
@@ -527,7 +455,20 @@ mod tests {
         let handler = NextSentenceHandler;
         let keys = handler.keys();
         assert!(keys.contains(&KeyCode::Char('j')));
-        assert!(keys.contains(&KeyCode::Char(' ')));
+        assert!(!keys.contains(&KeyCode::Char(' '))); // Space is pause/resume (PRD §7)
+    }
+
+    #[test]
+    fn test_paused_mode_space_resumes() {
+        let mut registry = KeyHandlerRegistry::new();
+        create_reading_handlers(&mut registry);
+        let mut app = App::default();
+        app.start_reading("test", 300);
+        app.set_mode(AppMode::Paused);
+        // Space in Paused must hit PauseToggleHandler and resume (PRD §7)
+        let result = registry.dispatch(KeyCode::Char(' '), AppMode::Paused, &mut app);
+        assert!(result.is_some());
+        assert_eq!(app.mode(), AppMode::Reading);
     }
 
     #[test]

@@ -129,7 +129,7 @@ impl App {
     }
 
     pub fn mode(&self) -> AppMode {
-        self.mode.clone()
+        self.mode
     }
 
     pub fn set_mode(&mut self, mode: AppMode) {
@@ -160,7 +160,7 @@ impl App {
 
     /// Get the default WPM for new reading sessions
     pub fn default_wpm(&self) -> u32 {
-        self.config.default_wpm
+        self.config.timing().wpm
     }
 
     /// Get the current theme name

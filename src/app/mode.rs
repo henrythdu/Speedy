@@ -1,4 +1,4 @@
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub enum AppMode {
     #[default]
     Command,

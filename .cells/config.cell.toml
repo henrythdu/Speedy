@@ -1,5 +1,5 @@
 name = "config"
 layer = 1
 purpose = "TOML configuration: XDG-compliant load/save (config_path, load, save), the Config struct, and ThemeColors (RGBA palette) used app-wide."
-provides = ["Config", "ThemeColors", "config_path", "load", "save", "rgb", "ConfigLoadError", "ConfigSaveError"]
+provides = ["Config", "config_path", "load", "save", "ConfigLoadError", "ConfigSaveError"]
 requires = ["engine"]

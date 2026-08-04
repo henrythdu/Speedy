@@ -110,11 +110,13 @@ cargo install speedy
 ## Quick Start
 
 1. **Launch Speedy:**
+
    ```bash
    speedy
    ```
 
 2. **Load a file** (in the command deck at the bottom):
+
    ```
    @document.pdf
    ```
@@ -138,7 +140,7 @@ Speedy uses a command deck at the bottom of the terminal for input. Type command
 #### Loading Files
 
 | Command | Description |
-|---------|-------------|
+| --------- | ------------- |
 | `@path/to/file.pdf` | Load a PDF file |
 | `@path/to/book.epub` | Load an EPUB file |
 | `@@` | Load text from clipboard |
@@ -166,8 +168,8 @@ When typing `@`, a popup appears with file suggestions:
 ### Reading Mode
 
 | Key | Action |
-|-----|--------|
-| `Space` | Pause / Resume |
+| ----- | -------- |
+| `Space` or `p` | Pause / Resume |
 | `q` | Return to command mode |
 | `]` | Increase WPM by 50 |
 | `[` | Decrease WPM by 50 |
@@ -177,7 +179,7 @@ When typing `@`, a popup appears with file suggestions:
 ### Command Mode
 
 | Key | Action |
-|-----|--------|
+| ----- | -------- |
 | `@` | Start file path (triggers autocomplete) |
 | `:` | Start command |
 | `Enter` | Execute command |
@@ -186,7 +188,7 @@ When typing `@`, a popup appears with file suggestions:
 ### Autocomplete Popup
 
 | Key | Action |
-|-----|--------|
+| ----- | -------- |
 | `↑` / `↓` | Navigate file list |
 | `Enter` / `Tab` | Select highlighted file |
 | `Esc` | Close popup |
@@ -218,7 +220,7 @@ speedy --list-themes
 Speedy looks for configuration at platform-specific locations:
 
 | Platform | Path |
-|----------|------|
+| ---------- | ------ |
 | **Linux** | `~/.config/speedy/config.toml` |
 | **macOS** | `~/Library/Application Support/speedy/config.toml` |
 | **Windows** | `%APPDATA%\speedy\config.toml` |
@@ -230,7 +232,7 @@ If no config file exists, Speedy uses built-in defaults.
 Speedy includes 6 carefully crafted color themes:
 
 | Theme | Description |
-|-------|-------------|
+| ------- | ------------- |
 | `tokyo-night` | Dark theme with blue-purple hues (default) |
 | `dracula` | Classic purple-accented dark theme |
 | `gruvbox` | Retro warm color palette |
@@ -243,7 +245,7 @@ Speedy includes 6 carefully crafted color themes:
 Control reading speed and punctuation pauses in the `[timing]` section:
 
 | Parameter | Default | Range | Description |
-|-----------|---------|-------|-------------|
+| ----------- | --------- | ------- | ------------- |
 | `wpm` | 300 | 50-1000 | Words per minute reading speed |
 | `period_multiplier` | 3.0 | any | Extra pause after periods (.). |
 | `comma_multiplier` | 1.5 | any | Extra pause after commas (,) |
@@ -298,10 +300,12 @@ RUST_LOG=debug speedy
 Speedy uses a **Dual-Engine Architecture**:
 
 ### 1. Command Layer (Ratatui)
+
 - Standard character-grid TUI
 - Command input, progress bars, UI chrome
 
 ### 2. Reading Layer (Graphics Engine)
+
 - Pixel-perfect rendering via Kitty Graphics Protocol
 - Sub-pixel OVP anchoring
 - True opacity for visual effects
@@ -393,7 +397,7 @@ This project bundles **JetBrains Mono**, which is licensed under the SIL Open Fo
 See [licenses/JetBrainsMono-LICENSE.txt](licenses/JetBrainsMono-LICENSE.txt) for the full license text.
 
 Copyright 2020 The JetBrains Mono Project Authors  
-https://github.com/JetBrains/JetBrainsMono
+<https://github.com/JetBrains/JetBrainsMono>
 
 ---
 

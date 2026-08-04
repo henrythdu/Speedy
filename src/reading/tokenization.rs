@@ -34,26 +34,6 @@ fn is_comma(c: char) -> bool {
     c == ','
 }
 
-/// Calculate punctuation multiplier based on trailing punctuation.
-/// - Comma: 1.5x pause
-/// - Period/Question/Exclamation: 2.0x pause
-fn calculate_punctuation_multiplier(punctuation: &[char]) -> f64 {
-    if punctuation.is_empty() {
-        return 1.0;
-    }
-
-    // Check the last punctuation mark
-    if let Some(&last) = punctuation.last() {
-        if is_comma(last) {
-            return 1.5;
-        } else if is_sentence_terminator(last) {
-            return 2.0;
-        }
-    }
-
-    1.0
-}
-
 /// Tokenizes text; PRD Section 3.2.
 /// Only creates pause tokens for paragraph breaks (2+ consecutive newlines), not single newlines.
 /// Single newlines (line wrapping) are treated as word separators only.
@@ -74,7 +54,6 @@ pub fn tokenize_text(text: &str) -> Vec<Token> {
 
                 let is_start = true; // Paragraph breaks indicate sentence boundaries
                 let char_count = 0;
-                let multiplier = 1.0;
                 let sentence_index = 0;
                 let sentence_length = 1;
                 tokens.push(Token::new(
@@ -82,7 +61,6 @@ pub fn tokenize_text(text: &str) -> Vec<Token> {
                     vec!['\n'],
                     is_start,
                     char_count,
-                    multiplier,
                     sentence_index,
                     sentence_length,
                 ));
@@ -104,7 +82,6 @@ pub fn tokenize_text(text: &str) -> Vec<Token> {
                     }
 
                     let char_count = text.chars().count();
-                    let multiplier = calculate_punctuation_multiplier(&punctuation);
 
                     // Add token with placeholder sentence info (will be updated)
                     let token_index = tokens.len();
@@ -115,7 +92,6 @@ pub fn tokenize_text(text: &str) -> Vec<Token> {
                         punctuation,
                         is_start,
                         char_count,
-                        multiplier,
                         0, // placeholder
                         0, // placeholder
                     ));
@@ -151,7 +127,6 @@ fn finalize_sentence(tokens: &mut [Token], sentence_token_indices: &mut Vec<usiz
                 token.punctuation().to_vec(),
                 token.is_sentence_start(),
                 token.char_count(),
-                token.punctuation_multiplier(),
                 idx,             // sentence_index
                 sentence_length, // sentence_length
             );

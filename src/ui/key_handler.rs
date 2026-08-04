@@ -12,10 +12,6 @@ use crossterm::event::KeyCode;
 pub enum KeyResult {
     /// Key was consumed, stop processing
     Consumed,
-    /// Key was ignored, continue to next handler
-    /// (Reserved for future handler chain extensions)
-    #[allow(dead_code)]
-    Ignored,
 }
 
 /// Trait for key handlers
@@ -28,12 +24,6 @@ pub trait KeyHandler: Send + Sync {
 
     /// Handle the key press
     fn handle(&self, app: &mut App) -> Result<KeyResult>;
-
-    /// Get help text for this key binding
-    #[allow(dead_code)]
-    fn help_text(&self) -> &str {
-        ""
-    }
 }
 
 /// Registry for key handlers
@@ -55,6 +45,9 @@ impl KeyHandlerRegistry {
     }
 
     /// Dispatch a key event to the appropriate handler
+    ///
+    /// Paused handlers: the registry has no Paused-mode handlers — Reading handlers
+    /// stay active so Space/p can resume (PRD §7).
     pub fn dispatch(
         &self,
         key: KeyCode,
@@ -62,21 +55,13 @@ impl KeyHandlerRegistry {
         app: &mut App,
     ) -> Option<Result<KeyResult>> {
         for handler in &self.handlers {
-            if handler.mode() == mode && handler.keys().contains(&key) {
+            let matches = handler.mode() == mode
+                || (mode == AppMode::Paused && handler.mode() == AppMode::Reading);
+            if matches && handler.keys().contains(&key) {
                 return Some(handler.handle(app));
             }
         }
         None
-    }
-
-    /// Get all handlers for a specific mode (used in tests)
-    #[allow(dead_code)]
-    pub fn handlers_for_mode(&self, mode: AppMode) -> Vec<&dyn KeyHandler> {
-        self.handlers
-            .iter()
-            .filter(|h| h.mode() == mode)
-            .map(|h| h.as_ref())
-            .collect()
     }
 }
 

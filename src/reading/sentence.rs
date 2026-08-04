@@ -124,7 +124,7 @@ mod tests {
 
     #[test]
     fn test_sentence_boundary_with_newline() {
-        let prev = Token::new("hello".to_string(), vec!['\n'], false, 5, 1.0, 0, 1);
+        let prev = Token::new("hello".to_string(), vec!['\n'], false, 5, 0, 1);
         let result = detect_sentence_boundary(Some(&prev), "World");
         assert!(result, "Newline should trigger sentence boundary");
     }

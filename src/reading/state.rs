@@ -190,7 +190,6 @@ mod tests {
             vec![],
             is_sentence_start,
             char_count,
-            1.0,
             0,
             1,
         )
@@ -296,7 +295,6 @@ mod tests {
             vec![],
             true,
             15,
-            1.0,
             0,
             1,
         )];
@@ -308,15 +306,7 @@ mod tests {
 
     #[test]
     fn test_current_token_duration_with_punctuation() {
-        let tokens = vec![Token::new(
-            "hello".to_string(),
-            vec!['.'],
-            true,
-            5,
-            2.0,
-            0,
-            1,
-        )];
+        let tokens = vec![Token::new("hello".to_string(), vec!['.'], true, 5, 0, 1)];
         let state = ReadingState::new(tokens, 300, TimingConfig::default());
         // 300 WPM = 200ms per word * max(3.0, 1.0) = 600ms
         // PRD: Apply MAX of punctuation (3.0) and length penalty (1.0)

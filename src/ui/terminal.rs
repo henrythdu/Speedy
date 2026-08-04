@@ -30,21 +30,12 @@ use ratatui::{
 /// Returns (top_margin, bottom_margin, left_margin, right_margin)
 fn calculate_margins(area: Rect) -> (u16, u16, u16, u16) {
     const MIN_HEIGHT_FOR_FULL_MARGINS: u16 = 15;
-    const TARGET_TOP_BOTTOM: u16 = 1;
     const TARGET_LEFT_RIGHT: u16 = 1;
 
     let height = area.height;
 
     if height >= MIN_HEIGHT_FOR_FULL_MARGINS {
         // Full margins for large terminals
-        (
-            TARGET_TOP_BOTTOM,
-            TARGET_TOP_BOTTOM,
-            TARGET_LEFT_RIGHT,
-            TARGET_LEFT_RIGHT,
-        )
-    } else if height >= 10 {
-        // Reduced margins for medium terminals
         (1, 1, TARGET_LEFT_RIGHT, TARGET_LEFT_RIGHT)
     } else {
         // Minimal margins for small terminals
@@ -327,7 +318,7 @@ impl TuiManager {
         let mode = app.mode();
         match self.key_registry.dispatch(code, mode, app) {
             Some(Ok(KeyResult::Consumed)) => true,
-            Some(Ok(KeyResult::Ignored)) | None => false,
+            None => false,
             Some(Err(e)) => {
                 app.set_error(format!("Key handler error: {}", e));
                 false
@@ -511,33 +502,18 @@ impl TuiManager {
                     if let Ok(word_height) =
                         self.kitty_renderer.calculate_word_height(&word, anchor_pos)
                     {
-                        // Render micro bar (sentence progress)
-                        let bar_image_id = self.kitty_renderer.current_image_id;
-                        if let Err(e) = self.kitty_renderer.render_bar(
+                        // Render micro bar (sentence progress) + macro gutter (document progress)
+                        if let Err(e) = self.kitty_renderer.render_progress(
                             word_y,
                             word_height,
                             progress,
                             paused,
-                            bar_image_id,
-                        ) {
-                            app.set_error(format!("Bar render error: {}", e));
-                        }
-                        // Always increment image ID to maintain ID sequence
-                        self.kitty_renderer.current_image_id += 1;
-
-                        // Render macro gutter (document progress)
-                        let gutter_id = self.kitty_renderer.current_image_id;
-                        if let Err(e) = self.kitty_renderer.render_macro_gutter(
                             current_index,
                             total_tokens,
                             reader_area,
-                            paused,
-                            gutter_id,
                         ) {
-                            app.set_error(format!("Gutter render error: {}", e));
+                            app.set_error(format!("Progress render error: {}", e));
                         }
-                        // Always increment image ID to maintain ID sequence
-                        self.kitty_renderer.current_image_id += 1;
                     }
                 }
             }

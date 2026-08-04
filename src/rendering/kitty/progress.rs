@@ -47,6 +47,34 @@ fn progress_colors(paused: bool) -> (Rgba<u8>, Rgba<u8>) {
 }
 
 impl KittyGraphicsRenderer {
+    /// Render the sentence-progress bar + document-progress gutter in one pass,
+    /// owning the image-id sequence so callers never touch renderer bookkeeping.
+    pub fn render_progress(
+        &mut self,
+        word_y: u32,
+        word_height: u32,
+        progress: f64,
+        paused: bool,
+        current_index: usize,
+        total_tokens: usize,
+        reader_area: Rect,
+    ) -> Result<(), RendererError> {
+        let bar_image_id = self.current_image_id;
+        self.render_bar(word_y, word_height, progress, paused, bar_image_id)?;
+        self.current_image_id += 1;
+
+        let gutter_image_id = self.current_image_id;
+        self.render_macro_gutter(
+            current_index,
+            total_tokens,
+            reader_area,
+            paused,
+            gutter_image_id,
+        )?;
+        self.current_image_id += 1;
+        Ok(())
+    }
+
     /// Render the sentence-progress micro bar below the word.
     pub fn render_bar(
         &mut self,

@@ -8,8 +8,6 @@ pub struct Token {
     is_sentence_start: bool,
     /// Character count of the token text.
     char_count: usize,
-    /// Multiplier applied based on trailing punctuation (e.g., 1.5 for commas, 2.0 for periods).
-    punctuation_multiplier: f64,
     /// Index of this token within its sentence (0-based).
     sentence_index: usize,
     /// Total number of tokens in the sentence this token belongs to.
@@ -23,7 +21,6 @@ impl Token {
         punctuation: Vec<char>,
         is_sentence_start: bool,
         char_count: usize,
-        punctuation_multiplier: f64,
         sentence_index: usize,
         sentence_length: usize,
     ) -> Self {
@@ -32,7 +29,6 @@ impl Token {
             punctuation,
             is_sentence_start,
             char_count,
-            punctuation_multiplier,
             sentence_index,
             sentence_length,
         }
@@ -56,11 +52,6 @@ impl Token {
     /// Returns the character count of the token text.
     pub fn char_count(&self) -> usize {
         self.char_count
-    }
-
-    /// Returns the punctuation multiplier for delay calculations.
-    pub fn punctuation_multiplier(&self) -> f64 {
-        self.punctuation_multiplier
     }
 
     /// Returns the index of this token within its sentence.

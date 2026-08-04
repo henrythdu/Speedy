@@ -1,14 +1,9 @@
 //! Theme presets for Speedy.
 //!
-//! Provides pre-built color themes that can be selected by name.
-//! Unknown theme names fall back to `tokyo-night` (the default).
-
-mod catppuccin;
-mod dracula;
-mod gruvbox;
-mod light;
-mod nord;
-mod tokyo_night;
+//! Provides theme names selectable by name, plus the name→index mapping used
+//! by the config popup and CLI. Unknown names fall back to index 0 (tokyo-night).
+//!
+//! Note: runtime palette values live in `crate::ui::theme` (single source).
 
 /// Available theme names in order.
 /// This is the single source of truth for theme names across the application.

@@ -23,24 +23,19 @@ pub struct Theme {
 
 impl Default for Theme {
     fn default() -> Self {
-        Theme::midnight()
+        Theme::tokyo_night()
     }
 }
 
 impl Theme {
-    /// Midnight theme (PRD Section 4.1)
-    pub fn midnight() -> Self {
+    /// Tokyo Night theme (the default — PRD Section 4.1)
+    pub fn tokyo_night() -> Self {
         Self {
             background: Color::Rgb(26, 27, 38), // #1A1B26 Stormy Dark
             surface: Color::Rgb(36, 40, 59),    // #24283B Dark Slate (command deck)
             text: Color::Rgb(169, 177, 214),    // #A9B1D6 Light Blue
             accent: Color::Rgb(247, 118, 142),  // #F7768E Coral Red
         }
-    }
-
-    /// Tokyo Night theme (same as midnight - the default)
-    pub fn tokyo_night() -> Self {
-        Self::midnight()
     }
 
     /// Dracula theme - popular dark theme with vibrant colors
@@ -102,7 +97,7 @@ impl Theme {
             "catppuccin-mocha" | "catppuccin" => Self::catppuccin_mocha(),
             "nord" => Self::nord(),
             "light" => Self::light(),
-            _ => Self::midnight(),
+            _ => Self::tokyo_night(),
         }
     }
 

@@ -31,7 +31,7 @@ impl ConfigPopupState {
     pub fn open(&mut self, config: &Config) {
         self.is_open = true;
         self.selected_row = 0;
-        self.temp_default_wpm = config.default_wpm;
+        self.temp_default_wpm = config.timing().wpm;
         self.temp_theme_index = theme_index(&config.theme);
         self.temp_ghost_words = config.ghost_words;
         self.original_theme_index = self.temp_theme_index;
@@ -85,9 +85,19 @@ impl ConfigPopupState {
 
     /// Apply changes to config (does not save to disk - caller handles persistence)
     pub fn apply_to_config(&self, config: &mut Config) {
-        config.default_wpm = self.temp_default_wpm;
+        config.timing.wpm = self.temp_default_wpm;
         config.theme = THEME_NAMES[self.temp_theme_index].to_string();
         config.ghost_words = self.temp_ghost_words;
+    }
+
+    /// Apply live preview of the selected row to config (theme / ghost words).
+    /// Callers invoke this on every cycle so the change shows before confirming.
+    pub fn preview(&self, config: &mut Config) {
+        match self.selected_row {
+            1 => config.theme = self.current_theme().to_string(),
+            2 => config.ghost_words = self.temp_ghost_words,
+            _ => {}
+        }
     }
 
     /// Revert theme to original (for Esc flow)

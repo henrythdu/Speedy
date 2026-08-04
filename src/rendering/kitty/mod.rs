@@ -34,7 +34,7 @@ pub struct KittyGraphicsRenderer {
     /// Font metrics for positioning calculations
     font_metrics: Option<FontMetrics>,
     /// Current image ID for protocol (incremented per word)
-    pub current_image_id: u32,
+    current_image_id: u32,
     /// Word-level LRU cache for rendered buffers
     word_cache: WordCache,
     /// Ghost word opacity (0.0 - 1.0), default 0.3

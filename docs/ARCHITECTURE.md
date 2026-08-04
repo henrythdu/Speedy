@@ -1,6 +1,6 @@
 # Speedy Architecture Document
 
-**Last Updated:** 2026-02-13 (cells partition green: 5-layer, acyclic)
+**Last Updated:** 2026-04-20 (review-driven cleanup: dead popup handler + dead theme-preset layer deleted, KeyHandlerRegistry documented, config WPM unified on timing.wpm, Space/p pause/resume restored)
 **Purpose:** Document actual codebase structure, methods, structs, and architecture to prevent duplication and confusion.
 **Status:** ✅ Production-ready with 408 tests passing, 0 clippy warnings
 
@@ -28,19 +28,14 @@ src/
 ├── config/             # Configuration file support
 │   ├── mod.rs          # Config struct, re-exports TimingConfig
 │   ├── file.rs         # XDG-compliant config file loading
-│   ├── theme.rs        # ThemeColors struct with RGBA colors
-│   └── themes/         # Theme preset implementations
-│       ├── mod.rs      # get_theme(), available_themes()
-│       ├── tokyo_night.rs  # Tokyo Night (default)
-│       ├── dracula.rs  # Dracula
-│       ├── gruvbox.rs  # Gruvbox
-│       ├── catppuccin.rs   # Catppuccin Mocha
-│       ├── nord.rs     # Nord
-│       └── light.rs    # Light
+│   └── themes/         # Theme name list + name→index mapping
+│       └── mod.rs      # THEME_NAMES, theme_index (palette values live in ui/theme.rs)
 ├── cli.rs              # CLI argument parsing (clap)
 ├── reading/            # Core RSVP reading logic domain
 │   ├── token.rs        # Token struct (word + punctuation + sentence metadata)
-│   ├── timing.rs       # Tokenization, WPM calculations, sentence boundaries
+│   ├── tokenization.rs # Text → Token pipeline (punctuation split, sentence starts)
+│   ├── sentence.rs     # Sentence-boundary detection (abbreviations, decimals)
+│   ├── timing.rs       # WPM→ms, sentence progress
 │   ├── state.rs        # ReadingState with navigation and timing
 │   ├── ovp.rs          # OVP (Optimal Viewing Position) anchor calculation
 │   └── mod.rs          # Reading module exports
@@ -53,22 +48,29 @@ src/
 │   │   ├── mod.rs      # KittyGraphicsRenderer implementation
 │   │   ├── protocol.rs # KGP transmission and encoding
 │   │   ├── rasterizer.rs # Word-to-image rendering with ab_glyph
-│   │   └── positioning.rs # Sub-pixel OVP anchoring calculations
+│   │   ├── positioning.rs # Sub-pixel OVP anchoring calculations
+│   │   └── progress.rs # Sentence micro-bar + document macro-gutter
 │   └── mod.rs          # Rendering module exports
 ├── ui/                 # TUI rendering layer
 │   ├── reader/         # Reader feature module
-│   │   ├── view.rs     # Render functions (OVP word, progress bars)
+│   │   ├── view.rs     # Render functions (WPM display, command deck)
 │   │   └── mod.rs      # Reader module exports
 │   ├── autocomplete/   # File picker autocomplete
 │   │   ├── mod.rs      # Module exports and constants
 │   │   ├── cache.rs    # Per-directory file cache with TTL
+│   │   ├── controller.rs # High-level actions for the command-deck key loop
 │   │   ├── discovery.rs # Threaded file discovery via mpsc
 │   │   ├── state.rs    # Autocomplete state management
 │   │   └── render.rs   # Popup rendering with ratatui
-│   ├── command.rs      # Command parsing and token utilities
-│   ├── command_executor.rs # Command execution logic
+│   ├── command.rs      # Command parsing (Command enum, parse_command, tokens_to_text)
+│   ├── command_executor.rs # Command execution logic (execute_command → CommandResult)
+│   ├── key_handler.rs  # KeyHandler trait + KeyHandlerRegistry + KeyResult
+│   ├── key_handlers.rs # Concrete handlers (reading/command/popup) + create_*_handlers
+│   ├── config_popup/   # Config picker popup (Ctrl+P)
+│   │   ├── state.rs    # ConfigPopupState (owned by app cell)
+│   │   └── render.rs   # Popup rendering
 │   ├── terminal.rs     # TuiManager with event loop and frame rendering
-│   ├── theme.rs        # Theme configuration (Midnight colors)
+│   ├── theme.rs        # Theme singleton + palettes (ratatui Color, single source)
 │   └── mod.rs          # UI module exports
 ├── input/              # File input processing
 │   ├── pdf.rs          # PDF parsing via pdf-extract
@@ -88,8 +90,6 @@ src/
 
 ### `App` (`src/app/app_impl.rs:18`)
 
-
-
 Main application state container.
 
 ```rust
@@ -101,7 +101,6 @@ pub struct App {
 
 **Purpose:** Coordinates between TUI and engine layers. Manages mode transitions.
 
-
 **Key Methods:**
 
 - `new() -> App` - Creates new App instance with Default impl (src/app/app_impl.rs:30)
@@ -111,7 +110,6 @@ pub struct App {
 - `advance_reading(&mut self) -> bool` - Auto-advance to next word (src/app/app_impl.rs:62)
 
 - `handle_keypress(&mut self, key: char) -> bool` - Handles keyboard input in Reading mode (src/app/app_impl.rs:89)
-
 
 ### `Theme` (`src/ui/theme.rs:4`)
 
@@ -129,9 +127,7 @@ pub struct Theme {
 
 **Purpose:** Centralizes color scheme for maintainability. Midnight theme (PRD Section 4.1) with explicit RGB colors.
 
-
 **Key Methods:**
-
 
 - `midnight() -> Self` - Returns midnight theme colors (src/ui/theme.rs:18)
 - `default() -> Self` - Returns midnight theme (src/ui/theme.rs:27)
@@ -142,16 +138,13 @@ Application configuration from TOML file.
 
 ```rust
 pub struct Config {
-    pub timing: TimingConfig,   // WPM and delay settings
-
-    pub theme: ThemeColors,     // Color scheme
+    pub theme: String,          // Theme name (e.g. "tokyo-night")
+    pub timing: TimingConfig,   // WPM and delay settings (timing.wpm = starting speed)
     pub ghost_words: bool,      // Enable ghost words (default: false)
 }
 ```
 
-
 **Purpose:** Holds user configuration loaded from XDG-compliant config file.
-
 
 **Key Methods:**
 
@@ -159,34 +152,33 @@ pub struct Config {
 - `load() -> Result<Self, ConfigError>` - Load from XDG config path (src/config/mod.rs:62)
 - `ghost_words() -> bool` - Returns ghost words setting (src/config/mod.rs:74)
 
-### `ThemeColors` (`src/config/theme.rs:6`)
+### `KeyHandlerRegistry` (`src/ui/key_handler.rs`)
 
-RGBA color configuration for themes.
+OCP-compliant key dispatch: each key binding is a `KeyHandler` (mode + keys + handle), registered into a registry and dispatched by `KeyHandlerRegistry::dispatch(key, mode, app)`. Replaces the hardcoded key matching in terminal.rs / app_impl.rs for Reading and Popup modes.
 
 ```rust
-pub struct ThemeColors {
-
-    pub name: String,           // Theme name for display
-    pub background: [u8; 4],    // RGBA background
-    pub text: [u8; 4],          // RGBA text color
-
-    pub accent: [u8; 4],        // RGBA accent color
-
-    pub dimmed: [u8; 4],        // RGBA dimmed color
+pub trait KeyHandler: Send + Sync {
+    fn mode(&self) -> AppMode;
+    fn keys(&self) -> Vec<KeyCode>;
+    fn handle(&self, app: &mut App) -> Result<KeyResult>;
 }
 ```
 
-**Purpose:** Cross-platform theme colors in RGBA format.
+**Key Result:** `KeyResult::Consumed` — no more `Ignored` (removed as dead flexibility).
 
-**Key Methods:**
+**Dispatch semantics:** a `Paused` key event matches Reading-mode handlers, so `Space`/`p` can resume (PRD §7).
 
-- `to_theme(&self) -> Theme` - Convert to ratatui Color format (src/config/theme.rs:38)
+**Concrete handlers** (`src/ui/key_handlers.rs`):
+
+- Reading: `NextSentenceHandler` (j), `PrevSentenceHandler` (k), `SpeedUpHandler` (]), `SpeedDownHandler` ([), `PauseToggleHandler` (Space, p)
+- Command: `CommandBackspaceHandler`, `CommandEnterHandler`, `CommandEscapeHandler`
+- Popup: `PopupConfirmHandler`, `PopupDismissHandler`, `PopupNavigateDown/UpHandler`, `PopupCycleLeft/RightHandler`
+
+**Registration:** `TuiManager::new()` builds the registry via `create_reading_handlers` / `create_command_handlers` / `create_popup_handlers`. Command-mode chars/Enter/Backspace/Tab/Esc remain hardcoded in `terminal.rs` (autocomplete interplay); only Reading/Popup dispatch through the registry.
 
 ### `Args` (`src/cli.rs:6`)
 
-
 CLI argument parsing with clap.
-
 
 ```rust
 
@@ -203,7 +195,6 @@ pub struct Args {
 
 - `parse() -> Self` - Parse from std::env::args() (src/cli.rs:15)
 
-
 ### `ReadingState` (`src/reading/state.rs:14`)
 
 Pure reading state with tokens and timing.
@@ -218,9 +209,7 @@ pub struct ReadingState {
 }
 ```
 
-
 **Purpose:** Holds tokenized document, position, and timing state. Pure core logic only.
-
 
 **Key Methods:**
 
@@ -236,7 +225,6 @@ pub struct ReadingState {
 - `adjust_wpm(&mut self, delta: i32)` - Adjusts WPM with clamping (src/reading/state.rs:121)
 - `ghost_context(&self) -> GhostContext<'_>` - Returns (prev, next) words with anchors for ghost rendering (src/reading/state.rs:65)
 - `peek_next(&self) -> Option<(&str, usize)>` - Returns next word with anchor position (src/reading/state.rs:79)
-
 
 ### `Token` (`src/reading/token.rs:1`)
 
@@ -285,16 +273,13 @@ pub trait RsvpRenderer {
 }
 ```
 
-
 **Purpose:** Abstracts rendering implementations (Kitty Graphics, future Sixel/iTerm2). Enables backend switching without changing reading logic. Object-safe trait supporting `Box<dyn RsvpRenderer>`.
-
 
 **Note:** `render_frame()` is the preferred method for ghost word support. `render_word()` retained for backward compatibility.
 
 ### `RenderFrame` (`src/rendering/renderer.rs:27`)
 
 Frame data for rendering current word with optional ghost word context.
-
 
 ```rust
 
@@ -310,7 +295,6 @@ pub struct RenderFrame<'a> {
 
 **Key Methods:**
 
-
 - `new(word, anchor) -> Self` - Create frame without ghosts (src/rendering/renderer.rs:46)
 - `with_ghosts(word, anchor, prev, next) -> Self` - Create frame with optional ghosts (src/rendering/renderer.rs:60)
 - `validate(&self) -> Result<(), RendererError>` - Validate anchor positions (src/rendering/renderer.rs:78)
@@ -319,13 +303,11 @@ pub struct RenderFrame<'a> {
 
 Type alias for ghost word context (previous and next words with their anchor positions).
 
-
 ```rust
 pub type GhostContext<'a> = (Option<(&'a str, usize)>, Option<(&'a str, usize)>);
 ```
 
 **Purpose:** Reduces type complexity when passing ghost word context.
-
 
 ### `WordCache` (`src/rendering/cache.rs:34`)
 
@@ -371,7 +353,6 @@ pub struct WordCache {
 
 ### `KittyGraphicsRenderer` (`src/rendering/kitty/mod.rs:20`)
 
-
 Pixel-perfect RSVP renderer using Kitty Graphics Protocol with sub-pixel OVP anchoring.
 
 ```rust
@@ -401,7 +382,6 @@ pub struct KittyGraphicsRenderer {
 
 **Implements RsvpRenderer trait:**
 
-
 - `initialize()` - Load font, get metrics, query viewport, init word cache (src/rendering/kitty/mod.rs:108)
 - `render_word(word, anchor_position)` - Use word cache for rasterization, transmit via KGP (src/rendering/kitty/mod.rs:139)
 - `render_frame(frame)` - Render current word with optional ghost words (prev above, next below) (src/rendering/kitty/mod.rs:423)
@@ -410,7 +390,6 @@ pub struct KittyGraphicsRenderer {
 - `cleanup()` - Clear word cache, delete all graphics on exit (src/rendering/kitty/mod.rs:218)
 
 **Ghost Word Features:**
-
 
 - `render_at_position(word, anchor, y_offset, opacity)` - Render word at vertical offset with opacity (src/rendering/kitty/mod.rs:139)
 
@@ -428,25 +407,20 @@ pub struct KittyGraphicsRenderer {
 
 ### `protocol` module (`src/rendering/kitty/protocol.rs`)
 
-
 Kitty Graphics Protocol transmission and encoding functions.
 
 **Public Functions:**
-
 
 - `encode_image_base64(image) -> String` - Encode RGBA image to base64 (src/rendering/kitty/protocol.rs:14)
 - `transmit_graphics(id, width, height, data, x, y) -> io::Result<()>` - Send image via KGP (src/rendering/kitty/protocol.rs:25)
 - `delete_image(id) -> io::Result<()>` - Delete specific KGP image (src/rendering/kitty/protocol.rs:45)
 - `delete_all_graphics() -> io::Result<()>` - Clear all KGP images (src/rendering/kitty/protocol.rs:52)
 
-
 ### `rasterizer` module (`src/rendering/kitty/rasterizer.rs`)
 
 Word-to-image rasterization using ab_glyph and imageproc.
 
-
 **Public Functions:**
-
 
 - `rasterize_word(word, anchor_position, font, font_size, metrics) -> Option<ImageBuffer>` - Render word to RGBA buffer (src/rendering/kitty/rasterizer.rs:21)
 - `TEXT_COLOR` - Theme text color constant (#A9B1D6) (src/rendering/kitty/rasterizer.rs:14)
@@ -466,7 +440,6 @@ OVP (Optimal Viewing Position) anchoring calculations.
 ### `Viewport` (`src/rendering/viewport.rs:11`)
 
 Viewport coordinate management for graphics overlay pattern.
-
 
 ```rust
 pub struct Viewport {
@@ -490,8 +463,6 @@ pub struct TerminalDimensions {
 
 **Removed Methods:**
 
-
-
 - ~~`set_dimensions(dimensions)`~~ - Removed (no longer needed)
 - ~~`convert_rect_to_pixels(x, y, w, h)`~~ - Removed (simplified API)
 
@@ -505,7 +476,6 @@ pub struct TerminalDimensions {
 
 Font metric data for OVP calculations.
 
-
 ```rust
 pub struct FontMetrics {
     pub height: f32,      // Total line height
@@ -513,9 +483,7 @@ pub struct FontMetrics {
 }
 ```
 
-
 **Purpose:** Holds font metrics for OVP positioning calculations.
-
 
 **Simplified:** Removed unused fields (`ascent`, `descent`, `line_gap`) during cleanup.
 
@@ -526,7 +494,6 @@ pub struct FontMetrics {
 - `calculate_string_width(font, text, font_size) -> f32` - Calculate string width (src/rendering/font.rs:53)
 - `get_font_metrics(font, font_size) -> FontMetrics` - Get font metrics (src/rendering/font.rs:68)
 
-
 **Removed:**
 
 - ~~`load_font_from_path(path)`~~ - Removed (using embedded font only)
@@ -535,7 +502,6 @@ pub struct FontMetrics {
 - ~~`FontConfig` struct~~ - Removed (not needed)
 
 ### `AppMode` (`src/app/mode.rs:1`)
-
 
 Application operating modes.
 
@@ -549,16 +515,13 @@ pub enum AppMode {
 }
 ```
 
-
 **Purpose:** Tracks which UI layer is active and handles transitions.
 
 **Removed:** `Peek` variant (not implemented)
 
 ### `Command` (`src/ui/command.rs:10`)
 
-
 Command deck input variants.
-
 
 ```rust
 pub enum Command {
@@ -575,7 +538,6 @@ pub enum Command {
 **Public Functions:**
 
 - `parse(input: &str) -> Self` - Parse command string into Command enum (src/ui/command.rs:22)
-
 
 ---
 
@@ -601,14 +563,11 @@ pub struct TuiManager {
 - `run_event_loop(&mut self, app: &mut App) -> io::Result<AppMode>` - Main event loop with WPM-based auto-advancement (src/ui/terminal.rs:39)
 - `render_frame(&mut self, app: &App) -> io::Result<()>` - Renders word display with OVP anchoring (src/ui/terminal.rs:89)
 
-
 ### CommandExecutor (`src/ui/command_executor.rs:10`)
 
 Command execution logic extracted from terminal event loop.
 
 **Public Enum:**
-
-
 
 ```rust
 pub enum CommandResult {
@@ -619,11 +578,9 @@ pub enum CommandResult {
 
 **Public Function:**
 
-
 - `execute_command(app: &mut App, command_str: &str) -> io::Result<CommandResult>` - Parse and execute command (src/ui/command_executor.rs:18)
 
 **Supported Commands:**
-
 
 - `LoadFile(path)` - Load PDF/EPUB file
 - `LoadClipboard` - Load from clipboard
@@ -635,7 +592,6 @@ pub enum CommandResult {
 ### AutocompleteState (`src/ui/autocomplete/state.rs:14`)
 
 Manages the file picker autocomplete popup state.
-
 
 ```rust
 pub struct AutocompleteState {
@@ -677,7 +633,6 @@ pub struct PerDirectoryCache {
 }
 ```
 
-
 **Purpose:** Avoids repeated directory scans within TTL window.
 
 **Key Methods:**
@@ -686,7 +641,6 @@ pub struct PerDirectoryCache {
 - `get(dir) -> Option<&Vec<PathBuf>>` - Returns cached files if not expired (src/ui/autocomplete/cache.rs:28)
 - `put(dir, files)` - Stores files with timestamp (src/ui/autocomplete/cache.rs:44)
 - `invalidate(dir)` - Removes specific directory from cache (src/ui/autocomplete/cache.rs:60)
-
 
 ### DiscoveryHandle (`src/ui/autocomplete/discovery.rs:14`)
 
@@ -708,7 +662,6 @@ pub struct DiscoveryHandle {
 
 ### render_autocomplete_popup (`src/ui/autocomplete/render.rs:21`)
 
-
 Renders file picker popup above/below command deck.
 
 **Parameters:**
@@ -718,7 +671,6 @@ Renders file picker popup above/below command deck.
 - `state` - Current AutocompleteState
 - `command_area` - Command deck area for positioning
 - `terminal_height` - Total terminal height
-
 
 **Features:**
 
@@ -732,7 +684,6 @@ Renders file picker popup above/below command deck.
 
 Reading mode key bindings:
 
-
 - `'j'` - jump to previous sentence
 - `'k'` - jump to next sentence
 - `'['` - decrease WPM by 50
@@ -745,7 +696,6 @@ Reading mode key bindings:
 ## 4. Module Architecture
 
 ### Pure Core Pattern
-
 
 The project follows **pure core + thin IO adapter** pattern:
 
@@ -765,7 +715,6 @@ The project follows **pure core + thin IO adapter** pattern:
    - TUI rendering (ratatui-based, with OVP anchoring)
    - Theme configuration (centralized color schemes)
 
-
 ### Testing Strategy
 
 - **Unit tests** in `engine/` modules (pure logic, testable without terminal)
@@ -777,7 +726,6 @@ The project follows **pure core + thin IO adapter** pattern:
 The codebase uses a layered error handling strategy:
 
 **1. Domain-Specific Errors (`thiserror`)**
-
 
 - `RendererError` (`src/rendering/renderer.rs:21`) - Rendering failures with context
 - `ViewportError` (`src/rendering/viewport.rs:58`) - Terminal query failures
@@ -796,7 +744,6 @@ Domain errors implement `std::error::Error` via `thiserror`, then convert to `an
 
 ### Input Validation Layer
 
-
 All user input is validated at the boundaries:
 
 **Command Validation** (`src/ui/command.rs:22`)
@@ -807,7 +754,6 @@ All user input is validated at the boundaries:
 - Graceful handling of malformed input
 
 **WPM Validation** (`src/reading/state.rs:121`)
-
 
 - Clamped to `MIN_WPM=50` and `MAX_WPM=1000`
 - Delta adjustments bounded
@@ -825,7 +771,7 @@ All user input is validated at the boundaries:
 ### ✅ Implemented (As of 2026-02-12 - Config File Support Complete)
 
 **Core Features:**
-    
+
 - ✅ PDF/EPUB/clipboard parsing (`src/input/`)
 - ✅ OVP anchor position calculation (`src/reading/ovp.rs`)
 - ✅ WPM adjustment ([ / ] keys) (src/app/app_impl.rs:99)
@@ -839,14 +785,13 @@ All user input is validated at the boundaries:
 - ✅ Auto-advancement timing loop (src/ui/terminal.rs:39)
 - ✅ Sentence-aware navigation (j/k keys) (src/app/app_impl.rs:93)
 
-
 **Configuration File Support:**
 
 - ✅ TOML config file parsing (src/config/mod.rs)
 - ✅ XDG-compliant config paths (src/config/file.rs)
-- ✅ 6 theme presets: tokyo-night, dracula, gruvbox, catppuccin-mocha, nord, light (src/config/themes/)
+- ✅ 6 theme names: tokyo-night, dracula, gruvbox, catppuccin-mocha, nord, light (src/config/themes/mod.rs)
 - ✅ CLI flags: `--config <PATH>`, `--list-themes` (src/cli.rs)
-- ✅ ThemeColors struct for RGBA color config (src/config/theme.rs)
+- ✅ Runtime palettes in ui/theme.rs (single source; the old config/themes preset layer was dead code and was deleted)
 - ✅ Renamed `anchor` → `accent` across UI for consistency
 
 **Word-Level LRU Cache:**
@@ -857,7 +802,6 @@ All user input is validated at the boundaries:
 - ✅ Hit/miss counters for telemetry
 - ✅ Integration with KittyGraphicsRenderer
 - ✅ Cache used in render_word() for transparent caching
-
 
 **File Autocomplete:**
 
@@ -904,7 +848,6 @@ All user input is validated at the boundaries:
 
 **Cleanup Completed (Phase 6.5 - Production-Grade Refactoring):**
 
-
 - ✅ Removed dead code (~1,700 lines)
 - ✅ Consolidated App struct (removed event.rs, render_state.rs)
 - ✅ Removed capability.rs (terminal detection)
@@ -918,11 +861,9 @@ All user input is validated at the boundaries:
 - ✅ **Input validation layer** - All user input validated at boundaries
 - ✅ **Dead code elimination** - Removed unused methods from Token, TimingConfig
 
-
 ---
 
 ## 6. PRD Alignment
-
 
 | PRD Section | Implementation Status |
 | ------------- | ---------------------- |
@@ -936,7 +877,6 @@ All user input is validated at the boundaries:
 | **7.2 Reading Mode** | ✅ Complete (TUI with OVP anchoring, auto-advance) |
 
 ---
-
 
 ## 7. Dependencies
 
@@ -962,18 +902,15 @@ All user input is validated at the boundaries:
 - `directories = "6.0"` - XDG paths (config file support) ✅
 - `clap = "4.5"` - CLI argument parsing ✅
 
-
 ### Development
 
 - `cargo test` - Unit and integration tests (337 passing)
 - `cargo clippy` - Linting (0 warnings)
 - `cargo fmt` - Code formatting
 
-
 ---
 
 ## 8. Key Design Decisions
-
 
 ### 1. TUI-First Command Deck Architecture
 
@@ -986,12 +923,10 @@ All user input is validated at the boundaries:
 
 ### 2. Simplified App Architecture
 
-
 - Removed `AppEvent` enum and event handling system
 - App now uses direct method calls for state management
 - Default impl for App reduces boilerplate
 - Simplified mode transitions
-
 
 ### 3. Embedded Font Strategy
 
@@ -1013,11 +948,9 @@ All user input is validated at the boundaries:
 
 ## 9. Recent Cleanup
 
-
 ### 2026-02-12 - Ghost Words & Tab Mode Toggle
 
 **New Features:**
-
 
 - Ghost words (optional, off by default) - previous/next word context
 - `ghost_words` config option in TOML
@@ -1026,7 +959,6 @@ All user input is validated at the boundaries:
 - GhostContext type alias for ghost word context
 
 **Architecture Changes:**
-
 
 - Added `render_frame()` to RsvpRenderer trait
 - Added `render_at_position()` to KittyGraphicsRenderer
@@ -1037,7 +969,6 @@ All user input is validated at the boundaries:
 
 - Mode toggle changed from `q`/`Esc` to `Tab`
 
-
 **Validation Results:**
 
 - 165 tests passing
@@ -1047,21 +978,17 @@ All user input is validated at the boundaries:
 
 **New Modules:**
 
-
 - `src/cli.rs` - CLI argument parsing with clap
 - `src/config/mod.rs` - Config struct with serde support
 - `src/config/file.rs` - XDG-compliant config file loading
-- `src/config/theme.rs` - ThemeColors struct (RGBA format)
-- `src/config/themes/` - 6 theme preset implementations
+- `src/config/themes/mod.rs` - Theme names + name→index (THEME_NAMES, theme_index)
 
 **Dependencies Added:**
-
 
 - `serde = "1.0"` - Serialization
 - `toml = "0.8"` - TOML parsing
 - `directories = "6.0"` - XDG paths
 - `clap = "4.5"` - CLI argument parsing
-
 
 **Breaking Changes:**
 
