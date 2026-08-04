@@ -33,19 +33,26 @@ pub fn transmit_graphics(
     z: i32,
 ) -> io::Result<()> {
     // Kitty Graphics Protocol: APC sequence
-    // Format: ESC _ G a=T f=32 s=<width> v=<height> i=<image_id> x=<x> y=<y> z=<z> m=0 C=1 <data> ESC \
+    // Format: ESC _ G a=T f=32 s=<width> v=<height> i=<image_id> p=<placement> x=<x> y=<y> z=<z> m=0 C=1 <data> ESC \
     // f=32 means 32-bit RGBA
     // x and y specify pixel position (top-left corner of image)
     // z>0 renders above the terminal text layer, z<0 behind it
     // C=1 prevents cursor movement after graphics placement
     // q=1 suppresses acknowledgment responses (_Gi=<id>;OK) from Kitty
+    // p=1 gives the placement a stable id: a later a=T with the same
+    // (image id, placement id) REPLACES the placement IN PLACE — the old
+    // pixels stay on screen until the new data arrives. Without it, the
+    // terminal deletes the old placement first and the word/bar blink
+    // between the delete and the new image landing (the advance-moment
+    // flicker). Each slot has a distinct image id, so one placement id
+    // keeps every (image, placement) pair unique.
     let apc_start = "\x1b_G";
     let apc_end = "\x1b\\";
 
     // If data fits in single transmission
     if base64_data.len() <= 4096 {
         let command = format!(
-            "{}a=T,f=32,s={},v={},i={},x={},y={},z={},C=1,m=0,q=1;{}{}",
+            "{}a=T,f=32,s={},v={},i={},p=1,x={},y={},z={},C=1,m=0,q=1;{}{}",
             apc_start, width, height, image_id, pos_x, pos_y, z, base64_data, apc_end
         );
         print!("{}", command);
@@ -61,7 +68,7 @@ pub fn transmit_graphics(
         for (i, chunk) in chunks.iter().enumerate() {
             let more = if i == chunks.len() - 1 { 0 } else { 1 };
             let command = format!(
-                "{}a=T,f=32,s={},v={},i={},x={},y={},z={},C=1,m={},q=1;{}{}",
+                "{}a=T,f=32,s={},v={},i={},p=1,x={},y={},z={},C=1,m={},q=1;{}{}",
                 apc_start, width, height, image_id, pos_x, pos_y, z, more, chunk, apc_end
             );
             print!("{}", command);
