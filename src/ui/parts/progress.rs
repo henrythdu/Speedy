@@ -16,7 +16,7 @@ use crate::engine::config::{
 };
 use crate::rendering::kitty::protocol::{encode_image_base64, transmit_graphics};
 use crate::rendering::renderer::RendererError;
-use crate::ui::parts::word::KittyGraphicsRenderer;
+use crate::ui::parts::word::{move_to_pixel, KittyGraphicsRenderer};
 use imageproc::image::{ImageBuffer, Rgba};
 use ratatui::layout::Rect;
 
@@ -148,7 +148,7 @@ impl KittyGraphicsRenderer {
 
         // Center the bar horizontally in the viewport
         let bar_x = (container_width - bar_width) / 2;
-        self.move_to_pixel(bar_x, bar_y)?;
+        move_to_pixel(self.viewport(), bar_x, bar_y);
         let base64_data = encode_image_base64(&buffer);
         transmit_graphics(
             image_id,
@@ -200,22 +200,10 @@ impl KittyGraphicsRenderer {
         let x_position =
             reader_area.x as u32 + (reader_area.width as u32).saturating_sub(gutter_width);
         let y_position = reader_area.y as u32;
-        self.move_to_pixel(x_position, y_position)?;
+        move_to_pixel(self.viewport(), x_position, y_position);
         let base64_data = encode_image_base64(&buffer);
         transmit_graphics(image_id, gutter_width, reader_height, &base64_data, 0, 0, 1)
             .map_err(|e| RendererError::RenderFailed(format!("Gutter render failed: {}", e)))
-    }
-
-    /// Move the terminal cursor to a pixel position via the viewport's cell map.
-    ///
-    /// Buffered, not flushed: the whole frame (placements + deletes + ratatui
-    /// cells) must reach the terminal in ONE batch so it repaints once — per-op
-    /// flushes split the frame and cause visible flicker.
-    fn move_to_pixel(&mut self, x: u32, y: u32) -> Result<(), RendererError> {
-        if let Some((col, row)) = self.viewport().pixel_to_cell(x, y) {
-            print!("\x1b[{};{}H", row + 1, col + 1);
-        }
-        Ok(())
     }
 }
 

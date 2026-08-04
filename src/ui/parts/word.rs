@@ -18,7 +18,6 @@ use crate::rendering::renderer::{RenderFrame, RendererError, RsvpRenderer};
 use crate::rendering::viewport::Viewport;
 use ab_glyph::FontRef;
 use imageproc::image::{ImageBuffer, Rgba};
-use std::io::{self, Write};
 
 /// Kitty Graphics Protocol renderer for pixel-perfect RSVP
 pub struct KittyGraphicsRenderer {
@@ -170,17 +169,8 @@ impl KittyGraphicsRenderer {
         // Calculate X position based on OVP anchoring
         let start_x = calculate_start_x(word, anchor, font, self.font_size, &self.viewport);
 
-        // Move cursor to position
-        if let Some((col, row)) = self.viewport.pixel_to_cell(start_x as u32, y_position) {
-            let cursor_command = format!("\x1b[{};{}H", row + 1, col + 1);
-            print!("{}", cursor_command);
-            if let Err(e) = io::stdout().flush() {
-                return Err(RendererError::RenderFailed(format!(
-                    "Failed to flush cursor command: {}",
-                    e
-                )));
-            }
-        }
+        // Move cursor to position (buffered — see move_to_pixel docs)
+        move_to_pixel(&self.viewport, start_x as u32, y_position);
 
         // Get cached word buffer
         let cached_word = self
@@ -353,6 +343,21 @@ fn apply_opacity(
         pixel.0[3] = (pixel.0[3] as f32 * opacity) as u8;
     }
     result
+}
+
+/// Move the terminal cursor to a pixel position via the viewport's cell map.
+///
+/// Buffered, NOT flushed: the whole frame (placements + deletes + ratatui
+/// cells) must reach the terminal in ONE batch so it repaints once — per-op
+/// flushes split the frame and cause visible flicker. The only flush in the
+/// render path is ratatui's `Terminal::draw` at the end of render_frame.
+///
+/// Takes `&Viewport` (not `&mut self`) so callers holding a font/metrics
+/// borrow can still position the cursor — disjoint-field borrows.
+pub(crate) fn move_to_pixel(viewport: &Viewport, x: u32, y: u32) {
+    if let Some((col, row)) = viewport.pixel_to_cell(x, y) {
+        print!("\x1b[{};{}H", row + 1, col + 1);
+    }
 }
 
 #[cfg(test)]

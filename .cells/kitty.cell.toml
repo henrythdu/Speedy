@@ -1,6 +1,6 @@
 name = "kitty"
 layer = 2
-purpose = "Kitty Graphics Protocol renderer: rasterizes each word to an RGBA image (ab_glyph + imageproc) with an LRU glyph cache, OVP-anchors it, and transmits/deletes graphics via the Kitty protocol for pixel-perfect display at 1000+ WPM."
+purpose = "Kitty Graphics Protocol leaf utilities: APC transmission (transmit/delete images), glyph rasterization (ab_glyph + imageproc), and anchor/positioning math. Pure infrastructure consumed by the ui-parts cell (word, progress, background)."
 provides = [
   "rasterize_word",
   "transmit_graphics",
